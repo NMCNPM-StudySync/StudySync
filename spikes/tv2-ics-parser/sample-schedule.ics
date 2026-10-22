@@ -1,0 +1,61 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Mock Calendar Generator//VI
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Thời khóa biểu mẫu (Dữ liệu giả lập - TV2)
+X-WR-TIMEZONE:Asia/Ho_Chi_Minh
+BEGIN:VTIMEZONE
+TZID:Asia/Ho_Chi_Minh
+X-LIC-LOCATION:Asia/Ho_Chi_Minh
+BEGIN:STANDARD
+TZOFFSETFROM:+0700
+TZOFFSETTO:+0700
+TZNAME:+07
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:studysync-mock-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Nhập môn Công nghệ Phần mềm (CSC13002) - Lý thuyết
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260907T073000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260907T113000
+RRULE:FREQ=WEEKLY;COUNT=15;BYDAY=MO
+LOCATION:Giảng đường 1 - Cơ sở 1 (227 Nguyễn Văn Cừ, P.4, Q.5)
+DESCRIPTION:Môn học bắt buộc của chuyên ngành CNPM. Sinh viên cần chuẩn 
+ bị bài đọc trước ở nhà và mang theo laptop để làm việc nhóm.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-002@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Mạng máy tính (CSC10008) - Thực hành Lab
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260911T133000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260911T163000
+RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261218T170000Z;BYDAY=FR
+LOCATION:Phòng máy C.31 - Cơ sở 2 (Linh Trung, TP. Thủ Đức)
+DESCRIPTION:Thực hành cách tuần. Sinh viên làm bài lab cấu hình mạng Cisco Packet Tracer.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-003@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Kiểm tra giữa kỳ - Nhập môn CNPM
+DTSTART:20261024T013000Z
+DTEND:20261024T033000Z
+LOCATION:Phòng F.201 - Cơ sở 1
+DESCRIPTION:Thi tự luận 90 phút. Nội dung gồm Requirement Engineering, Use Case và Domain Model.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-004@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Họp đồ án nhóm StudySync (Tuần 1)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20261022T200000
+DURATION:PT1H30M
+LOCATION:Google Meet (meet.google.com/mock-link)
+DESCRIPTION:Họp rà soát tiến độ Tuần 1, kiểm tra PR của các thành viên và chuẩn bị báo cáo tuần.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
