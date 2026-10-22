@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudySync - Demo Thẻ Sự Kiện Lịch (Issue #12)</title>
+  
+  <!-- Tailwind CSS qua CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React 18 & ReactDOM qua CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel standalone để compile trực tiếp JSX trong trình duyệt -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100 font-sans antialiased text-slate-800">
+  <div id="root"></div>
+
+  <!-- Script JSX: Chạy trực tiếp được cả khi click đúp mở bằng file:// hoặc qua local server -->
+  <script type="text/babel">
+    const { useState } = React;
+
+    // ==========================================
+    // 1. COMPONENT CON: CalendarEventCard
+    // ==========================================
+    function CalendarEventCard({ 
+      title, 
+      courseCode, 
+      time, 
+      location, 
+      type = "Học tập", 
+      priority = "Trung bình",
+      notes = ""
+    }) {
+      // State 1: Quản lý trạng thái hoàn thành sự kiện
+      const [isCompleted, setIsCompleted] = useState(false);
+
+      // State 2: Quản lý mở rộng xem ghi chú chi tiết
+      const [isExpanded, setIsExpanded] = useState(false);
+
+      // Helper: Màu sắc nhãn theo loại sự kiện
+      const getTypeBadgeColor = (t) => {
+        switch (t) {
+          case "Họp nhóm":
+            return "bg-purple-100 text-purple-700 border-purple-200";
+          case "Thi cử":
+            return "bg-rose-100 text-rose-700 border-rose-200";
+          default:
+            return "bg-blue-100 text-blue-700 border-blue-200";
+        }
+      };
+
+      // Helper: Màu sắc nhãn độ ưu tiên
+      const getPriorityBadgeColor = (p) => {
+        switch (p) {
+          case "Cao":
+            return "bg-red-50 text-red-600 border-red-200";
+          case "Thấp":
+            return "bg-gray-100 text-gray-600 border-gray-200";
+          default:
+            return "bg-amber-50 text-amber-600 border-amber-200";
+        }
+      };
+
+      return (
+        <div 
+          className={`relative rounded-xl border p-5 transition-all duration-200 shadow-sm hover:shadow-md ${
+            isCompleted 
+              ? "bg-slate-50 border-emerald-300 opacity-80" 
+              : "bg-white border-slate-200"
+          }`}
+        >
+          {/* Header thẻ: Phân loại, ưu tiên, mã môn học & Nút hoàn thành */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${getTypeBadgeColor(type)}`}>
+                {type}
+              </span>
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${getPriorityBadgeColor(priority)}`}>
+                Ưu tiên: {priority}
+              </span>
+              {courseCode && (
+                <span className="text-xs text-slate-500 font-mono font-medium">
+                  [{courseCode}]
+                </span>
+              )}
+            </div>
+
+            {/* Nút bấm thay đổi State isCompleted */}
+            <button
+              onClick={() => setIsCompleted(!isCompleted)}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                isCompleted
+                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {isCompleted ? "✓ Đã xong" : "○ Đánh dấu xong"}
+            </button>
+          </div>
+
+          {/* Tiêu đề sự kiện */}
+          <h3 
+            className={`text-base font-semibold leading-snug mb-2 ${
+              isCompleted ? "line-through text-slate-400" : "text-slate-900"
+            }`}
+          >
+            {title}
+          </h3>
+
+          {/* Thông tin thời gian & địa điểm */}
+          <div className="space-y-1.5 text-sm text-slate-600 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">⏰</span>
+              <span className="font-medium text-slate-700">{time}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">📍</span>
+              <span>{location}</span>
+            </div>
+          </div>
+
+          {/* Xem thêm ghi chú (State isExpanded) */}
+          {notes && (
+            <div className="border-t border-slate-100 pt-2 mt-2">
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 cursor-pointer"
+              >
+                {isExpanded ? "▲ Thu gọn ghi chú" : "▼ Xem ghi chú"}
+              </button>
+
+              {isExpanded && (
+                <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 whitespace-pre-line leading-relaxed">
+                  {notes}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 2. COMPONENT CHA: App
+    // ==========================================
+    function App() {
+      const initialEvents = [
+        {
+          id: 1,
+          title: "Nhập môn Công nghệ Phần mềm - Lý thuyết",
+          courseCode: "CSC13002",
+          time: "Thứ Bảy, 07:30 - 11:00",
+          location: "E211 (Cơ sở 2)",
+          type: "Học tập",
+          priority: "Cao",
+          notes: "Cần đọc trước slide kiến trúc phần mềm và chuẩn bị câu hỏi thảo luận nhóm."
+        },
+        {
+          id: 2,
+          title: "Họp nhóm StudySync hàng tuần",
+          courseCode: "TEAM-05",
+          time: "Thứ Năm, 20:00 - 21:30",
+          location: "Google Meet",
+          type: "Họp nhóm",
+          priority: "Cao",
+          notes: "Kiểm tra tiến độ Tuần 1: Rà soát GitHub Projects, thống nhất user story cho TV2 và chuẩn bị tài liệu SRS."
+        },
+        {
+          id: 3,
+          title: "Mạng máy tính - Thực hành Lab 2",
+          courseCode: "CSC10008",
+          time: "Thứ Sáu, 13:30 - 16:30",
+          location: "Phòng máy C.31",
+          type: "Học tập",
+          priority: "Trung bình",
+          notes: "Nộp báo cáo cấu hình định tuyến tĩnh trước 23:59."
+        }
+      ];
+
+      const [events] = useState(initialEvents);
+      const [filterType, setFilterType] = useState("Tất cả");
+
+      const filteredEvents = filterType === "Tất cả" 
+        ? events 
+        : events.filter(e => e.type === filterType);
+
+      return (
+        <div className="min-h-screen bg-slate-100 py-10 px-4 sm:px-6">
+          <div className="max-w-2xl mx-auto">
+            {/* Header */}
+            <header className="bg-white rounded-2xl p-6 mb-6 shadow-sm border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">
+                  StudySync • Module TV2 (Lịch cá nhân)
+                </span>
+                <span className="text-xs text-slate-400">Issue #12 Demo</span>
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Thử nghiệm Component Thẻ Sự Kiện Lịch
+              </h1>
+              <p className="text-sm text-slate-600 mt-1">
+                Người thực hiện: <strong className="text-slate-800">Đào Ngọc Hưng</strong> (MSSV: 24120319)
+              </p>
+            </header>
+
+            {/* Bộ lọc */}
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+              {["Tất cả", "Học tập", "Họp nhóm", "Thi cử"].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    filterType === type
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+              <span className="text-xs text-slate-500 ml-auto">
+                Hiển thị: <strong>{filteredEvents.length}</strong> sự kiện
+              </span>
+            </div>
+
+            {/* Danh sách thẻ */}
+            <div className="space-y-4">
+              {filteredEvents.map(event => (
+                <CalendarEventCard
+                  key={event.id}
+                  title={event.title}
+                  courseCode={event.courseCode}
+                  time={event.time}
+                  location={event.location}
+                  type={event.type}
+                  priority={event.priority}
+                  notes={event.notes}
+                />
+              ))}
+            </div>
+
+            {/* Footer tóm tắt kiến thức */}
+            <footer className="mt-8 bg-blue-50/70 border border-blue-200 rounded-xl p-4 text-xs text-slate-600 space-y-1.5">
+              <p className="font-semibold text-blue-900">💡 Kiến thức cốt lõi đã áp dụng:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>Component & Props:</strong> Dữ liệu từ mảng <code>events</code> được truyền tuần tự vào từng thẻ qua props.</li>
+                <li><strong>State (<code>useState</code>):</strong> Quản lý bộ lọc <code>filterType</code> ở App, và trạng thái <code>isCompleted</code> / <code>isExpanded</code> riêng biệt trong mỗi thẻ.</li>
+                <li><strong>List Rendering:</strong> Dùng <code>.map()</code> kèm thuộc tính <code>key</code> duy nhất để hiển thị danh sách.</li>
+              </ul>
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    // Render ra màn hình
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
+</body>
+</html>
