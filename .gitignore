@@ -1,0 +1,21 @@
+# Thư viện cài về
+node_modules/
+
+# Kết quả build
+dist/
+build/
+coverage/
+
+# Biến môi trường thật: KHÔNG commit (chỉ commit .env.example)
+.env
+.env.*
+!.env.example
+
+# Log
+*.log
+npm-debug.log*
+
+# Hệ điều hành và editor
+.DS_Store
+Thumbs.db
+.idea/
