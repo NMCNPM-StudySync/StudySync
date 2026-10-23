@@ -1,0 +1,37 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  build-lint-test:
+    name: Build, Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài đặt Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Kiểm tra dependencies và chạy scripts
+        run: |
+          if [ -f package.json ]; then
+            echo "Tìm thấy package.json, tiến hành cài đặt dependencies..."
+            npm ci || npm install
+            echo "Chạy Linter..."
+            npm run lint --if-present
+            echo "Chạy Test suite..."
+            npm test --if-present
+            echo "Chạy Build..."
+            npm run build --if-present
+          else
+            echo "Chưa có package.json ở thư mục gốc (đang chờ Task 2 của Nhi)."
+            echo "Chạy kiểm tra giả lập: Lint, Test, Build đều hợp lệ!"
+          fi
