@@ -9,8 +9,8 @@
 TV3 (xếp lịch tự động) và TV4 (giờ chung) cùng cần tính toán trên các khoảng thời gian: gộp lịch bận, tìm khoảng rảnh, tìm giờ chung của nhiều người. Thư viện này gom các phép tính đó thành **hàm thuần** ở backend: nhận danh sách khoảng thời gian, trả danh sách khoảng thời gian (mục 3.6).
 
 Hàm thuần nghĩa là:
-- Không đọc/ghi CSDL, không gọi API, không dùng giờ hệ thống (`new Date()` bên trong hàm).
-- Không sửa mảng hoặc đối tượng đầu vào; luôn trả mảng mới.
+- Không đọc/ghi CSDL, không gọi API, không đọc giờ hiện tại (`Date.now()`, `new Date()` không tham số).
+- Không sửa mảng, đối tượng hay `Date` đầu vào; luôn trả mảng mới, đối tượng mới, `Date` mới (xem quy ước "Bất biến" ở mục 2).
 - Cùng đầu vào thì luôn cho cùng đầu ra, nên viết unit test dễ.
 
 Thư viện chỉ biết thời điểm bắt đầu và kết thúc, không biết tên sự kiện. Nhờ vậy dữ liệu đi ra từ thư viện tự đúng với BR2 (nhóm chỉ thấy bận/rảnh).
@@ -38,6 +38,8 @@ Quy ước:
 | Hợp lệ | `start < end`. Khoảng có độ dài 0 (`start == end`) bị bỏ khỏi kết quả. `start > end` hoặc `Date` không hợp lệ (`NaN`) thì ném `RangeError`. |
 | Độ chính xác | So sánh bằng `getTime()` (mili giây). Thư viện không làm tròn theo bước 15 hay 30 phút; nếu cần, TV3/TV4 làm tròn trước khi gọi. |
 | Kết quả | Mọi hàm trả về danh sách **đã sắp xếp theo `start`, không chồng nhau, không chạm nhau** (gọi là "danh sách chuẩn"). |
+| Bất biến | `Date` trong JavaScript sửa được (ví dụ `setHours`), nên thư viện **không bao giờ trả lại chính đối tượng `Date` của đầu vào**. Mỗi khoảng trong kết quả là đối tượng mới, với `start`/`end` tạo bằng `new Date(t.getTime())`. Nhờ vậy sửa kết quả không ảnh hưởng đầu vào và ngược lại. Thư viện cũng không gọi hàm `set...` nào trên `Date` đầu vào. |
+| Kiểm tra tham số | Mỗi hàm **kiểm tra toàn bộ tham số trước**, rồi mới xử lý. Không trả sớm mảng rỗng khi còn tham số chưa kiểm tra. Ví dụ `subtractIntervals([], [10–09])` vẫn ném `RangeError` dù `free` rỗng. Thứ tự: (1) kiểm tra kiểu và từng `Date`, (2) kiểm tra `start <= end`, (3) kiểm tra tham số số (`minMinutes`), (4) mới xử lý và trả kết quả. |
 
 ## 3. Danh sách hàm
 
@@ -71,11 +73,14 @@ export function intersectIntervalLists(
 Hàm phụ đề xuất thêm (nhỏ, giúp TV3/TV4 khỏi viết lại):
 
 ```ts
-/** Độ dài khoảng, tính bằng phút. */
+/**
+ * Độ dài khoảng, tính bằng phút, là số thực, KHÔNG làm tròn.
+ * Ví dụ: 09:00:00–09:01:30 -> 1.5; 09:00–10:00 -> 60.
+ */
 export function durationMinutes(interval: TimeInterval): number;
 
 /**
- * Chỉ giữ các khoảng dài ít nhất minMinutes phút.
+ * Chuẩn hóa đầu vào bằng mergeIntervals, rồi chỉ giữ các khoảng dài ít nhất minMinutes phút.
  * Ví dụ: TV3 cần chỗ trống ≥ 60 phút cho việc dùng thời lượng mặc định (BR4).
  */
 export function filterByMinDuration(
@@ -83,6 +88,18 @@ export function filterByMinDuration(
   minMinutes: number,
 ): TimeInterval[];
 ```
+
+Quy ước riêng cho hai hàm phụ:
+
+| Hàm | Trường hợp | Cách xử lý |
+|---|---|---|
+| `durationMinutes` | Khoảng lẻ giây hoặc mili giây | Trả số thực `(end - start) / 60000`, **không làm tròn**. Làm tròn là việc của TV3/TV4 nếu cần. |
+| `durationMinutes` | `start == end` | Trả `0`. |
+| `durationMinutes` | `start > end` hoặc `Date` không hợp lệ | Ném `RangeError`, giống các hàm chính. |
+| `filterByMinDuration` | Đầu vào chưa chuẩn | **Có** gọi `mergeIntervals` trước khi lọc. Vì vậy `[09:00–09:40, 09:40–10:10]` với `minMinutes = 60` cho `[09:00–10:10]` (gộp được 70 phút), không bị loại sai. |
+| `filterByMinDuration` | So sánh độ dài | Giữ khoảng có độ dài **≥** `minMinutes` (bằng đúng cũng giữ). |
+| `filterByMinDuration` | `minMinutes = 0` | Hợp lệ, giữ mọi khoảng (sau khi gộp). |
+| `filterByMinDuration` | `minMinutes < 0`, `NaN`, `Infinity` | Ném `RangeError`. Số lẻ như `1.5` thì hợp lệ. |
 
 Cách TV4 gọi để tìm giờ chung (ví dụ):
 
@@ -123,6 +140,8 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 | S7 | Bận lệch một đầu | `[08–12]` | `[11–13]` | `[08–11]` |
 | S8 | Nhiều khoảng bận chồng nhau, chưa sắp xếp | `[08–12]` | `[10–11, 09–10:30]` | `[08–09, 11–12]` |
 | S9 | Bận nằm ngoài khung | `[08–12]` | `[13–14]` | `[08–12]` |
+| S10 | Nhiều khoảng rảnh rời nhau bị một khoảng bận dài cắt ngang | `[08–10, 11–13, 14–16]` | `[09–15]` | `[08–09, 15–16]` |
+| S11 | Kiểm tra tham số trước khi trả sớm | `[]` | `[10–09]` | ném `RangeError` (không trả `[]`) |
 
 ### intersectIntervalLists
 | # | Trường hợp | Đầu vào | Kết quả mong đợi |
@@ -134,11 +153,29 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 | I5 | Có giờ chung | `[[08–11], [10–12]]` | `[10–11]` |
 | I6 | Ba người, nhiều khoảng | `[[08–10, 13–17], [09–14], [09:30–16]]` | `[09:30–10, 13–14]` |
 | I7 | Mọi người rảnh y hệt | `[[08–12], [08–12]]` | `[08–12]` |
+| I8 | Danh sách của một người chưa chuẩn (chồng nhau, chạm nhau) | `[[08–10, 09–12, 12–13], [11–14]]` | `[11–13]` (người thứ nhất được gộp thành `08–13` trước khi giao) |
+| I9 | Kiểm tra tham số trước khi trả sớm | `[[10–09], []]` | ném `RangeError` (không trả `[]` dù có người lịch trống) |
+
+### durationMinutes và filterByMinDuration
+| # | Trường hợp | Đầu vào | Kết quả mong đợi |
+|---|---|---|---|
+| D1 | Tròn phút | `09:00–10:00` | `60` |
+| D2 | Lẻ giây | `09:00:00–09:01:30` | `1.5` |
+| D3 | Độ dài 0 | `09:00–09:00` | `0` |
+| D4 | Không hợp lệ | `10:00–09:00` | ném `RangeError` |
+| F1 | Lịch trống **(4.9)** | `[]`, `60` | `[]` |
+| F2 | Bằng đúng ngưỡng | `[09–10]`, `60` | `[09–10]` |
+| F3 | Ngắn hơn ngưỡng | `[09:00–09:59]`, `60` | `[]` |
+| F4 | Gộp rồi mới lọc | `[09:00–09:40, 09:40–10:10]`, `60` | `[09:00–10:10]` |
+| F5 | Ngưỡng 0 | `[10–11, 09–10]`, `0` | `[09–11]` |
+| F6 | Ngưỡng âm, `NaN` hoặc `Infinity` | `[09–10]`, `-1` / `NaN` / `Infinity` | ném `RangeError` |
+| F7 | Kiểm tra tham số trước khi trả sớm | `[]`, `NaN` | ném `RangeError` (không trả `[]`) |
 
 ### Chung cho mọi hàm
 - Ngày khác nhau và khoảng vắt qua nửa đêm (theo giờ VN là 23:00–01:00, theo UTC là 16:00–18:00): xử lý bình thường vì chỉ so thời điểm.
 - `Date` không hợp lệ (`new Date('abc')`) thì ném `RangeError`.
 - Kết quả luôn là danh sách chuẩn (mục 2).
+- Bất biến: sau khi gọi hàm, đầu vào giữ nguyên (so `getTime()` từng `Date` trước và sau), và không `Date` nào trong kết quả (`start` hay `end`) là cùng một đối tượng với một `Date` của đầu vào (so bằng `!==`). Gọi `result[0].start.setHours(0)` không làm đổi đầu vào.
 
 ## 5. Phạm vi và việc tiếp theo
 
