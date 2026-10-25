@@ -1,6 +1,5 @@
 // practice/react-event-card/App.jsx
 // Component chính demo cách truyền dữ liệu (Props) vào CalendarEventCard
-// Tác giả: Đào Ngọc Hưng (MSSV: 24120319) - Issue #12
 
 const { useState } = React;
 
@@ -62,7 +61,7 @@ function App() {
             Thử nghiệm Component Thẻ Sự Kiện Lịch
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Người thực hiện: <strong className="text-slate-800">Đào Ngọc Hưng</strong> (MSSV: 24120319)
+            Thực hành Component, Props và State cơ bản trong React
           </p>
         </header>
 

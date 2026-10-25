@@ -1,6 +1,5 @@
 // practice/react-event-card/CalendarEventCard.jsx
 // Component hiển thị Thẻ sự kiện lịch cá nhân (Module TV2 - StudySync)
-// Tác giả: Đào Ngọc Hưng (MSSV: 24120319) - Issue #12
 
 const { useState } = React;
 
