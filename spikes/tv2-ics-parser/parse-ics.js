@@ -28,6 +28,38 @@ function unescapeIcsText(str) {
 }
 
 /**
+ * Kiểm tra tính hợp lệ về mặt lịch pháp và giờ/phút/giây của các thành phần thời gian
+ */
+function isValidDateTime(year, month, day, hour = 0, min = 0, sec = 0) {
+  const y = parseInt(year, 10);
+  const m = parseInt(month, 10);
+  const d = parseInt(day, 10);
+  const h = parseInt(hour, 10);
+  const mi = parseInt(min, 10);
+  const s = parseInt(sec, 10);
+
+  // Kiểm tra miền giá trị hợp lệ cơ bản
+  if (m < 1 || m > 12) return false;
+  if (d < 1 || d > 31) return false;
+  if (h < 0 || h > 23) return false;
+  if (mi < 0 || mi > 59) return false;
+  if (s < 0 || s > 59) return false;
+
+  // Kiểm tra tính đúng đắn của ngày thực tế trong tháng (bao gồm năm nhuận)
+  const date = new Date(Date.UTC(y, m - 1, d, h, mi, s));
+  date.setUTCFullYear(y);
+
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === m - 1 &&
+    date.getUTCDate() === d &&
+    date.getUTCHours() === h &&
+    date.getUTCMinutes() === mi &&
+    date.getUTCSeconds() === s
+  );
+}
+
+/**
  * 3. CHUYỂN ĐỔI CHUỖI THỜI GIAN iCalendar SANG ĐỊNH DẠNG ISO VÀ KIỂM TRA TÍNH HỢP LỆ
  * Hỗ trợ:
  * - UTC date-time: YYYYMMDDTHHmmSSZ (VD: 20261024T013000Z)
@@ -41,6 +73,9 @@ function parseIcsDate(dateStr, tzid = null) {
   const utcMatch = dateStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
   if (utcMatch) {
     const [, year, month, day, hour, min, sec] = utcMatch;
+    if (!isValidDateTime(year, month, day, hour, min, sec)) {
+      throw new Error(`Chuỗi thời gian iCalendar không hợp lệ: "${dateStr}"`);
+    }
     return {
       raw: dateStr,
       iso: `${year}-${month}-${day}T${hour}:${min}:${sec}Z`,
@@ -54,6 +89,9 @@ function parseIcsDate(dateStr, tzid = null) {
   const localMatch = dateStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
   if (localMatch) {
     const [, year, month, day, hour, min, sec] = localMatch;
+    if (!isValidDateTime(year, month, day, hour, min, sec)) {
+      throw new Error(`Chuỗi thời gian iCalendar không hợp lệ: "${dateStr}"`);
+    }
     return {
       raw: dateStr,
       iso: `${year}-${month}-${day}T${hour}:${min}:${sec}`,
@@ -67,6 +105,9 @@ function parseIcsDate(dateStr, tzid = null) {
   const dateOnlyMatch = dateStr.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (dateOnlyMatch) {
     const [, year, month, day] = dateOnlyMatch;
+    if (!isValidDateTime(year, month, day)) {
+      throw new Error(`Chuỗi thời gian iCalendar không hợp lệ: "${dateStr}"`);
+    }
     return {
       raw: dateStr,
       iso: `${year}-${month}-${day}`,
@@ -218,12 +259,15 @@ function parseIcsFile(filePath) {
       if (!currentEvent) {
         throw new Error(`Tệp lỗi cấu trúc: Gặp END:VEVENT nhưng không có sự kiện nào đang mở (dòng ${i + 1}).`);
       }
-      if (subBlockDepth === 0) {
-        events.push(currentEvent);
-        currentEvent = null;
-      } else {
-        subBlockDepth = Math.max(0, subBlockDepth - 1);
+      if (subBlockDepth > 0) {
+        throw new Error(`Tệp lỗi cấu trúc: Sự kiện "${currentEvent.title || currentEvent.uid || 'Không rõ'}" có khối con chưa đóng (thiếu END:VALARM hoặc tương tự) trước END:VEVENT (dòng ${i + 1}).`);
       }
+      // Sự kiện VEVENT bắt buộc phải có thời gian bắt đầu (DTSTART)
+      if (!currentEvent.dtStart) {
+        throw new Error(`Sự kiện thiếu thuộc tính bắt buộc DTSTART (UID: "${currentEvent.uid || 'Không rõ'}", dòng ${i + 1}).`);
+      }
+      events.push(currentEvent);
+      currentEvent = null;
       continue;
     }
 
@@ -252,10 +296,18 @@ function parseIcsFile(filePath) {
             currentEvent.title = unescapeIcsText(prop.value);
             break;
           case 'DTSTART':
-            currentEvent.dtStart = parseIcsDate(prop.value, prop.params.TZID || defaultTimezone);
+            try {
+              currentEvent.dtStart = parseIcsDate(prop.value, prop.params.TZID || defaultTimezone);
+            } catch (err) {
+              throw new Error(`${err.message} (dòng ${i + 1})`);
+            }
             break;
           case 'DTEND':
-            currentEvent.dtEnd = parseIcsDate(prop.value, prop.params.TZID || defaultTimezone);
+            try {
+              currentEvent.dtEnd = parseIcsDate(prop.value, prop.params.TZID || defaultTimezone);
+            } catch (err) {
+              throw new Error(`${err.message} (dòng ${i + 1})`);
+            }
             break;
           case 'DURATION':
             currentEvent.duration = prop.value;
@@ -324,6 +376,7 @@ if (require.main === module) {
 module.exports = {
   unfoldLines,
   unescapeIcsText,
+  isValidDateTime,
   parseIcsDate,
   parseRrule,
   parseProperty,
