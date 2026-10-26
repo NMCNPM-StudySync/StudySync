@@ -1,0 +1,52 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-lint-test:
+    name: Build, Lint and Test (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: matrix.project != 'frontend' || hashFiles('frontend/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Warn when frontend is not available yet
+        if: matrix.project == 'frontend' && hashFiles('frontend/package.json') == ''
+        run: echo "::warning::frontend/package.json is missing; skipping frontend CI until the frontend is added."
+        working-directory: .
+
+      - name: Install dependencies
+        if: matrix.project != 'frontend' || hashFiles('frontend/package.json') != ''
+        run: npm ci
+
+      - name: Run lint
+        if: matrix.project != 'frontend' || hashFiles('frontend/package.json') != ''
+        run: npm run lint
+
+      - name: Run build
+        if: matrix.project != 'frontend' || hashFiles('frontend/package.json') != ''
+        run: npm run build
+
+      - name: Run tests
+        if: matrix.project != 'frontend' || hashFiles('frontend/package.json') != ''
+        run: npm test
