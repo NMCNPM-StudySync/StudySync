@@ -27,7 +27,7 @@ labels: ["bug"]
 ## Ảnh chụp, video
 <Kéo thả ảnh vào đây.>
 
-## Mức độ
+## Mức độ lỗi
 <Blocker / High / Normal / Low>
 
 ## Liên kết

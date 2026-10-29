@@ -2,7 +2,7 @@
 name: Việc không phải code
 about: Báo cáo, thiết kế, tài liệu, chuẩn bị demo
 title: "[<Báo cáo/Figma/Demo>] "
-labels: ["khac"]
+labels: ["docs"]
 ---
 
 ## Mô tả
