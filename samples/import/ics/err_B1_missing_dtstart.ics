@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-no-dtstart@hcmus.edu.vn
+SUMMARY:Môn học không rõ thời gian bắt đầu
+DTEND:20260907T113000Z
+LOCATION:Phòng C.42
+END:VEVENT
+END:VCALENDAR

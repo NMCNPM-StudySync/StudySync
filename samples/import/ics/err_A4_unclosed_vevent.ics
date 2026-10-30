@@ -1,0 +1,8 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-unclosed@hcmus.edu.vn
+SUMMARY:Sự kiện bị cắt ngang do tệp tải về dở dang
+DTSTART:20260907T073000Z
+DTEND:20260907T093000Z
+END:VCALENDAR

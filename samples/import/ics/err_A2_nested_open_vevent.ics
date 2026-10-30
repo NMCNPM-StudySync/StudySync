@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-1@hcmus.edu.vn
+SUMMARY:Sự kiện thứ nhất chưa kịp đóng
+DTSTART:20260907T073000Z
+BEGIN:VEVENT
+UID:event-2@hcmus.edu.vn
+SUMMARY:Sự kiện thứ hai lồng vào khi sự kiện 1 chưa đóng END:VEVENT
+DTSTART:20260907T093000Z
+END:VEVENT
+END:VEVENT
+END:VCALENDAR

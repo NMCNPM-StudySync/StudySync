@@ -1,0 +1,10 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-summary-over-200@hcmus.edu.vn
+SUMMARY:Chương trình Hội nghị Khoa học Trẻ và Đổi mới Sáng tạo Công nghệ Thông tin Toàn quốc Phân hiệu Đại học Quốc gia Thành phố Hồ Chí Minh Năm Học 2026 - 2027 Chuyên đề Ứng dụng Trí tuệ Nhân tạo và An toàn Thông tin Không gian Mạng
+DTSTART:20261120T080000Z
+DTEND:20261120T113000Z
+LOCATION:Hội trường B
+END:VEVENT
+END:VCALENDAR

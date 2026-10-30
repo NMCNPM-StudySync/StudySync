@@ -1,0 +1,66 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Thời khóa biểu học kỳ mẫu (Dữ liệu giả lập - TV2)
+X-WR-TIMEZONE:Asia/Ho_Chi_Minh
+BEGIN:VTIMEZONE
+TZID:Asia/Ho_Chi_Minh
+X-LIC-LOCATION:Asia/Ho_Chi_Minh
+BEGIN:STANDARD
+TZOFFSETFROM:+0700
+TZOFFSETTO:+0700
+TZNAME:+07
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:studysync-mock-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Nhập môn Công nghệ Phần mềm (CSC13002) - Lý thuyết
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260907T073000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260907T113000
+RRULE:FREQ=WEEKLY;COUNT=15;BYDAY=MO
+LOCATION:Giảng đường 1 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Môn học cốt lõi ngành Công nghệ thông tin. Sinh viên cần chuẩn bị bài đọc trước ở nhà.
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Nhắc nhở vào lớp học
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-002@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Mạng máy tính (CSC10008) - Thực hành Lab
+DTSTART;TZID="Asia/Ho_Chi_Minh":20260911T133000
+DTEND;TZID="Asia/Ho_Chi_Minh":20260911T163000
+RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261218T170000Z;BYDAY=FR
+LOCATION:Phòng máy C.31 - Cơ sở Linh Trung
+DESCRIPTION:Thực hành cấu hình mạng trên máy ảo và thiết bị chuyển mạch Cisco.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-003@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Thi giữa kỳ - Nhập môn Công nghệ Phần mềm
+DTSTART:20261024T013000Z
+DTEND:20261024T033000Z
+LOCATION:Phòng F.201 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Thi tự luận 90 phút. Nội dung gồm User Story, Use Case và Thiết kế kiến trúc.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-004@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Họp đồ án nhóm StudySync (Định kỳ Thứ Năm)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20261022T200000
+DTEND;TZID=Asia/Ho_Chi_Minh:20261022T210000
+RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=TH
+LOCATION:Google Meet (Online)
+DESCRIPTION:Họp sprint review và phân công công việc tuần mới.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
