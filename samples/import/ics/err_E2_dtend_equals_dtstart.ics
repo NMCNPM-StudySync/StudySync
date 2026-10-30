@@ -1,0 +1,10 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-dtend-equals-dtstart@hcmus.edu.vn
+SUMMARY:Lỗi logic: Giờ kết thúc trùng giờ bắt đầu (thời lượng 0 phút)
+DTSTART:20260907T080000Z
+DTEND:20260907T080000Z
+LOCATION:Phòng Hội trường I
+END:VEVENT
+END:VCALENDAR

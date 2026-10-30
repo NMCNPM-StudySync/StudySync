@@ -1,0 +1,3 @@
+﻿Mã môn,Tên môn học,Thứ,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học,Giảng viên,Ghi chú
+CSC13002,Lớp học sai ngày YYYY/MM/DD,Hai,2026/09/07,2026/12/14,07:30,11:30,GĐ1,TS. Trần Văn A,Phải dùng dd/mm/yyyy
+CSC10008,Lớp học ngày tháng bằng chữ,Sáu,ngay-bay-thang-chin,ngay-muoi-bon-thang-muoi-hai,13:30,16:30,C.31,ThS. Lê Thị B,Chuỗi không hợp lệ

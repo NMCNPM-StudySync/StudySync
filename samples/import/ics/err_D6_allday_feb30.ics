@@ -1,0 +1,8 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allday-feb30@hcmus.edu.vn
+SUMMARY:Sự kiện cả ngày có ngày 30 tháng 2 không tồn tại
+DTSTART:20260230
+END:VEVENT
+END:VCALENDAR
