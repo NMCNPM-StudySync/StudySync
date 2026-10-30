@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+BEGIN:VEVENT
+UID:studysync-escape-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Hội thảo: Trí tuệ Nhân tạo\, Dữ liệu lớn \; Ứng dụng Cloud
+DTSTART:20261115T080000Z
+DTEND:20261115T110000Z
+LOCATION:Phòng A1\, Tầng 2\; Khu Công nghệ cao\\HCMUS
+DESCRIPTION:Dòng mô tả 1.\nDòng mô tả 2 có dấu gạch chéo \\ và dấu chấm phẩy \;.\nTham dự đầy đủ.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

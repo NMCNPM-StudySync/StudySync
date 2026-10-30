@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-garbage-date@hcmus.edu.vn
+SUMMARY:Lịch học có chuỗi ngày tháng là ký tự rác
+DTSTART:chuoi-ngay-thang-hoan-toan-khong-hop-le
+DTEND:20260907T113000Z
+END:VEVENT
+END:VCALENDAR
