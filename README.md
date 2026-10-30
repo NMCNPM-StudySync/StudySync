@@ -18,6 +18,10 @@ StudySync là ứng dụng web tự động xếp lịch học cá nhân và qu�
 - **BR2:** Nhóm chỉ thấy bận/rảnh, không thấy tên sự kiện riêng.
 - **BR3:** Tái xếp lịch chỉ áp dụng sau khi sinh viên xác nhận.
 - **BR4:** Mỗi việc có hạn chót; thời lượng mặc định 1 giờ nếu không nhập.
+- **BR5:** Mỗi tệp nhập (.ics, .csv) không vượt quá 5 MB; vượt giới hạn thì từ chối và trả mã lỗi `413 FILE_TOO_LARGE`.
+- **BR6:** Tệp sai định dạng hoặc có bất kỳ dòng nào không hợp lệ thì từ chối toàn bộ tệp, không nhập dòng nào; trả mã lỗi `422 FILE_INVALID` kèm tối đa 20 dòng lỗi đầu tiên (số dòng và lý do).
+- **BR7:** Nhập và hiển thị theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7); thời gian lưu ở cơ sở dữ liệu theo UTC dạng `timestamptz`; API trao đổi chuỗi ISO 8601 có hậu tố `Z`; không có thiết lập múi giờ riêng cho từng người dùng.
+- **BR8:** Tên nhóm tối đa 100 ký tự; tên việc (việc cần làm, sự kiện cố định, thẻ Kanban) tối đa 200 ký tự; đếm theo ký tự Unicode sau khi cắt khoảng trắng đầu và cuối, vượt giới hạn thì không lưu và báo lỗi tại trường nhập.
 
 ## Công nghệ
 
