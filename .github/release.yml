@@ -1,0 +1,13 @@
+changelog:
+  categories:
+    - title: Tính năng mới
+      labels:
+        - feature
+    - title: Lỗi đã sửa
+      labels:
+        - bug
+    - title: Tài liệu và việc khác
+      labels:
+        - docs
+        - test
+        - chore
