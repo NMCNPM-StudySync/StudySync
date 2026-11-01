@@ -1,0 +1,12 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+BEGIN:VEVENT
+UID:event-allday-missing-time@hcmus.edu.vn
+SUMMARY:Ngày hội việc làm (Sự kiện cả ngày không có mốc giờ)
+DTSTART;VALUE=DATE:20261120
+LOCATION:Sân trường cơ sở 1
+DESCRIPTION:Sự kiện kéo dài cả ngày nhưng thiếu mốc giờ bắt đầu và kết thúc cụ thể, bị từ chối theo BR-06 vì không thể tính khoảng bận cho thuật toán xếp lịch.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
