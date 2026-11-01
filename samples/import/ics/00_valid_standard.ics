@@ -63,4 +63,14 @@ LOCATION:Google Meet (Online)
 DESCRIPTION:Họp sprint review và phân công công việc tuần mới.
 STATUS:CONFIRMED
 END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-005@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Hội thảo Chuyên đề Công nghệ mới (Floating Time)
+DTSTART:20261102T080000
+DTEND:20261102T110000
+LOCATION:Hội trường B - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Kiểm tra quy đổi mốc thời gian không kèm định danh múi giờ về giờ Việt Nam (UTC+7) theo BR-07 và US-11 AC8.
+STATUS:CONFIRMED
+END:VEVENT
 END:VCALENDAR
