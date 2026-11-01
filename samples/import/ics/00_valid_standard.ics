@@ -73,4 +73,26 @@ LOCATION:Hội trường B - Cơ sở Nguyễn Văn Cừ
 DESCRIPTION:Kiểm tra quy đổi mốc thời gian không kèm định danh múi giờ về giờ Việt Nam (UTC+7) theo BR-07 và US-11 AC8.
 STATUS:CONFIRMED
 END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-006@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Seminar Đổi mới Sáng tạo (Kiểm tra thuộc tính DURATION thay DTEND)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20261104T133000
+DURATION:PT1H50M
+LOCATION:Phòng F.102 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Kiểm tra phân tích cú pháp sự kiện sử dụng thuộc tính DURATION:PT1H50M (1 giờ 50 phút) thay cho DTEND.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-007@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Lớp học Chuyên đề Trí tuệ Nhân tạo (Có thẻ EXDATE loại trừ ngày nghỉ lễ)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260907T080000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260907T110000
+RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO
+EXDATE;TZID=Asia/Ho_Chi_Minh:20260914T080000,20261019T080000
+LOCATION:Phòng I.41 - Cơ sở Linh Trung
+DESCRIPTION:Kiểm tra phân tích cú pháp thẻ EXDATE loại trừ 2 ngày nghỉ lễ trong chuỗi lặp hàng tuần.
+STATUS:CONFIRMED
+END:VEVENT
 END:VCALENDAR
