@@ -1,0 +1,23 @@
+﻿Mã môn,Tên môn học,Thứ trong tuần,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học,Giảng viên,Ghi chú
+CSC00001,Môn #1 giờ kết thúc sớm,Hai,07/09/2026,14/12/2026,11:30,07:30,GĐ1,Giảng viên A,Lỗi logic thời gian
+CSC00002,Môn #2 ngày 31 tháng 2,Ba,31/02/2026,31/02/2026,08:00,10:00,C.31,Giảng viên B,Lỗi ngày không tồn tại
+CSC00003,Môn #3 giờ 25:00,Tư,09/09/2026,16/12/2026,25:00,27:00,C.42,Giảng viên C,Lỗi giờ vượt quá 23
+CSC00004,Môn #4 thiếu cột,Năm,10/09/2026,17/12/2026,08:00
+CSC00005,Môn #5 ngày bằng chữ,Sáu,ngay-dau,ngay-cuoi,13:30,16:30,F.102,Giảng viên D,Lỗi ngày sai định dạng
+CSC00006,Môn #6 giờ kết thúc sớm,Hai,07/09/2026,14/12/2026,11:30,07:30,GĐ1,Giảng viên A,Lỗi logic thời gian
+CSC00007,Môn #7 ngày 31 tháng 2,Ba,31/02/2026,31/02/2026,08:00,10:00,C.31,Giảng viên B,Lỗi ngày không tồn tại
+CSC00008,Môn #8 giờ 25:00,Tư,09/09/2026,16/12/2026,25:00,27:00,C.42,Giảng viên C,Lỗi giờ vượt quá 23
+CSC00009,Môn #9 thiếu cột,Năm,10/09/2026,17/12/2026,08:00
+CSC00010,Môn #10 ngày bằng chữ,Sáu,ngay-dau,ngay-cuoi,13:30,16:30,F.102,Giảng viên D,Lỗi ngày sai định dạng
+CSC00011,Môn #11 giờ kết thúc sớm,Hai,07/09/2026,14/12/2026,11:30,07:30,GĐ1,Giảng viên A,Lỗi logic thời gian
+CSC00012,Môn #12 ngày 31 tháng 2,Ba,31/02/2026,31/02/2026,08:00,10:00,C.31,Giảng viên B,Lỗi ngày không tồn tại
+CSC00013,Môn #13 giờ 25:00,Tư,09/09/2026,16/12/2026,25:00,27:00,C.42,Giảng viên C,Lỗi giờ vượt quá 23
+CSC00014,Môn #14 thiếu cột,Năm,10/09/2026,17/12/2026,08:00
+CSC00015,Môn #15 ngày bằng chữ,Sáu,ngay-dau,ngay-cuoi,13:30,16:30,F.102,Giảng viên D,Lỗi ngày sai định dạng
+CSC00016,Môn #16 giờ kết thúc sớm,Hai,07/09/2026,14/12/2026,11:30,07:30,GĐ1,Giảng viên A,Lỗi logic thời gian
+CSC00017,Môn #17 ngày 31 tháng 2,Ba,31/02/2026,31/02/2026,08:00,10:00,C.31,Giảng viên B,Lỗi ngày không tồn tại
+CSC00018,Môn #18 giờ 25:00,Tư,09/09/2026,16/12/2026,25:00,27:00,C.42,Giảng viên C,Lỗi giờ vượt quá 23
+CSC00019,Môn #19 thiếu cột,Năm,10/09/2026,17/12/2026,08:00
+CSC00020,Môn #20 ngày bằng chữ,Sáu,ngay-dau,ngay-cuoi,13:30,16:30,F.102,Giảng viên D,Lỗi ngày sai định dạng
+CSC00021,Môn #21 giờ kết thúc sớm,Hai,07/09/2026,14/12/2026,11:30,07:30,GĐ1,Giảng viên A,Lỗi logic thời gian
+CSC00022,Môn #22 ngày 31 tháng 2,Ba,31/02/2026,31/02/2026,08:00,10:00,C.31,Giảng viên B,Lỗi ngày không tồn tại
