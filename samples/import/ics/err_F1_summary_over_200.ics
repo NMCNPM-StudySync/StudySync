@@ -1,11 +1,13 @@
 BEGIN:VCALENDAR
 VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
 BEGIN:VEVENT
-UID:event-summary-over-200@hcmus.edu.vn
-SUMMARY:Chương trình Hội nghị Khoa học Trẻ và Đổi mới Sáng tạo Công nghệ Thông tin Toàn quốc Phân hiệu Đại học Quốc gia Thành phố Hồ Chí Minh Năm Học 2026 - 2027 Chuyên đề Ứng dụng Trí tuệ Nhân tạo và An toàn Thông tin Không gian Mạng
-DTSTART:20261120T080000Z
-DTEND:20261120T113000Z
-LOCATION:Hội trường B
-DESCRIPTION:Kiểm tra BR-08: Chuỗi tiếng Việt dạng tổ hợp Unicode NFD (279 code points) được parser chuẩn hóa về NFC (226 ký tự) trước khi đếm, vượt quá 200 ký tự nên bị từ chối.
+UID:err-f1-nfd-over-201@hcmus.edu.vn
+SUMMARY:Chuyên đề Công nghệ Phần mềm Tiếng Việt: ếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếế
+DTSTART:20260907T073000Z
+DTEND:20260907T113000Z
+LOCATION:Giảng đường 1
+DESCRIPTION:Tiêu đề NFD có 535 code points và sau khi chuẩn hóa NFC là 201 ký tự (vượt 1 ký tự, bị từ chối theo BR-08).
+STATUS:CONFIRMED
 END:VEVENT
 END:VCALENDAR

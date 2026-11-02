@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+BEGIN:VEVENT
+UID:valid-f1-nfd-exact-200@hcmus.edu.vn
+SUMMARY:Chuyên đề Công nghệ Phần mềm Tiếng Việt: ếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếế
+DTSTART:20260907T073000Z
+DTEND:20260907T113000Z
+LOCATION:Giảng đường 1
+DESCRIPTION:Tiêu đề NFD có 532 code points nhưng sau khi chuẩn hóa NFC đúng 200 ký tự (hợp lệ theo BR-08).
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

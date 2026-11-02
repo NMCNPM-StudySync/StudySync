@@ -1,0 +1,16 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:err-unbounded-rrule-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Luyện tập thuật toán hàng ngày (Lặp vô hạn không có COUNT hoặc UNTIL)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260901T060000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260901T070000
+RRULE:FREQ=DAILY
+LOCATION:Phòng tự học - Ký túc xá
+DESCRIPTION:Sự kiện lặp vô hạn hàng ngày không có tham số COUNT hoặc UNTIL. Hệ thống từ chối tệp hoặc giới hạn bung chuỗi lặp tối đa 150 buổi / 24 tuần để bảo vệ bộ nhớ máy chủ.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

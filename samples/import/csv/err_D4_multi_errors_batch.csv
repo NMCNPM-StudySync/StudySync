@@ -1,4 +1,4 @@
-﻿Mã môn,Tên môn học,Thứ,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học,Giảng viên,Ghi chú
+﻿Mã môn,Tên môn học,Thứ trong tuần,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học,Giảng viên,Ghi chú
 CSC13002,Nhập môn Công nghệ Phần mềm,Hai,07/09/2026,14/12/2026,07:30,11:30,GĐ1,TS. Trần Văn A,Dòng 2 hợp lệ
 CSC10008,Mạng máy tính lỗi giờ kết thúc,Sáu,11/09/2026,18/12/2026,16:30,13:30,C.31,ThS. Lê Thị B,Dòng 3 lỗi logic thời gian
 CSC10005,Hệ điều hành ngày 31/02,Ba,31/02/2026,31/02/2026,09:30,12:00,F.102,TS. Phạm Đình D,Dòng 4 lỗi ngày không tồn tại
