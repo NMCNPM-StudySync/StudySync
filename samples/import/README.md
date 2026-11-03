@@ -88,7 +88,7 @@ samples/import/
 │   │
 │   └── NHÓM 6 - QUY ĐỊNH NGHIỆP VỤ & BATCH (Business Rules & Batch)
 │       ├── err_F1_summary_over_200.ics # Tên sự kiện NFD sau NFC là 201 ký tự (vượt 1 ký tự, bị từ chối)
-│       ├── err_F2_multi_errors_batch.ics # Tệp chứa 4 sự kiện lỗi rải rác (dòng 9, 14/17, 20/24, 26)
+│       ├── err_F2_multi_errors_batch.ics # Tệp chứa 4 sự kiện lỗi rải rác (dòng 9, 17, 24, 26)
 │       ├── err_F4_rrule_malformed.ics  # Quy tắc lặp RRULE bị sai tham số (dòng 8)
 │       └── err_F5_over_20_errors.ics   # Chứa đúng 25 sự kiện lỗi để test cắt ở 20 lỗi (US-11 AC6)
 │
