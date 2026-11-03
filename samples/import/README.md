@@ -28,17 +28,15 @@ Nhằm đảm bảo sự nhất quán 100% giữa bộ dữ liệu mẫu, mã ng
 1. **Lỗi sai cú pháp / giá trị cụ thể trên một dòng (ngày tháng, giờ giấc, logic thời gian, RRULE):**
    Báo số dòng của chính thuộc tính vi phạm đó (ví dụ: dòng chứa `DTSTART` sai, dòng chứa `DTEND` trước `DTSTART`).
 2. **Lỗi thiếu thuộc tính bắt buộc (`DTSTART`, `SUMMARY`, `UID`):**
-   Báo số dòng của thẻ mở `BEGIN:VEVENT` của sự kiện vi phạm đó (giúp người dùng định vị ngay sự kiện bị thiếu trường, ví dụ `B1`, `B2`, `B3` đều là dòng 3). *(Nếu parser kiểm tra lúc đóng thẻ `END:VEVENT`, số dòng sẽ là dòng `END:VEVENT` tương ứng; cả 2 trường hợp đều được ghi chú chi tiết trong bảng).*
+   Báo số dòng của thẻ mở `BEGIN:VEVENT` của sự kiện vi phạm đó (giúp người dùng định vị ngay sự kiện bị thiếu trường, ví dụ `B1`, `B2`, `B3` đều là dòng 3).
 3. **Lỗi cấu trúc khối thẻ lồng nhau / mồ côi:**
    Báo số dòng của thẻ gây xung đột (thẻ `BEGIN:VEVENT` thứ 2 mở khi thẻ trước chưa đóng ở dòng 7, hoặc thẻ `END:VEVENT` mồ côi ở dòng 3).
 4. **Đối với tệp kiểm thử chứa nhiều lỗi `err_F2_multi_errors_batch.ics`:**
-   Kỳ vọng báo đúng 4 lỗi với số dòng:
-   - Theo thẻ mở `BEGIN:VEVENT`: **dòng 9, 14, 20, 26**.
-   - Theo dòng thuộc tính cụ thể: **dòng 9 (thiếu DTSTART), 17 (ngày 31/04), 24 (DTEND < DTSTART), 26 (thiếu SUMMARY)**.
+   Kỳ vọng báo đúng 4 lỗi tại các dòng: **dòng 9** (thiếu `DTSTART`, theo thẻ `BEGIN:VEVENT`), **dòng 17** (ngày 31/04, theo dòng `DTSTART`), **dòng 24** (`DTEND < DTSTART`, theo dòng `DTEND`), **dòng 26** (thiếu `SUMMARY`, theo thẻ `BEGIN:VEVENT`).
 
 ### 2.2. Phân loại cột CSV và giá trị hợp lệ
-- **7 cột bắt buộc (US-15):** `Mã môn`, `Tên môn học`, `Thứ trong tuần`, `Ngày bắt đầu`, `Ngày kết thúc`, `Giờ bắt đầu`, `Giờ kết thúc`. Thiếu bất kỳ cột nào trong số này đều bị từ chối ngay tại dòng tiêu đề.
-- **3 cột tùy chọn:** `Phòng học`, `Giảng viên`, `Ghi chú`. Sinh viên có thể để trống; ô phòng học để trống hệ thống tự gán là `(Trực tuyến)`.
+- **7 cột bắt buộc (US-15 AC1):** `Tên môn học`, `Thứ trong tuần`, `Ngày bắt đầu`, `Ngày kết thúc`, `Giờ bắt đầu`, `Giờ kết thúc`, `Phòng học`. Tiêu đề tệp bắt buộc phải có đủ 7 cột này (thiếu cột sẽ bị từ chối theo `err_A3`). Riêng cột `Phòng học` được phép để trống giá trị ô (hệ thống tự gán là `(Trực tuyến)` theo US-15 AC1).
+- **3 cột tùy chọn / mở rộng:** `Mã môn`, `Giảng viên`, `Ghi chú`. Sinh viên có thể để trống hoặc không nhập.
 - **Giá trị chuẩn cột `Thứ trong tuần`:** Chấp nhận các chuỗi tiếng Việt: `Hai`, `Ba`, `Tư`, `Năm`, `Sáu`, `Bảy`, `Chủ Nhật` (hoặc `Chủ nhật`). Giá trị ngoài danh sách này (như `Thứ 9`, `Chủ Nhật 2`) bị từ chối theo `err_C4`.
 
 ---
@@ -145,9 +143,9 @@ samples/import/
 | `err_A4_unclosed_vevent.ics` | Cấu trúc tệp | Tệp bị ngắt quãng giữa chừng, thiếu thẻ `END:VEVENT` cuối cùng. | `422` | **Từ chối:** *"Tệp .ics bị cắt cụt: Sự kiện thiếu thẻ đóng END:VEVENT"* | RFC 5545, BR-06 |
 | `err_A5_unclosed_valarm.ics` | Cấu trúc tệp | Khối con `BEGIN:VALARM` không có `END:VALARM` trước khi gặp `END:VEVENT` (dòng 12). | `422` | **Từ chối:** *"Tệp lỗi cấu trúc: Khối con chưa đóng (thiếu END:VALARM) trước END:VEVENT (dòng 12)"* | RFC 5545, BR-06 |
 | `err_A6_empty_vcalendar.ics` | Cấu trúc tệp | Có `BEGIN:VCALENDAR` nhưng bên trong không có bất kỳ khối `VEVENT` nào. | `422` | **Từ chối:** *"Tệp lịch không chứa bất kỳ sự kiện nào"* | BR-06 |
-| `err_B1_missing_dtstart.ics` | Thiếu trường bắt buộc | Sự kiện có `SUMMARY`, `DTEND` nhưng thiếu `DTSTART` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu thuộc tính bắt buộc DTSTART (dòng 3)"* *(nếu bắt tại END: dòng 8)* | RFC 5545, US-11 AC4 |
-| `err_B2_missing_summary.ics` | Thiếu trường bắt buộc | Sự kiện có ngày giờ nhưng thiếu trường `SUMMARY` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu tiêu đề bắt buộc (SUMMARY) (dòng 3)"* *(nếu bắt tại END: dòng 8)* | BR-06 |
-| `err_B3_missing_uid.ics` | Thiếu trường bắt buộc | Sự kiện thiếu thuộc tính nhận dạng duy nhất `UID` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu thuộc tính bắt buộc UID (dòng 3)"* *(nếu bắt tại END: dòng 8)* | RFC 5545, BR-06 |
+| `err_B1_missing_dtstart.ics` | Thiếu trường bắt buộc | Sự kiện có `SUMMARY`, `DTEND` nhưng thiếu `DTSTART` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu thuộc tính bắt buộc DTSTART (dòng 3)"* | RFC 5545, US-11 AC4 |
+| `err_B2_missing_summary.ics` | Thiếu trường bắt buộc | Sự kiện có ngày giờ nhưng thiếu trường `SUMMARY` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu tiêu đề bắt buộc (SUMMARY) (dòng 3)"* | BR-06 |
+| `err_B3_missing_uid.ics` | Thiếu trường bắt buộc | Sự kiện thiếu thuộc tính nhận dạng duy nhất `UID` (khối sự kiện bắt đầu tại dòng 3). | `422` | **Từ chối:** *"Sự kiện thiếu thuộc tính bắt buộc UID (dòng 3)"* | RFC 5545, BR-06 |
 | `err_C1_garbage_date.ics` | Định dạng dữ liệu | Giá trị `DTSTART:chuoi-ngay-thang-hoan-toan-khong-hop-le` tại dòng 6. | `422` | **Từ chối:** *"Chuỗi thời gian iCalendar không đúng định dạng (dòng 6)"* | RFC 5545, BR-06 |
 | `err_C2_iso_format_date.ics` | Định dạng dữ liệu | `DTSTART:2026-09-07T07:30:00` tại dòng 6 (dùng dấu gạch nối ISO sai RFC 5545). | `422` | **Từ chối:** *"Chuỗi thời gian iCalendar không đúng định dạng (dòng 6)"* | RFC 5545 |
 | `err_C3_tzid_quoted_malformed.ics` | Định dạng dữ liệu | Tham số múi giờ rỗng `DTSTART;TZID="":20260907T073000` tại dòng 6. | `422` | **Từ chối:** *"Tham số múi giờ TZID không hợp lệ (dòng 6)"* | RFC 5545 |
@@ -161,7 +159,7 @@ samples/import/
 | `err_E1_dtend_before_dtstart.ics` | Logic thời gian | `DTSTART: 11:30`, `DTEND: 07:30` tại dòng 7 (giờ kết thúc trước giờ bắt đầu). | `422` | **Từ chối:** *"Tệp không hợp lệ. Lỗi tại dòng 7: Thời gian kết thúc phải sau thời gian bắt đầu"* | BR-06, US-11 AC5 |
 | `err_E2_dtend_equals_dtstart.ics` | Logic thời gian | `DTSTART: 08:00`, `DTEND: 08:00` tại dòng 7 (sự kiện thời lượng bằng 0 phút). | `422` | **Từ chối:** *"Tệp không hợp lệ. Lỗi tại dòng 7: Thời gian kết thúc phải sau thời gian bắt đầu"* | BR-06, US-11 AC5 |
 | `err_F1_summary_over_200.ics` | Quy định nghiệp vụ | Tên sự kiện NFD gồm 535 code points, sau NFC là **201 ký tự** (vượt 1 ký tự). | `422` | **Từ chối:** *"Tệp không hợp lệ. Lỗi tại dòng 6: Tên sự kiện không được vượt quá 200 ký tự"* | BR-08, US-11 |
-| `err_F2_multi_errors_batch.ics` | Quy định nghiệp vụ | Chứa 4 sự kiện lỗi rải rác. Báo 4 lỗi tại: dòng **9, 14, 20, 26** (theo thẻ mở `BEGIN:VEVENT`) hoặc **9, 17, 24, 26** (theo dòng thuộc tính). | `422` | **Từ chối toàn bộ:** Trả mảng 4 lỗi kèm số dòng gốc tương ứng theo thứ tự tăng dần. | BR-06 |
+| `err_F2_multi_errors_batch.ics` | Quy định nghiệp vụ | Chứa 4 sự kiện lỗi rải rác. Báo đúng 4 lỗi tại các dòng: **dòng 9** (thiếu `DTSTART`), **dòng 17** (ngày 31/04), **dòng 24** (`DTEND < DTSTART`), **dòng 26** (thiếu `SUMMARY`). | `422` | **Từ chối toàn bộ:** Trả mảng 4 lỗi kèm số dòng gốc tương ứng theo thứ tự tăng dần. | BR-06 |
 | `err_F4_rrule_malformed.ics` | Cú pháp quy tắc lặp | `RRULE:FREQ=MINUTELY;INTERVAL=-5;COUNT=KHONG_HOP_LE` tại dòng 8. | `422` | **Từ chối:** *"Quy tắc lặp RRULE không hợp lệ hoặc sai cú pháp (dòng 8)"* | RFC 5545 |
 | `err_F5_over_20_errors.ics` | Cắt danh sách lỗi (BR-06) | Tệp chứa **đúng 25 sự kiện bị lỗi cú pháp** khác nhau. | `422` | **Từ chối toàn bộ:** Trả JSON `{ totalErrors: 25, errors: [ 20 lỗi đầu ] }`. UI thông báo: *"Phát hiện 25 lỗi trong tệp (đang hiển thị 20 lỗi đầu tiên)"*. | BR-06, US-11 AC6 |
 
@@ -239,6 +237,7 @@ VERSION:2.0\r
 PRODID:-//StudySync//Module TV2 5MB Boundary Test//VI\r
 BEGIN:VEVENT\r
 UID:test-5mb-boundary@hcmus.edu.vn\r
+DTSTAMP:20260901T080000Z\r
 SUMMARY:Kiểm thử ranh giới 5 MB\r
 DTSTART:20260907T073000Z\r
 DTEND:20260907T113000Z\r
