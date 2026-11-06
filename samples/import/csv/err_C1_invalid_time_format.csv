@@ -1,0 +1,4 @@
+﻿Mã môn,Tên môn học,Thứ trong tuần,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học,Giảng viên,Ghi chú
+CSC13002,Lớp học giờ 25:00,Hai,07/09/2026,14/12/2026,25:00,26:30,GĐ1,TS. Trần Văn A,Giờ vượt quá 23
+CSC10008,Lớp học phút 65,Sáu,11/09/2026,18/12/2026,13:65,16:00,C.31,ThS. Lê Thị B,Phút vượt quá 59
+CSC10005,Lớp học định dạng chữ 8h30,Ba,08/09/2026,15/12/2026,8h30,11h30,F.102,TS. Phạm Đình D,Định dạng chữ thay vì HH:mm

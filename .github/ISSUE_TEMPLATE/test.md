@@ -1,22 +1,22 @@
 ---
-name: Việc code
-about: Tính năng, sửa đổi hoặc việc kỹ thuật cần làm
-title: "[TVx] "
-labels: ["code"]
+name: Kiểm thử
+about: Viết test case, unit test hoặc thực hiện kiểm thử
+title: "[TEST][TVx] "
+labels: ["test"]
 ---
 
 ## Mô tả
-<Việc này làm gì và vì sao cần làm. Viết 2 đến 4 câu.>
+<Cần kiểm thử gì, thuộc module nào và mục tiêu kiểm thử là gì. Viết 2 đến 4 câu.>
 
 ## Liên kết liên quan
 - User story: US-<xx>
 - Quy định nghiệp vụ: BR-<xx>
-- Thiết kế (Figma, API Spec, ERD): <link>
-- Issue liên quan: #<số>
+- Issue chức năng liên quan: #<số>
 
 ## Tiêu chí hoàn thành
-- [ ] Cho trước <bối cảnh> – Khi <hành động> – Thì <kết quả mong đợi>
-- [ ] Có unit test cho phần logic (gồm trường hợp biên)
+- [ ] Đã viết đủ test case theo dàn ý đã chốt (gồm trường hợp biên)
+- [ ] Kết quả thực tế khớp kết quả mong đợi ở mọi test case
+- [ ] Đã ghi kết quả vào tab Test case trong Sheets
 - [ ] Pull Request đã được review và merge
 - [ ] Đã ghi chú kết quả trên Issue này
 

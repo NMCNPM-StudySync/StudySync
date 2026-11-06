@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+BEGIN:VEVENT
+UID:err-f1-nfd-over-201@hcmus.edu.vn
+SUMMARY:Chuyên đề Công nghệ Phần mềm Tiếng Việt: ếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếếế
+DTSTART:20260907T073000Z
+DTEND:20260907T113000Z
+LOCATION:Giảng đường 1
+DESCRIPTION:Tiêu đề NFD có 535 code points và sau khi chuẩn hóa NFC là 201 ký tự (vượt 1 ký tự, bị từ chối theo BR-08).
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

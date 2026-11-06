@@ -1,0 +1,32 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:studysync-fold-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Kiến trúc phần mềm nâng cao (Dòng tiêu đề rất dài được ngắt tự độ
+ ng theo chuẩn RFC 5545)
+DTSTART:20260908T073000Z
+DTEND:20260908T113000Z
+LOCATION:Tòa nhà Trung tâm Tin học, Phòng Hội thảo Chuyên đề B.12, 227 Ng
+	uyễn Văn Cừ, Phường 4, Quận 5
+DESCRIPTION:Mô tả môn học dài hơn 75 ký tự được hệ thống xuất lịch chia t
+	hành nhiều dòng liên tiếp bắt đầu bằng một ký tự Tab ngang theo đúng quy
+	định gập dòng Line Folding của RFC 5545 Mục 3.1.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-fold-002@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Kỹ nghệ yêu cầu phần mềm (Kiểm tra ngắt dòng RFC 5545 giữa ký tự
+ tiếng Việt đa byte UTF-8)
+DTSTART:20260909T080000Z
+DTEND:20260909T110000Z
+LOCATION:Phòng F.301 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Kiểm tra bộ phân tích cú pháp nối dòng theo mảng byte (buffer)
+	thay vì chuỗi ký tự, đảm bảo không làm vỡ ký tự tiếng Việt có dấu khi bị
+	ngắt dòng ở ranh giới 75 octet.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

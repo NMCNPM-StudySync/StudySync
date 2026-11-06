@@ -1,0 +1,98 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudySync//Module TV2 Sample Generator//VI
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Thời khóa biểu học kỳ mẫu (Dữ liệu giả lập - TV2)
+X-WR-TIMEZONE:Asia/Ho_Chi_Minh
+BEGIN:VTIMEZONE
+TZID:Asia/Ho_Chi_Minh
+X-LIC-LOCATION:Asia/Ho_Chi_Minh
+BEGIN:STANDARD
+TZOFFSETFROM:+0700
+TZOFFSETTO:+0700
+TZNAME:+07
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:studysync-mock-001@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Nhập môn Công nghệ Phần mềm (CSC13002) - Lý thuyết
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260907T073000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260907T113000
+RRULE:FREQ=WEEKLY;COUNT=15;BYDAY=MO
+LOCATION:Giảng đường 1 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Môn học cốt lõi ngành Công nghệ thông tin. Sinh viên cần chuẩn bị bài đọc trước ở nhà.
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Nhắc nhở vào lớp học
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-002@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Mạng máy tính (CSC10008) - Thực hành Lab
+DTSTART;TZID="Asia/Ho_Chi_Minh":20260911T133000
+DTEND;TZID="Asia/Ho_Chi_Minh":20260911T163000
+RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261218T170000Z;BYDAY=FR
+LOCATION:Phòng máy C.31 - Cơ sở Linh Trung
+DESCRIPTION:Thực hành cấu hình mạng trên máy ảo và thiết bị chuyển mạch Cisco.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-003@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Thi giữa kỳ - Nhập môn Công nghệ Phần mềm
+DTSTART:20261024T013000Z
+DTEND:20261024T033000Z
+LOCATION:Phòng F.201 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Thi tự luận 90 phút. Nội dung gồm User Story, Use Case và Thiết kế kiến trúc.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-004@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Họp đồ án nhóm StudySync (Định kỳ Thứ Năm)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20261022T200000
+DTEND;TZID=Asia/Ho_Chi_Minh:20261022T210000
+RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=TH
+LOCATION:Google Meet (Online)
+DESCRIPTION:Họp sprint review và phân công công việc tuần mới.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-005@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Hội thảo Chuyên đề Công nghệ mới (Floating Time)
+DTSTART:20261102T080000
+DTEND:20261102T110000
+LOCATION:Hội trường B - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Kiểm tra quy đổi mốc thời gian không kèm định danh múi giờ về giờ Việt Nam (UTC+7) theo BR-07 và US-11 AC8.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-006@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Seminar Đổi mới Sáng tạo (Kiểm tra thuộc tính DURATION thay DTEND)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20261104T133000
+DURATION:PT1H50M
+LOCATION:Phòng F.102 - Cơ sở Nguyễn Văn Cừ
+DESCRIPTION:Kiểm tra phân tích cú pháp sự kiện sử dụng thuộc tính DURATION:PT1H50M (1 giờ 50 phút) thay cho DTEND.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:studysync-mock-007@hcmus.edu.vn
+DTSTAMP:20260901T080000Z
+SUMMARY:Lớp học Chuyên đề Trí tuệ Nhân tạo (Có thẻ EXDATE loại trừ ngày nghỉ lễ)
+DTSTART;TZID=Asia/Ho_Chi_Minh:20260907T080000
+DTEND;TZID=Asia/Ho_Chi_Minh:20260907T110000
+RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO
+EXDATE;TZID=Asia/Ho_Chi_Minh:20260914T080000,20261019T080000
+LOCATION:Phòng I.41 - Cơ sở Linh Trung
+DESCRIPTION:Kiểm tra phân tích cú pháp thẻ EXDATE loại trừ 2 ngày nghỉ lễ trong chuỗi lặp hàng tuần.
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

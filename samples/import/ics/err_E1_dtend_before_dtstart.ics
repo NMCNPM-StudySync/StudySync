@@ -1,0 +1,10 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-dtend-before-dtstart@hcmus.edu.vn
+SUMMARY:Lỗi logic: Giờ kết thúc sớm hơn giờ bắt đầu
+DTSTART:20260907T113000Z
+DTEND:20260907T073000Z
+LOCATION:Phòng E.304
+END:VEVENT
+END:VCALENDAR
