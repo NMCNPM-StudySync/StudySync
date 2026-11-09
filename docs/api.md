@@ -9,23 +9,24 @@
 | --- | --- |
 | Định dạng | REST, gửi và trả JSON, mã hóa UTF-8 |
 | Tiền tố đường dẫn | `/api` |
-| Xác thực | `<Bearer token (JWT) trong header Authorization>` |
-| Thời gian | Chuỗi ISO 8601 theo UTC, ví dụ `2026-11-05T13:00:00Z`; nhận cả dạng có mili giây (`2026-11-05T13:00:00.000Z`), không nhận offset như `+07:00`; dữ liệu API trả về luôn có mili giây, ví dụ `2026-11-05T13:00:00.000Z`; frontend tự hiển thị giờ Việt Nam |
-| Tên trường JSON | `<camelCase hoặc snake_case, chốt một kiểu cho toàn bộ>` |
+| Xác thực | Bearer token (JWT) trong header `Authorization: Bearer <token>` |
+| Thời gian | Chuỗi ISO 8601 theo UTC, ví dụ `2026-11-05T13:00:00Z`; nhận cả dạng có mili giây (`2026-11-05T13:00:00.000Z`), không nhận offset như `+07:00` và không nhận chuỗi thiếu hậu tố `Z` (trả `400 VALIDATION_ERROR`, BR-07); dữ liệu API trả về luôn có mili giây, ví dụ `2026-11-05T13:00:00.000Z`; frontend tự hiển thị giờ Việt Nam |
+| Tên trường JSON | camelCase cho toàn bộ (ví dụ `dueAt`, `startsAt`, `durationMinutes`). Backend đổi qua lại với tên cột snake_case của CSDL, không đổi tên cột theo API |
+| Khoảng thời gian | Đối tượng `{ "startsAt": "...", "endsAt": "..." }` (kiểu `TimeSlot` trong `docs/interval-library.md`), hai giá trị theo dòng Thời gian ở trên, hiểu theo nửa mở `[startsAt, endsAt)`. Khoảng tìm kiếm gửi lên dùng `from` và `to`, cũng nửa mở `[from, to)` |
+| Định danh | `id` là chuỗi UUID, theo kiểu khóa chính của CSDL |
 | Quyền riêng tư (BR-02) | API dành cho nhóm chỉ trả trạng thái bận hoặc rảnh, không trả tên sự kiện |
 
 ## Dạng phản hồi thành công
 
-> Trạng thái: **đề xuất**, chờ Nhi chốt ở việc "Chốt quy ước chung của API" (Tuần 4). Lý do: một số quy định nghiệp vụ (BR-01, BR-04) cho gọi thành công nhưng kèm cảnh báo, nên cần chỗ đặt cảnh báo tách khỏi các trường của đối tượng.
+> Trạng thái: **đã chốt** (Nhi, việc "Chốt quy ước chung của API", `#56`). Lý do: một số quy định nghiệp vụ (BR-01, BR-04) cho gọi thành công nhưng kèm cảnh báo, nên cần chỗ đặt cảnh báo tách khỏi các trường của đối tượng.
 
-Áp dụng cho mọi phản hồi thành công (HTTP 2xx), kể cả khi không có cảnh báo.
+Áp dụng cho mọi phản hồi thành công có nội dung (HTTP 200, 201). HTTP 204 không có nội dung, xem mục "Mã HTTP khi thành công".
 
 **Thành công thường:**
 
 ```json
 {
-  "data": { },
-  "warnings": []
+  "data": { }
 }
 ```
 
@@ -48,16 +49,28 @@
 ```
 
 - `data`: nội dung chính của endpoint (đối tượng hoặc danh sách bọc trong đối tượng, ví dụ `data.slots`).
-- `warnings`: luôn có, là mảng rỗng khi không có cảnh báo. Mỗi phần tử có dạng `{ code, message }`.
+- `warnings`: chỉ có khi có cảnh báo, không trả mảng rỗng. Mỗi phần tử có dạng `{ code, message }`, có thể kèm `details` (xem mục "Mã HTTP khi thành công").
 - Phản hồi lỗi (4xx, 5xx) dùng dạng riêng ở mục sau, không có `data`.
 
-Bảng mã cảnh báo dùng chung (đề xuất, chờ Nhi chốt ở việc 3 – `#56`):
+Bảng mã cảnh báo dùng chung (đã chốt ở việc 3 – `#56`):
 
 | Mã cảnh báo (`code`) | Quy tắc | Ý nghĩa / Khi nào trả về |
 | --- | --- | --- |
 | `FIXED_EVENT_OVERLAP` | BR-01 | Sự kiện cố định vừa tạo/nhập bị chồng thời gian với sự kiện cố định khác (vẫn cho lưu thành công kèm cảnh báo) |
-| `DEADLINE_PASSED` | BR-04 | Việc cần làm được lưu với hạn hoàn thành (`dueAt` / `due_at`) đã qua so với thời điểm hiện tại |
+| `DEADLINE_PASSED` | BR-04 | Việc cần làm được lưu với hạn hoàn thành (`dueAt`) đã qua so với thời điểm hiện tại |
 | `MEMBER_NO_FIXED_EVENTS` | Yêu cầu 4.1 (U031) | Khi tìm giờ họp chung mà trong nhóm có thành viên chưa nhập sự kiện cố định nào trong tuần được chọn |
+
+## Mã HTTP khi thành công
+
+> Bổ sung của Nhi cho Quy ước chung (việc 3, `#56`).
+
+| Mã HTTP | Khi nào | Nội dung trả về |
+| --- | --- | --- |
+| 200 | Đọc, sửa, hoặc thao tác không tạo tài nguyên mới (ví dụ tìm giờ họp, đề xuất khung giờ) thành công | Dạng phản hồi thành công ở trên |
+| 201 | Tạo tài nguyên mới thành công | Dạng phản hồi thành công ở trên, `data` là tài nguyên vừa tạo |
+| 204 | Xóa thành công | Body rỗng, không gửi chuỗi JSON nào (không trả `{ "data": null }` hay `{ "data": {} }`) |
+
+Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng `[{ "field", "issue" }]` với `error.details`) khi cảnh báo gắn với một trường cụ thể để frontend hiện ngay tại trường nhập. Ví dụ `DEADLINE_PASSED` kèm `"details": [{ "field": "dueAt", "issue": "đã qua" }]`.
 
 ## Dạng thông báo lỗi thống nhất
 
@@ -116,7 +129,7 @@ Quyền: <Ai gọi được: chủ tài khoản / thành viên nhóm / trưởng
 **Kết quả thành công (<mã HTTP>)**
 
 ```json
-{ "data": { }, "warnings": [] }
+{ "data": { } }
 ```
 
 **Lỗi có thể gặp**
