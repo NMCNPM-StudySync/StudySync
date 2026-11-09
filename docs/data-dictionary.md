@@ -223,7 +223,7 @@ Cú pháp cụ thể theo `backend/README.md`. Các bước dưới đây gọi 
 
 ```markdown
 #### <tên_bảng>
-Mô tả: <Bảng cho cái diện dòng gì gì, lưu mỗi này đại>  
+Mô tả: <Bảng này lưu gì, mỗi dòng đại diện cho cái gì>  
 Module: TV<x> · Migration tạo bảng: <tên file migration> · Người sở hữu: <tên>  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
@@ -233,8 +233,8 @@ Module: TV<x> · Migration tạo bảng: <tên file migration> · Người sở 
 | created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
 | updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
 
-Quyền riêng tư: <Cột (BR-02) cho khác không người nhóm nào trong trả được>  
-Ghi chú: <Chỉ dữ liệu mẫu mục, quy tắc xóa,>
+Quyền riêng tư: <Cột nào không được trả cho người khác trong nhóm (BR-02)>  
+Ghi chú: <Chỉ mục, quy tắc xóa, dữ liệu mẫu>
 ```
 
 ---
