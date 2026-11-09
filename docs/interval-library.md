@@ -107,7 +107,7 @@ Hàm kiểm tra chồng nhau (thêm ở Issue #56):
 export function hasOverlap(a: TimeInterval, b: TimeInterval): boolean;
 ```
 
-Hàm đếm số danh sách phủ kín một khung (thêm ở Issue #56, phục vụ `freeCount` của TV4):
+Hàm đếm số danh sách phủ kín một khung (thêm ở Issue #56, phục vụ `availableCount` của TV4):
 
 ```ts
 /**
@@ -118,7 +118,7 @@ Hàm đếm số danh sách phủ kín một khung (thêm ở Issue #56, phục 
  * Khung độ dài 0 (start == end) là khoảng rỗng, trả 0 (cùng cách xử lý với hasOverlap).
  * Khung có start > end hoặc Date không hợp lệ thì ném RangeError.
  * Ví dụ: A [08:00–11:00], B [10:00–12:00], window 10:00–11:00 -> 2; window 09:00–10:30 -> 1 (chỉ A)
- * Dùng cho TV4: freeCount của một khung khi không có khung nào cả nhóm cùng rảnh.
+ * Dùng cho TV4: availableCount của một khung khi không có khung nào cả nhóm cùng rảnh.
  */
 export function countCoveringLists(
   lists: readonly (readonly TimeInterval[])[],
@@ -186,7 +186,7 @@ Hàm nào TV nào dùng (theo tài liệu thuật toán TV3 và ví dụ TV4):
 | `filterByMinDuration` | Chỉ giữ chỗ trống đủ dài cho khung cần đặt | Chỉ giữ khoảng đủ dài cho buổi họp |
 | `durationMinutes` | Độ dài khoảng | Độ dài khoảng |
 | `hasOverlap` | Có thể dùng để kiểm tra một khung với một sự kiện | Có thể dùng để kiểm tra hai khoảng |
-| `countCoveringLists` | Không dùng | `freeCount` của từng khung ứng viên khi không có khung chung |
+| `countCoveringLists` | Không dùng | `availableCount` của từng khung ứng viên khi không có khung chung |
 | `toInterval`, `toSlot` | Đọc dữ liệu từ API, trả kết quả cho API | Đọc `from`, `to` từ body, trả `startsAt`, `endsAt` |
 
 Cách TV4 đếm số người rảnh khi không có khung nào cả nhóm cùng rảnh (ví dụ):
@@ -195,7 +195,7 @@ Cách TV4 đếm số người rảnh khi không có khung nào cả nhóm cùng
 // candidates: các khung ứng viên (do TV4 sinh, ví dụ dài đúng thời lượng họp, cách nhau 30 phút)
 const result = candidates.map((w) => ({
   slot: toSlot(w),
-  freeCount: countCoveringLists(freeOfEach, w),
+  availableCount: countCoveringLists(freeOfEach, w),
   totalMembers: freeOfEach.length,
 }));
 ```
