@@ -176,7 +176,7 @@ Ghi chú: <Quy định nghiệp vụ áp dụng, giới hạn, lưu ý cho front
 ### `POST /api/groups/{groupId}/meeting-slots/search`
 
 Mô tả: Tìm các khung giờ họp chung của nhóm trong tuần được chọn dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên (US-23, U031).  
-Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp
+Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Quyền: Người tổ chức họp của nhóm (gồm Trưởng nhóm hoặc Thành viên nhóm được Trưởng nhóm ủy quyền theo U036).  
 
 Tham số đường dẫn (Path parameters):
@@ -189,8 +189,8 @@ Dữ liệu gửi lên (Request body):
 
 ```json
 {
-  "from": "2026-11-09T00:00:00.000Z",
-  "to": "2026-11-16T00:00:00.000Z",
+  "from": "2026-11-08T17:00:00.000Z",
+  "to": "2026-11-15T17:00:00.000Z",
   "durationMinutes": 60
 }
 ```
@@ -272,7 +272,7 @@ sequenceDiagram
         FE-->>NTH: Hiển thị thông báo yêu cầu nhóm tối thiểu 2 thành viên / chọn lại tuần
     else Đủ điều kiện tìm giờ họp
         Note over SVC,DB: BR-02 - Chỉ đọc starts_at, ends_at của fixed_events, không đọc title/tasks/study_slots
-        SVC->>DB: SELECT user_id, starts_at, ends_at FROM fixed_events WHERE user_id IN (...) AND starts_at < to AND ends_at > from
+    SVC->>DB: Lấy user_id, starts_at, ends_at của fixed_events thuộc các thành viên, giao với khoảng from đến to
         DB-->>SVC: Danh sách khoảng bận (UTC) của các thành viên
         Note over SVC: BR-01, BR-07 - Hợp nhất khoảng bận nửa mở [starts_at, ends_at) trong khung 07:00-22:00 giờ VN
         SVC-->>API: Kết quả khung giờ rảnh (allFreeSlots / tối đa 10 partialSlots) kèm warnings nếu có
