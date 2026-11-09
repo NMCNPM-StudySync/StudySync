@@ -32,11 +32,11 @@ export interface TimeInterval {
 /**
  * Dạng chuỗi của một khoảng thời gian, dùng ở ranh giới API (BR-07).
  * Cả hai là chuỗi ISO 8601 theo UTC, hậu tố Z. Cùng quy ước nửa mở [start, end).
- * Ví dụ: { start: "2026-11-05T13:00:00.000Z", end: "2026-11-05T14:30:00.000Z" }
+ * Ví dụ: { startsAt: "2026-11-05T13:00:00.000Z", endsAt: "2026-11-05T14:30:00.000Z" }
  */
 export interface TimeSlot {
-  readonly start: string;
-  readonly end: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
 }
 ```
 
@@ -187,7 +187,7 @@ Hàm nào TV nào dùng (theo tài liệu thuật toán TV3 và ví dụ TV4):
 | `durationMinutes` | Độ dài khoảng | Độ dài khoảng |
 | `hasOverlap` | Có thể dùng để kiểm tra một khung với một sự kiện | Có thể dùng để kiểm tra hai khoảng |
 | `countCoveringLists` | Không dùng | `freeCount` của từng khung ứng viên khi không có khung chung |
-| `toInterval`, `toSlot` | Đọc dữ liệu từ API, trả kết quả cho API | Đọc `from`, `to` từ body, trả `start`, `end` |
+| `toInterval`, `toSlot` | Đọc dữ liệu từ API, trả kết quả cho API | Đọc `from`, `to` từ body, trả `startsAt`, `endsAt` |
 
 Cách TV4 đếm số người rảnh khi không có khung nào cả nhóm cùng rảnh (ví dụ):
 
@@ -290,12 +290,12 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 ### toInterval và toSlot
 | # | Trường hợp | Đầu vào | Kết quả mong đợi |
 |---|---|---|---|
-| C1 | Không có mili giây | `{ start: "2026-11-05T13:00:00Z", end: "2026-11-05T14:30:00Z" }` | `Date` 13:00Z và 14:30Z |
-| C2 | Có mili giây | `{ start: "2026-11-05T13:00:00.000Z", ... }` | Giống C1 |
+| C1 | Không có mili giây | `{ startsAt: "2026-11-05T13:00:00Z", endsAt: "2026-11-05T14:30:00Z" }` | `Date` 13:00Z và 14:30Z |
+| C2 | Có mili giây | `{ startsAt: "2026-11-05T13:00:00.000Z", ... }` | Giống C1 |
 | C3 | Offset thay cho Z | `"2026-11-05T20:00:00+07:00"` | ném `RangeError` (BR-07) |
 | C4 | Không có hậu tố múi giờ | `"2026-11-05T13:00:00"` | ném `RangeError` |
 | C5 | Chuỗi không đọc được | `"abc"` | ném `RangeError` |
-| C6 | `start` sau `end` | `start: "…14:00:00Z"`, `end: "…13:00:00Z"` | ném `RangeError` |
+| C6 | `startsAt` sau `endsAt` | `startsAt: "…14:00:00Z"`, `endsAt: "…13:00:00Z"` | ném `RangeError` |
 | C7 | `toSlot` luôn có mili giây | `Date` 13:00:00Z | `"2026-11-05T13:00:00.000Z"` |
 | C8 | Đi qua rồi quay lại | `toSlot(toInterval(slot))` | Bằng `slot` chuẩn hóa mili giây |
 | C9 | Không sửa đầu vào, trả đối tượng mới | bất kỳ | `Date` trả về không phải đối tượng của đầu vào |
