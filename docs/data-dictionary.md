@@ -198,4 +198,247 @@ Cú pháp cụ thể theo `backend/README.md`. Các bước dưới đây gọi 
 2. Knex, Migrations: https://knexjs.org/guide/migrations
 3. Prisma, Generating down migrations: https://www.prisma.io/docs/orm/prisma-migrate/workflows/generating-down-migrations
 
-<!-- Từ điển từng bảng theo module (khung của Thư Q.A., việc 1) nối tiếp từ đây, bắt đầu bằng Phần 3. -->
+## Phần 3. Từ điển bảng theo module
+
+> Khung tài liệu theo Template 8 và các quy ước đã chốt ở Phần 1. Mỗi module điền vào vùng riêng của mình, cập nhật cùng Pull Request với migration.
+> Ký hiệu: `<nội dung>` là chỗ cần điền (thay cả dấu ngoặc nhọn). Xóa các ghi chú *Hướng dẫn* khi dùng thật.
+> Thư H.A. sở hữu lược đồ và chốt tên bảng khi vẽ ERD; Thư Q.A. cùng vẽ ERD và viết từ điển.
+
+### Tổng quan bảng theo module
+
+| Module | Bảng | Thực thể | Trạng thái |
+| --- | --- | --- | --- |
+| TV1 | `users` | Người dùng | Nháp |
+| TV1 | `groups` | Nhóm | Nháp |
+| TV1 | `group_members` | Thành viên nhóm | Nháp |
+| TV2 | `fixed_events` | Sự kiện cố định | Nháp |
+| TV2 | `tasks` | Việc cần làm (dùng chung với TV3) | Nháp |
+| TV3 | `study_slots` | Khung giờ học đề xuất | Nháp |
+| TV4 | `meeting_proposals` | Đề xuất buổi họp | Nháp |
+| TV4 | `meeting_invitations` | Lời mời | Nháp |
+| TV4 | `reminders` | Nhắc việc | Nháp |
+| TV5 | `kanban_cards` | Thẻ Kanban | Nháp |
+
+### Mẫu một bảng (sao chép cho mỗi bảng)
+
+```markdown
+#### <tên_bảng>
+Mô tả: <Bảng cho cái diện dòng gì gì, lưu mỗi này đại>  
+Module: TV<x> · Migration tạo bảng: <tên file migration> · Người sở hữu: <tên>  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính (`pk_<tên_bảng>`) | gen_random_uuid() | Mã dòng |
+| <cột> | <kiểu> | <Có/Không> | <khóa ngoại → bảng.cột, duy nhất, CHECK...> | <...> | <...> |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: <Cột (BR-02) cho khác không người nhóm nào trong trả được>  
+Ghi chú: <Chỉ dữ liệu mẫu mục, quy tắc xóa,>
+```
+
+---
+
+### TV1 – Tài khoản và nhóm
+
+<!-- Vùng của TV1: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+
+#### users
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Người dùng)  
+Module: TV1 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+#### groups
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Nhóm)  
+Module: TV1 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+#### group_members
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Thành viên nhóm)  
+Module: TV1 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+---
+
+### TV2 – Lịch, sự kiện cố định và việc cần làm
+
+<!-- Vùng của TV2: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+
+#### fixed_events
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Sự kiện cố định)  
+Module: TV2 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+#### tasks
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Việc cần làm (dùng chung với TV3))  
+Module: TV2 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+---
+
+### TV3 – Đề xuất khung giờ học
+
+<!-- Vùng của TV3: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+
+#### study_slots
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Khung giờ học đề xuất)  
+Module: TV3 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+---
+
+### TV4 – Họp nhóm, lời mời và nhắc việc
+
+<!-- Vùng của TV4: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+
+#### meeting_proposals
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Đề xuất buổi họp)  
+Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+#### meeting_invitations
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Lời mời)  
+Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+#### reminders
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Nhắc việc)  
+Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+
+---
+
+### TV5 – Kanban và thống kê
+
+<!-- Vùng của TV5: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+
+#### kanban_cards
+
+Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Thẻ Kanban)  
+Module: TV5 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
+| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
+Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu, lưu ý cột người tạo dùng created_by_user_id theo mục 1.8>`
+
+---
+
+### Ví dụ điền sẵn: `fixed_events` (TV2)
+
+> Ví dụ minh họa, xóa hoặc thay bằng bản chính thức khi TV2 điền vùng của mình.
+
+Mô tả: Mỗi dòng là một sự kiện cố định không dời được của một sinh viên (buổi học trên lớp, lịch thi, sự kiện khác theo U011).  
+Module: TV2 · Migration tạo bảng: `<sẽ điền ở việc 9>` · Người sở hữu: Hưng  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính (`pk_fixed_events`) | gen_random_uuid() | Mã sự kiện |
+| user_id | uuid | Không | Khóa ngoại `fk_fixed_events_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Chủ sự kiện |
+| title | varchar(200) | Không | CHECK `ck_fixed_events_title_not_empty`: `char_length(title) >= 1`; CHECK `ck_fixed_events_title_trimmed`: `title = btrim(title)` | | Tên sự kiện (riêng tư, không trả cho nhóm); lưu chuỗi NFC đã cắt khoảng trắng, tối đa 200 code point (BR-08) |
+| kind | varchar(30) | Không | CHECK `ck_fixed_events_kind`: `kind IN ('class', 'exam', 'other')` | `'class'` | Loại sự kiện (`class`: buổi học, `exam`: lịch thi, `other`: khác) |
+| starts_at | timestamptz | Không | | | Thời điểm bắt đầu (UTC, BR-07) |
+| ends_at | timestamptz | Không | CHECK `ck_fixed_events_ends_after_starts`: `ends_at > starts_at` | | Thời điểm kết thúc (UTC, hiểu theo khoảng nửa mở `[starts_at, ends_at)` – BR-01, BR-07) |
+| location | text | Có | | NULL | Địa điểm diễn ra sự kiện (tùy chọn khi tạo/sửa ở U011; cho phép rỗng vì người dùng không bắt buộc nhập) |
+| notes | text | Có | | NULL | Ghi chú thêm cho sự kiện (tùy chọn khi tạo/sửa ở U011; cho phép rỗng vì người dùng không bắt buộc nhập) |
+| source | varchar(30) | Không | CHECK `ck_fixed_events_source`: `source IN ('manual', 'ics', 'csv')` | `'manual'` | Nguồn nhập sự kiện |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: API nhóm chỉ trả `starts_at` và `ends_at` (trạng thái bận) phục vụ tìm giờ họp chung; mọi cột còn lại (`title`, `kind`, `location`, `notes`, `source`) đều là dữ liệu cá nhân và không trả cho người khác trong nhóm (BR-02, mục 1.7).  
+Ghi chú: Chỉ mục `idx_fixed_events_user_id_starts_at` trên `(user_id, starts_at)` để truy vấn lịch cá nhân và kiểm tra trùng/tìm giờ họp; gắn trigger `trg_fixed_events_set_updated_at` gọi hàm `set_updated_at()`; xóa thật khỏi CSDL khi sinh viên xóa sự kiện (US-12, mục 1.5).
