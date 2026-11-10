@@ -14,7 +14,7 @@ Hàm thuần nghĩa là:
 - Không sửa mảng, đối tượng hay `Date` đầu vào; luôn trả mảng mới, đối tượng mới, `Date` mới (xem quy ước "Bất biến" ở mục 2).
 - Cùng đầu vào thì luôn cho cùng đầu ra, nên viết unit test dễ.
 
-Thư viện chỉ biết thời điểm bắt đầu và kết thúc, không biết tên sự kiện. Nhờ vậy dữ liệu đi ra từ thư viện tự đúng với BR2 (nhóm chỉ thấy bận/rảnh).
+Thư viện chỉ biết thời điểm bắt đầu và kết thúc, không biết tên sự kiện. Nhờ vậy dữ liệu đi ra từ thư viện tự đúng với BR-02 (nhóm chỉ thấy bận/rảnh).
 
 ## 2. Kiểu dữ liệu
 
@@ -59,7 +59,7 @@ Quy ước:
 |---|---|
 | Múi giờ | Mọi `Date` là thời điểm UTC. Thư viện không đổi múi giờ. Đổi sang giờ Việt Nam (UTC+7) chỉ làm ở tầng hiển thị. |
 | Nửa mở `[start, end)` | `09:00–10:00` và `10:00–11:00` **không chồng nhau**: một buổi kết thúc lúc 10:00 không đụng buổi bắt đầu lúc 10:00. |
-| Hợp lệ | `start < end`. Khoảng có độ dài 0 (`start == end`) bị bỏ khỏi kết quả. `start > end` hoặc `Date` không hợp lệ (`NaN`) thì ném `RangeError`. |
+| Hợp lệ | `start < end`. Khoảng có độ dài 0 (`start == end`) là hợp lệ, không ném lỗi, và bị bỏ khỏi kết quả. `start > end` hoặc `Date` không hợp lệ (`NaN`) thì ném `RangeError`. |
 | Độ chính xác | So sánh bằng `getTime()` (mili giây). Thư viện không làm tròn theo bước 15 hay 30 phút; nếu cần, TV3/TV4 làm tròn trước khi gọi. |
 | Kết quả | Mọi hàm trả về danh sách **đã sắp xếp theo `start`, không chồng nhau, không chạm nhau** (gọi là "danh sách chuẩn"). |
 | Bất biến | `Date` trong JavaScript sửa được (ví dụ `setHours`), nên thư viện **không bao giờ trả lại chính đối tượng `Date` của đầu vào**. Mỗi khoảng trong kết quả là đối tượng mới, với `start`/`end` tạo bằng `new Date(t.getTime())`. Nhờ vậy sửa kết quả không ảnh hưởng đầu vào và ngược lại. Thư viện cũng không gọi hàm `set...` nào trên `Date` đầu vào. |
@@ -78,7 +78,7 @@ export function mergeIntervals(intervals: readonly TimeInterval[]): TimeInterval
 /**
  * Lấy các khoảng rảnh trừ đi các khoảng bận.
  * Ví dụ: free [08:00–12:00], busy [09:00–10:00] -> [08:00–09:00, 10:00–12:00]
- * Dùng cho TV3: khoảng rảnh trong ngày trừ lịch cố định (BR1) để ra chỗ xếp việc.
+ * Dùng cho TV3: khoảng rảnh trong ngày trừ lịch cố định (BR-01) để ra chỗ xếp việc.
  */
 export function subtractIntervals(
   free: readonly TimeInterval[],
@@ -147,7 +147,7 @@ export function durationMinutes(interval: TimeInterval): number;
 
 /**
  * Chuẩn hóa đầu vào bằng mergeIntervals, rồi chỉ giữ các khoảng dài ít nhất minMinutes phút.
- * Ví dụ: TV3 cần chỗ trống ≥ 60 phút cho việc dùng thời lượng mặc định (BR4).
+ * Ví dụ: TV3 cần chỗ trống ≥ 60 phút cho việc dùng thời lượng mặc định (BR-04).
  */
 export function filterByMinDuration(
   intervals: readonly TimeInterval[],
@@ -202,7 +202,7 @@ const result = candidates.map((w) => ({
 
 ## 4. Trường hợp biên
 
-Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh sách này là cơ sở để viết test ở Tuần 3.
+Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh sách này là cơ sở để viết test ở #71 (Tuần 4).
 
 ### mergeIntervals
 | # | Trường hợp | Đầu vào | Kết quả mong đợi |
@@ -300,6 +300,7 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 | C8 | Đi qua rồi quay lại | `toSlot(toInterval(slot))` | Bằng `slot` chuẩn hóa mili giây |
 | C9 | Không sửa đầu vào, trả đối tượng mới | bất kỳ | `Date` trả về không phải đối tượng của đầu vào |
 | C10 | Ngày không tồn tại | `"2026-02-30T00:00:00Z"` | ném `RangeError` (không để `Date` tự đổi thành 02/03) |
+| C11 | `startsAt` bằng `endsAt` | `startsAt: "…13:00:00Z"`, `endsAt: "…13:00:00Z"` | hợp lệ, trả `TimeInterval` độ dài 0 (không ném lỗi), cùng quy tắc "Hợp lệ" ở mục 2; các hàm khác coi đây là khoảng rỗng |
 
 ### Chung cho mọi hàm
 - Ngày khác nhau và khoảng vắt qua nửa đêm (theo giờ VN là 23:00–01:00, theo UTC là 16:00–18:00): xử lý bình thường vì chỉ so thời điểm.
