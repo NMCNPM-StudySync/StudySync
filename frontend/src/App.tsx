@@ -6,6 +6,7 @@ import { SchedulerPage } from './pages/scheduler/SchedulerPage';
 import { MeetingsPage } from './pages/meetings/MeetingsPage';
 import { KanbanPage } from './pages/kanban/KanbanPage';
 import { StatsPage } from './pages/stats/StatsPage';
+import { NotFoundPage } from './pages/not-found/NotFoundPage';
 
 export function App() {
   return (
@@ -18,6 +19,7 @@ export function App() {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/kanban" element={<KanbanPage />} />
         <Route path="/stats" element={<StatsPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );

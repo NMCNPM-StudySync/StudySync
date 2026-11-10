@@ -33,21 +33,21 @@ Nội dung biến môi trường cơ bản:
 
 ```env
 # Địa chỉ API backend của StudySync
-VITE_API_BASE_URL=http://localhost:3000/api
+VITE_API_URL=http://localhost:3000/api
 ```
 
 > **Lưu ý an toàn:** Tuyệt đối không commit file `.env` lên Git (đã được cấu hình trong `.gitignore`).
 
 ## 4. Các lệnh phát triển (Scripts)
 
-| Lệnh | Mục đích |
-|---|---|
-| `npm run dev` | Khởi chạy máy chủ phát triển (Vite Dev Server) tại `http://localhost:5173` |
-| `npm run build` | Kiểm tra kiểu TypeScript (`tsc -b`) và biên dịch dự án vào thư mục `dist/` |
-| `npm run preview` | Chạy thử bản biên dịch production tại máy cục bộ |
-| `npm run lint` | Chạy kiểm tra tĩnh ESLint và Prettier cho `src/` và `tests/` |
-| `npm run format` | Tự động định dạng mã nguồn theo chuẩn Prettier của nhóm |
-| `npm test` | Chạy toàn bộ bộ kiểm thử tự động bằng Vitest |
+| Lệnh              | Mục đích                                                                   |
+| ----------------- | -------------------------------------------------------------------------- |
+| `npm run dev`     | Khởi chạy máy chủ phát triển (Vite Dev Server) tại `http://localhost:5173` |
+| `npm run build`   | Kiểm tra kiểu TypeScript (`tsc -b`) và biên dịch dự án vào thư mục `dist/` |
+| `npm run preview` | Chạy thử bản biên dịch production tại máy cục bộ                           |
+| `npm run lint`    | Chạy kiểm tra tĩnh ESLint và Prettier cho `src/` và `tests/`               |
+| `npm run format`  | Tự động định dạng mã nguồn theo chuẩn Prettier của nhóm                    |
+| `npm test`        | Chạy toàn bộ bộ kiểm thử tự động bằng Vitest                               |
 
 ## 5. Cấu trúc thư mục
 
@@ -81,7 +81,8 @@ frontend/
 │       ├── scheduler/        # Module TV3: Xếp lịch tự động (`/scheduler`)
 │       ├── meetings/         # Module TV4: Tìm giờ họp chung (`/meetings`)
 │       ├── kanban/           # Module TV5: Bảng công việc Kanban (`/kanban`)
-│       └── stats/            # Phân hệ Thống kê giờ học (`/stats`)
+│       ├── stats/            # Phân hệ Thống kê giờ học (`/stats`)
+│       └── not-found/        # Trang thông báo 404 không tìm thấy đường dẫn
 └── tests/                    # Bộ kiểm thử tự động
     ├── setup.ts              # Cấu hình mở rộng jest-dom cho Vitest
     └── App.test.tsx          # Kiểm thử tích hợp bố cục và điều hướng

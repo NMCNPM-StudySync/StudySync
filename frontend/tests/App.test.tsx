@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import App from '../src/App';
@@ -58,7 +58,38 @@ describe('App navigation and layout', () => {
     }
   });
 
-  it('hiển thị chân trang với đầy đủ thông tin 5 thành viên nhóm', () => {
+  it('chuyển đổi trang khi người dùng bấm vào các mục trên thanh điều hướng', () => {
+    render(
+      <MemoryRouter initialEntries={['/calendar']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Lịch cá nhân (TV2)' }),
+    ).toBeInTheDocument();
+
+    const nav = screen.getByRole('navigation', { name: 'Thanh điều hướng chính' });
+    const groupsLink = within(nav).getByRole('link', { name: /^Nhóm$/i });
+    fireEvent.click(groupsLink);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Nhóm (TV1)' })).toBeInTheDocument();
+  });
+
+  it('hiển thị trang 404 Not Found khi truy cập đường dẫn lạ', () => {
+    render(
+      <MemoryRouter initialEntries={['/duong-dan-khong-ton-tai']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Không tìm thấy trang' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Quay về trang Lịch' })).toBeInTheDocument();
+  });
+
+  it('hiển thị chân trang với bản quyền và không chứa thông tin MSSV', () => {
     render(
       <MemoryRouter initialEntries={['/calendar']}>
         <App />
@@ -67,10 +98,11 @@ describe('App navigation and layout', () => {
 
     const footer = screen.getByRole('contentinfo');
     expect(footer).toBeInTheDocument();
-    expect(within(footer).getByText(/24120195/)).toBeInTheDocument(); // Kiên
-    expect(within(footer).getByText(/24120319/)).toBeInTheDocument(); // Hưng
-    expect(within(footer).getByText(/24120404/)).toBeInTheDocument(); // Nhi
-    expect(within(footer).getByText(/24120226/)).toBeInTheDocument(); // Thư H.A.
-    expect(within(footer).getByText(/24120143/)).toBeInTheDocument(); // Thư Q.A.
+    expect(within(footer).getByText(/© 2026 StudySync/i)).toBeInTheDocument();
+    expect(
+      within(footer).getByText(/Đội ngũ phát triển: Kiên · Hưng · Nhi · Thư H.A. · Thư Q.A./i),
+    ).toBeInTheDocument();
+    // Đảm bảo không chứa MSSV của thành viên theo Mục 4.15
+    expect(within(footer).queryByText(/2412\d{4}/)).not.toBeInTheDocument();
   });
 });
