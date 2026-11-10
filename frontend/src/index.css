@@ -21,6 +21,17 @@ body {
   background-color: #eaf1fc;
   color: #10264c;
   font-family: 'Josefin Sans', system-ui, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ẩn thanh cuộn nhưng vẫn cho phép cuộn cảm ứng */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Toàn bộ tiêu đề sử dụng Zalando Sans Expanded theo UI Kit */

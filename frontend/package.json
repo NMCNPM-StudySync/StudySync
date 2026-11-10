@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint . && prettier --check src tests",
-    "format": "prettier --write src tests",
+    "lint": "eslint . && prettier --check \"src\" \"tests\" \"*.{js,ts,mjs,html,json,md}\"",
+    "format": "prettier --write \"src\" \"tests\" \"*.{js,ts,mjs,html,json,md}\"",
     "preview": "vite preview",
     "test": "vitest run"
   },

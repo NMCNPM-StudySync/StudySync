@@ -2,21 +2,21 @@ import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
-    <footer className="mt-auto border-t border-[#DCE8FA] bg-white py-6 text-[#47658F]">
+    <footer className="mt-auto w-full border-t border-brand-surface bg-white py-4 sm:py-6 text-brand-muted">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Hàng 1: Thương hiệu + Dải liên kết 5 module và Thống kê */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4 border-b border-[#EAF1FC]">
+        {/* Dải liên kết 6 module: Ẩn trên mobile để thu gọn chân trang (trên Mobile đã có lưới 2x3 ở Header), chỉ hiện trên Desktop */}
+        <div className="hidden sm:flex flex-row items-center justify-between gap-4 pb-4 border-b border-brand-bg">
           <div className="flex items-center space-x-3">
             <img
               src="/studysync-logo.png"
               alt="StudySync Logo"
-              className="h-8 w-8 rounded-xl object-contain shadow-xs"
+              className="h-8 w-8 rounded-xl object-contain shadow-sm"
             />
             <div className="text-left">
-              <span className="font-heading text-base font-black tracking-wider text-[#10264C]">
+              <span className="font-heading text-base font-black tracking-wider text-brand-navy">
                 STUDYSYNC
               </span>
-              <p className="font-sans text-[12px] text-[#47658F]">
+              <p className="font-sans text-[12px] text-brand-muted">
                 Xếp lịch học và đồ án nhóm tự động · Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM
               </p>
             </div>
@@ -24,35 +24,38 @@ export function Footer() {
 
           <nav
             aria-label="Liên kết chân trang"
-            className="flex flex-wrap items-center justify-center gap-5 sm:gap-6 font-sans text-[13px] text-[#47658F]"
+            className="flex flex-wrap items-center justify-center gap-6 font-sans text-[13px] text-brand-muted"
           >
-            <Link to="/calendar" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/calendar" className="transition-colors hover:text-brand-primary">
               Lịch cá nhân (TV2)
             </Link>
-            <Link to="/groups" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/groups" className="transition-colors hover:text-brand-primary">
               Nhóm (TV1)
             </Link>
-            <Link to="/scheduler" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/scheduler" className="transition-colors hover:text-brand-primary">
               Xếp lịch (TV3)
             </Link>
-            <Link to="/meetings" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/meetings" className="transition-colors hover:text-brand-primary">
               Giờ chung (TV4)
             </Link>
-            <Link to="/kanban" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/kanban" className="transition-colors hover:text-brand-primary">
               Kanban (TV5)
             </Link>
-            <Link to="/stats" className="transition-colors hover:text-[#0754D8]">
+            <Link to="/stats" className="transition-colors hover:text-brand-primary">
               Thống kê
             </Link>
           </nav>
         </div>
 
-        {/* Hàng 2: Bản quyền + Thông tin 5 thành viên chính thức của nhóm */}
-        <div className="pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 font-sans text-[12px] text-[#47658F]">
-          <p>© 2026 StudySync – Đồ án môn Nhập môn Công nghệ Phần mềm</p>
-          <p className="font-mono text-[11px] text-[#10264C]">
-            Kiên (24120195) · Hưng (24120319) · Nhi (24120404) · Thư H.A. (24120226) · Thư Q.A.
-            (24120143)
+        {/* Thông tin bản quyền và thành viên (Thu gọn tối giản trên mobile chuẩn Figma: StudySync · Giờ Việt Nam, UTC+7) */}
+        <div className="pt-0 sm:pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-2 font-sans text-[11px] sm:text-[12px] text-brand-muted text-center sm:text-left">
+          <p>
+            © 2026 StudySync – Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
+            <span className="hidden sm:inline"> · </span>
+            <span className="block sm:inline text-brand-muted/80">Giờ Việt Nam (UTC+7)</span>
+          </p>
+          <p className="font-sans text-brand-navy">
+            Đội ngũ phát triển: Kiên · Hưng · Nhi · Thư H.A. · Thư Q.A.
           </p>
         </div>
       </div>
