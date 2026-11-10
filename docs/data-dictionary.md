@@ -189,7 +189,7 @@ Cú pháp cụ thể theo `backend/README.md`. Các bước dưới đây gọi 
 - Việc 16 (Hưng): cài node-pg-migrate bản 9.0.0 theo mục 2.4, thêm bốn script ở mục 2.5, ghi phiên bản và lệnh vào `backend/README.md`, ghi PostgreSQL từ 14 vào phần Yêu cầu môi trường.
 - Thư H.A. báo Kiên sửa Template 8 ở bản gộp theo mục 1.8 (sửa ở tab riêng theo ghi chú đầu doc Templates).
 - Việc 3 (Nhi): chốt kiểu tên trường JSON (mục 1.2).
-- Việc 10 (Nhi): `study_slots.task_id` cho phép rỗng (Bảng 1.3). Chốt khung "Đã học" và "Bỏ lỡ" của việc đã xóa hiển thị tên gì (chụp lại tên vào khung hay không hiển thị tên), vì CSDL không còn việc để lấy tên.
+- Việc 10 (Nhi): `study_slots.task_id` cho phép rỗng (Bảng 1.3). Đã chốt ở Issue #56: khung "Đã học" và "Bỏ lỡ" của việc đã xóa không lưu tên việc, CSDL giữ nguyên (không thêm cột). API trả `taskId: null`, giao diện hiện nhãn mặc định, ví dụ "Việc đã xóa" (xem Quy ước chung trong `docs/api.md`).
 - Việc 9 (Hưng) và việc 15 (Thư H.A.): ví dụ `fixed_events` ở Template 8 chưa có cột địa điểm và ghi chú, trong khi U011 cho nhập hai trường này. Bổ sung theo Bảng 1.2.
 
 ### 2.7 Nguồn tham khảo
