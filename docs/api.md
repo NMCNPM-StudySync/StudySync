@@ -471,6 +471,20 @@ Quyền: chủ tài khoản.
 | 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
+Ví dụ lỗi 400:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Tên hiển thị không được để trống và tối đa 100 ký tự",
+    "details": [
+      { "field": "displayName", "issue": "không được để trống và tối đa 100 ký tự" }
+    ]
+  }
+}
+```
+
 **Ghi chú:** BR-08. Email chưa cho sửa ở phiên bản này. Tên mới hiện ngay trong danh sách thành viên của mọi nhóm vì danh sách đó đọc tên từ `users.display_name`.
 
 ---
@@ -514,6 +528,20 @@ Quyền: đã đăng nhập.
 | 400 | VALIDATION_ERROR | Tên rỗng, chỉ gồm khoảng trắng hoặc quá 100 ký tự. Không tạo nhóm |
 | 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ví dụ lỗi 400:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Tên nhóm không được để trống và tối đa 100 ký tự",
+    "details": [
+      { "field": "name", "issue": "không được để trống và tối đa 100 ký tự" }
+    ]
+  }
+}
+```
 
 **Ghi chú:** nhóm và dòng Trưởng nhóm được tạo trong cùng một transaction nên không có nhóm nào thiếu Trưởng nhóm. Một sinh viên được tạo và tham gia nhiều nhóm, vai trò tính theo từng nhóm. Cho phép trùng tên nhóm.
 
