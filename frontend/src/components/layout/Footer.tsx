@@ -5,7 +5,7 @@ export function Footer() {
     <footer className="mt-auto w-full border-t border-brand-surface bg-white py-4 sm:py-6 text-brand-muted">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Dải liên kết 6 module: Ẩn trên mobile để thu gọn chân trang (trên Mobile đã có lưới 2x3 ở Header), chỉ hiện trên Desktop */}
-        <div className="hidden sm:flex flex-row items-center justify-between gap-4 pb-4 border-b border-brand-bg">
+        <div className="hidden sm:flex flex-col lg:flex-row items-center justify-between gap-4 pb-4 border-b border-brand-bg text-center lg:text-left">
           <div className="flex items-center space-x-3">
             <img
               src="/studysync-logo.png"
@@ -24,7 +24,7 @@ export function Footer() {
 
           <nav
             aria-label="Liên kết chân trang"
-            className="flex flex-wrap items-center justify-center gap-6 font-sans text-[13px] text-brand-muted"
+            className="flex flex-wrap items-center justify-center gap-4 lg:gap-6 font-sans text-[13px] text-brand-muted"
           >
             <Link to="/calendar" className="transition-colors hover:text-brand-primary">
               Lịch cá nhân (TV2)

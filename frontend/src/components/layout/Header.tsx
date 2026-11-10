@@ -204,7 +204,7 @@ export function Header() {
   }, [targetIndex]);
 
   return (
-    <header className="sticky top-0 z-50 w-full px-3 pt-3 sm:px-6 sm:pt-5 lg:px-8">
+    <header className="sticky top-0 z-50 w-full px-3 pt-3 sm:px-4 sm:pt-4 lg:px-8 lg:pt-5">
       {/* 1. GIAO DIỆN HEADER TRÊN MOBILE (Chuẩn Prototype Figma node 74:3) */}
       <div className="block sm:hidden mx-auto max-w-md rounded-3xl border border-brand-surface bg-white/95 p-3.5 shadow-prototype backdrop-blur-md">
         {/* Hàng 1: Logo StudySync + Chuông thông báo + Avatar TK */}
@@ -315,18 +315,18 @@ export function Header() {
       </div>
 
       {/* 2. GIAO DIỆN HEADER TRÊN DESKTOP (Thanh nổi 76px + Viên thuốc Stripe lướt mượt mà) */}
-      <div className="hidden sm:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-6 shadow-prototype backdrop-blur-md">
+      <div className="hidden sm:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-3.5 sm:px-4 lg:px-6 shadow-prototype backdrop-blur-md">
         {/* Brand / Logo 3D sạch, không sọc, kích thước 42×42px với phông Zalando Sans Expanded */}
         <NavLink
           to="/calendar"
-          className="flex items-center space-x-3.5 shrink-0 focus:outline-none"
+          className="flex items-center space-x-2.5 lg:space-x-3.5 shrink-0 focus:outline-none"
         >
           <img
             src="/studysync-logo.png"
             alt="StudySync Logo"
-            className="h-[42px] w-[42px] rounded-xl object-contain shadow-sm"
+            className="h-9 w-9 lg:h-[42px] lg:w-[42px] rounded-xl object-contain shadow-sm"
           />
-          <span className="font-heading text-xl font-black tracking-wider text-brand-navy">
+          <span className="hidden min-[900px]:inline font-heading text-lg lg:text-xl font-black tracking-wider text-brand-navy">
             STUDYSYNC
           </span>
         </NavLink>
@@ -335,7 +335,7 @@ export function Header() {
         <nav
           aria-label="Thanh điều hướng chính"
           onMouseLeave={() => setHoveredIndex(null)}
-          className="relative flex items-center space-x-1.5 shrink-0"
+          className="relative flex items-center space-x-1 lg:space-x-1.5 shrink-0"
         >
           {/* Vệt màu viên thuốc lướt theo khi rê chuột */}
           <div
@@ -366,7 +366,7 @@ export function Header() {
                 onMouseEnter={() => setHoveredIndex(index)}
                 onFocus={() => setHoveredIndex(index)}
                 onBlur={() => setHoveredIndex(null)}
-                className={`group relative z-10 flex h-10 items-center justify-center rounded-xl px-3 transition-colors duration-200 focus:outline-none ${
+                className={`group relative z-10 flex h-10 items-center justify-center rounded-xl px-2 sm:px-2.5 lg:px-3 transition-colors duration-200 focus:outline-none ${
                   isActive && !isPillTarget
                     ? 'bg-brand-surface/40 text-brand-primary font-semibold'
                     : isPillTarget
@@ -378,7 +378,7 @@ export function Header() {
                   {item.icon(isPillTarget || isActive)}
                 </span>
                 {isActive && (
-                  <span className="ml-2 font-sans text-[14px] font-semibold text-brand-primary whitespace-nowrap">
+                  <span className="ml-1.5 lg:ml-2 font-sans text-[13px] lg:text-[14px] font-semibold text-brand-primary whitespace-nowrap">
                     {item.label}
                   </span>
                 )}
@@ -388,14 +388,14 @@ export function Header() {
         </nav>
 
         {/* Cụm công cụ bên phải: Ô tìm kiếm, Chuông thông báo, Hồ sơ người dùng */}
-        <div className="flex items-center space-x-4 shrink-0">
+        <div className="flex items-center space-x-2 sm:space-x-2.5 lg:space-x-4 shrink-0">
           {/* Ô tìm kiếm: "Tìm môn, tuần" */}
           <div className="relative">
             <input
               type="text"
               aria-label="Tìm kiếm môn học, tuần"
               placeholder="Tìm môn, tuần"
-              className="h-10 w-44 lg:w-52 rounded-full border border-brand-surface bg-brand-bg/70 px-4 font-sans text-[14px] text-brand-navy placeholder-brand-muted/70 transition-all duration-200 focus:w-60 focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+              className="h-10 w-28 sm:w-32 md:w-36 lg:w-44 xl:w-52 rounded-full border border-brand-surface bg-brand-bg/70 px-3.5 lg:px-4 font-sans text-[13px] lg:text-[14px] text-brand-navy placeholder-brand-muted/70 transition-all duration-200 focus:w-40 sm:focus:w-48 lg:focus:w-56 focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
             />
           </div>
 
@@ -420,25 +420,26 @@ export function Header() {
             </svg>
           </button>
 
-          {/* Hồ sơ người dùng */}
+          {/* Hồ sơ người dùng: Hiển thị avatar tròn/squircle trên màn hình hẹp và mở rộng đầy đủ tên trên desktop lớn */}
           <button
             type="button"
             aria-label="Hồ sơ người dùng"
-            className="flex items-center space-x-2 rounded-2xl border border-brand-surface bg-white py-1.5 pl-2 pr-3.5 shadow-sm hover:bg-brand-surface/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+            title="Hồ sơ người dùng (Trung Kiên)"
+            className="flex items-center space-x-2 rounded-2xl border border-brand-surface bg-white p-1 xl:py-1.5 xl:pl-2 xl:pr-3.5 shadow-sm hover:bg-brand-surface/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-surface font-heading text-xs font-bold text-brand-primary">
               TK
             </div>
-            <div className="text-left">
-              <p className="font-sans text-[14px] font-bold leading-tight text-brand-navy">
+            <div className="hidden xl:block text-left">
+              <p className="font-sans text-[13px] font-bold leading-tight text-brand-navy">
                 Trung Kiên
               </p>
-              <p className="font-sans text-[12px] font-normal leading-tight text-brand-muted">
+              <p className="font-sans text-[11px] font-normal leading-tight text-brand-muted">
                 Hồ sơ cá nhân
               </p>
             </div>
             <svg
-              className="h-4 w-4 text-brand-muted"
+              className="hidden xl:block h-4 w-4 text-brand-muted shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
