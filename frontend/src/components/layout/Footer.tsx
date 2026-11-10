@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
-    <footer className="mt-auto w-full border-t border-brand-surface bg-white py-4 sm:py-6 text-brand-muted">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <footer className="mt-auto w-full border-t border-brand-surface bg-white py-4 md:py-6 text-brand-muted">
+      <div className="mx-auto max-w-7xl px-4 md:px-6 lg:px-8">
         {/* Dải liên kết 6 module: Ẩn trên mobile để thu gọn chân trang (trên Mobile đã có lưới 2x3 ở Header), chỉ hiện trên Desktop */}
-        <div className="hidden sm:flex flex-col lg:flex-row items-center justify-between gap-4 pb-4 border-b border-brand-bg text-center lg:text-left">
+        <div className="hidden md:flex flex-col lg:flex-row items-center justify-between gap-4 pb-4 border-b border-brand-bg text-center lg:text-left">
           <div className="flex items-center space-x-3">
             <img
               src="/studysync-logo.png"
@@ -17,7 +17,8 @@ export function Footer() {
                 STUDYSYNC
               </span>
               <p className="font-sans text-[12px] text-brand-muted">
-                Xếp lịch học và đồ án nhóm tự động · Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM
+                Xếp lịch học và đồ án nhóm tự động · Trường ĐH Khoa học Tự nhiên,{' '}
+                <span className="whitespace-nowrap">ĐHQG-HCM</span>
               </p>
             </div>
           </div>
@@ -48,11 +49,12 @@ export function Footer() {
         </div>
 
         {/* Thông tin bản quyền và thành viên (Thu gọn tối giản trên mobile chuẩn Figma: StudySync · Giờ Việt Nam, UTC+7) */}
-        <div className="pt-0 sm:pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-2 font-sans text-[11px] sm:text-[12px] text-brand-muted text-center sm:text-left">
+        <div className="pt-0 md:pt-3.5 flex flex-col md:flex-row items-center justify-between gap-1.5 md:gap-2 font-sans text-[11px] md:text-[12px] text-brand-muted text-center md:text-left">
           <p>
-            © 2026 StudySync – Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
-            <span className="hidden sm:inline"> · </span>
-            <span className="block sm:inline text-brand-muted/80">Giờ Việt Nam (UTC+7)</span>
+            © 2026 StudySync – Trường Đại học Khoa học Tự nhiên,{' '}
+            <span className="whitespace-nowrap">ĐHQG-HCM</span>
+            <span className="hidden md:inline"> · </span>
+            <span className="block md:inline text-brand-muted/80">Giờ Việt Nam (UTC+7)</span>
           </p>
           <p className="font-sans text-brand-navy">
             Đội ngũ phát triển: Kiên · Hưng · Nhi · Thư H.A. · Thư Q.A.

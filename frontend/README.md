@@ -40,14 +40,14 @@ VITE_API_URL=http://localhost:3000/api
 
 ## 4. Các lệnh phát triển (Scripts)
 
-| Lệnh              | Mục đích                                                                   |
-| ----------------- | -------------------------------------------------------------------------- |
-| `npm run dev`     | Khởi chạy máy chủ phát triển (Vite Dev Server) tại `http://localhost:5173` |
-| `npm run build`   | Kiểm tra kiểu TypeScript (`tsc -b`) và biên dịch dự án vào thư mục `dist/` |
-| `npm run preview` | Chạy thử bản biên dịch production tại máy cục bộ                           |
-| `npm run lint`    | Chạy kiểm tra tĩnh ESLint và Prettier cho `src/` và `tests/`               |
-| `npm run format`  | Tự động định dạng mã nguồn theo chuẩn Prettier của nhóm                    |
-| `npm test`        | Chạy toàn bộ bộ kiểm thử tự động bằng Vitest                               |
+| Lệnh              | Mục đích                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`     | Khởi chạy máy chủ phát triển (Vite Dev Server) tại `http://localhost:5173`           |
+| `npm run build`   | Kiểm tra kiểu TypeScript (`tsc -b`) và biên dịch dự án vào thư mục `dist/`           |
+| `npm run preview` | Chạy thử bản biên dịch production tại máy cục bộ                                     |
+| `npm run lint`    | Chạy kiểm tra tĩnh ESLint và định dạng Prettier cho toàn bộ mã nguồn và tệp cấu hình |
+| `npm run format`  | Tự động định dạng mã nguồn và tệp cấu hình theo chuẩn Prettier của nhóm              |
+| `npm test`        | Chạy toàn bộ bộ kiểm thử tự động bằng Vitest                                         |
 
 ## 5. Cấu trúc thư mục
 

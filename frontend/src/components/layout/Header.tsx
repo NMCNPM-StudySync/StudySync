@@ -133,8 +133,9 @@ export function Header() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isInitialMount, setIsInitialMount] = useState(true);
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  const navRef = useRef<HTMLElement | null>(null);
 
-  // Xác định tab đang active dựa trên pathname hiện tại (hỗ trợ cả route con)
+  // Xác định tab đang active dựa trên pathname hiện tại (hỗ trợ cả route con của cả 6 tab)
   const activeIndex = navItems.findIndex((item) => {
     if (
       item.to === '/calendar' &&
@@ -142,14 +143,10 @@ export function Header() {
     ) {
       return true;
     }
-    return (
-      location.pathname === item.to ||
-      (item.to !== '/calendar' && location.pathname.startsWith(`${item.to}/`))
-    );
+    return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
   });
 
-  const effectiveActiveIndex = activeIndex !== -1 ? activeIndex : 0;
-  const targetIndex = hoveredIndex !== null ? hoveredIndex : effectiveActiveIndex;
+  const targetIndex = hoveredIndex !== null ? hoveredIndex : activeIndex;
 
   const [pillStyle, setPillStyle] = useState<{
     left: number;
@@ -158,7 +155,14 @@ export function Header() {
   }>({ left: 0, width: 0, opacity: 0 });
 
   useEffect(() => {
+    let isCancelled = false;
+
     const updatePill = () => {
+      if (isCancelled) return;
+      if (targetIndex === -1) {
+        setPillStyle((prev) => ({ ...prev, opacity: 0 }));
+        return;
+      }
       const el = itemRefs.current[targetIndex];
       if (el) {
         setPillStyle({
@@ -174,22 +178,35 @@ export function Header() {
 
     // Đo lại chính xác khi Google Fonts tải hoàn tất
     if (document.fonts?.ready) {
-      document.fonts.ready.then(updatePill);
+      document.fonts.ready.then(() => {
+        if (!isCancelled) updatePill();
+      });
     }
 
     if (isInitialMount) {
-      const timer = setTimeout(() => setIsInitialMount(false), 60);
+      const timer = setTimeout(() => {
+        if (!isCancelled) setIsInitialMount(false);
+      }, 60);
       return () => {
+        isCancelled = true;
         cancelAnimationFrame(rafId);
         clearTimeout(timer);
       };
     }
 
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      isCancelled = true;
+      cancelAnimationFrame(rafId);
+    };
   }, [targetIndex, location.pathname, isInitialMount]);
 
+  // Tự động đo lại kích thước viên pill khi khung nav co giãn hoặc đổi breakpoint
   useEffect(() => {
-    const handleResize = () => {
+    const updatePill = () => {
+      if (targetIndex === -1) {
+        setPillStyle((prev) => ({ ...prev, opacity: 0 }));
+        return;
+      }
       const el = itemRefs.current[targetIndex];
       if (el) {
         setPillStyle({
@@ -199,14 +216,26 @@ export function Header() {
         });
       }
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    let ro: ResizeObserver | null = null;
+    if (navRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updatePill();
+      });
+      ro.observe(navRef.current);
+    }
+
+    window.addEventListener('resize', updatePill);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', updatePill);
+    };
   }, [targetIndex]);
 
   return (
-    <header className="sticky top-0 z-50 w-full px-3 pt-3 sm:px-4 sm:pt-4 lg:px-8 lg:pt-5">
+    <header className="relative md:sticky md:top-0 z-50 w-full px-3 pt-3 md:px-6 md:pt-5 lg:px-8">
       {/* 1. GIAO DIỆN HEADER TRÊN MOBILE (Chuẩn Prototype Figma node 74:3) */}
-      <div className="block sm:hidden mx-auto max-w-md rounded-3xl border border-brand-surface bg-white/95 p-3.5 shadow-prototype backdrop-blur-md">
+      <div className="block md:hidden mx-auto max-w-md rounded-3xl border border-brand-surface bg-white/95 p-3.5 shadow-prototype backdrop-blur-md">
         {/* Hàng 1: Logo StudySync + Chuông thông báo + Avatar TK */}
         <div className="flex items-center justify-between">
           <NavLink to="/calendar" className="flex items-center space-x-2.5 focus:outline-none">
@@ -241,12 +270,15 @@ export function Header() {
               </svg>
             </button>
 
-            <div
+            {/* Mock user profile: Dữ liệu giả lập tạm thời (Trung Kiên / TK) trước khi TV1 triển khai module đăng nhập */}
+            <button
+              type="button"
               aria-label="Hồ sơ người dùng"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-surface bg-brand-surface/70 font-heading text-xs font-bold text-brand-primary shadow-sm"
+              title="Hồ sơ người dùng (Trung Kiên)"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-surface bg-brand-surface/70 font-heading text-xs font-bold text-brand-primary shadow-sm hover:bg-brand-surface transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
             >
               TK
-            </div>
+            </button>
           </div>
         </div>
 
@@ -256,7 +288,7 @@ export function Header() {
             const isActive =
               location.pathname === item.to ||
               (item.to === '/calendar' && location.pathname === '/') ||
-              (item.to !== '/calendar' && location.pathname.startsWith(`${item.to}/`));
+              location.pathname.startsWith(`${item.to}/`);
 
             return (
               <NavLink
@@ -277,23 +309,25 @@ export function Header() {
           })}
         </nav>
 
-        {/* Hàng 4: Thông tin hồ sơ người dùng ở đáy card */}
+        {/* Hàng 4: Thông tin hồ sơ người dùng ở đáy card (Mock user tạm thời trước khi TV1 triển khai Auth) */}
         <div className="flex items-center justify-between border-t border-brand-bg pt-2.5 px-0.5 text-[13px]">
           <span className="font-sans font-medium text-brand-muted">Trung Kiên</span>
-          <NavLink
-            to="/calendar"
-            className="font-sans font-semibold text-brand-primary hover:text-brand-hover inline-flex items-center space-x-1"
+          <button
+            type="button"
+            aria-label="Hồ sơ cá nhân"
+            title="Hồ sơ cá nhân (Trung Kiên)"
+            className="font-sans font-semibold text-brand-primary hover:text-brand-hover inline-flex items-center space-x-1 focus:outline-none"
           >
             <span>Hồ sơ cá nhân</span>
             <span aria-hidden="true" className="text-sm font-bold">
               ›
             </span>
-          </NavLink>
+          </button>
         </div>
       </div>
 
       {/* Ô tìm kiếm nổi ngay dưới Header card trên mobile (khớp chuẩn Figma) */}
-      <div className="block sm:hidden mx-auto mt-2.5 max-w-md relative">
+      <div className="block md:hidden mx-auto mt-2.5 max-w-md relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-brand-muted">
           <svg
             className="h-4 w-4"
@@ -315,7 +349,7 @@ export function Header() {
       </div>
 
       {/* 2. GIAO DIỆN HEADER TRÊN DESKTOP (Thanh nổi 76px + Viên thuốc Stripe lướt mượt mà) */}
-      <div className="hidden sm:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-3.5 sm:px-4 lg:px-6 shadow-prototype backdrop-blur-md">
+      <div className="hidden md:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-4 lg:px-6 shadow-prototype backdrop-blur-md">
         {/* Brand / Logo 3D sạch, không sọc, kích thước 42×42px với phông Zalando Sans Expanded */}
         <NavLink
           to="/calendar"
@@ -333,6 +367,7 @@ export function Header() {
 
         {/* Thanh chuyển đổi Module với hiệu ứng viên thuốc lướt mượt chuẩn Stripe */}
         <nav
+          ref={navRef}
           aria-label="Thanh điều hướng chính"
           onMouseLeave={() => setHoveredIndex(null)}
           className="relative flex items-center space-x-1 lg:space-x-1.5 shrink-0"
@@ -351,7 +386,7 @@ export function Header() {
           />
 
           {navItems.map((item, index) => {
-            const isActive = effectiveActiveIndex === index;
+            const isActive = activeIndex === index;
             const isPillTarget = targetIndex === index;
 
             return (
@@ -420,7 +455,7 @@ export function Header() {
             </svg>
           </button>
 
-          {/* Hồ sơ người dùng: Hiển thị avatar tròn/squircle trên màn hình hẹp và mở rộng đầy đủ tên trên desktop lớn */}
+          {/* Mock user profile: Dữ liệu giả lập tạm thời (Trung Kiên / TK) trước khi TV1 triển khai module đăng nhập */}
           <button
             type="button"
             aria-label="Hồ sơ người dùng"

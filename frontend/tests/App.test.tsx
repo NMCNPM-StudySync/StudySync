@@ -87,6 +87,13 @@ describe('App navigation and layout', () => {
       screen.getByRole('heading', { level: 1, name: 'Không tìm thấy trang' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Quay về trang Lịch' })).toBeInTheDocument();
+
+    // Đảm bảo không sáng nhầm tab nào trên thanh điều hướng khi ở trang 404
+    const nav = screen.getByRole('navigation', { name: 'Thanh điều hướng chính' });
+    const activeTabLabels = within(nav).queryAllByText(
+      /^(Lịch|Nhóm|Xếp lịch|Giờ chung|Kanban|Thống kê)$/,
+    );
+    expect(activeTabLabels.length).toBe(0);
   });
 
   it('hiển thị chân trang với bản quyền và không chứa thông tin MSSV', () => {
