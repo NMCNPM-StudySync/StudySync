@@ -1905,9 +1905,393 @@ Ghi chú: Lịch tuần được tính theo khoảng nửa mở 7 ngày `[weekSt
 
 ## TV3 – Đề xuất khung giờ học
 
-<!-- Vùng của TV3: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+Trạng thái: Nháp · Người viết: Nhi · Người review: Hưng · Cập nhật: 12/11/2026
 
-`<Thêm các endpoint của TV3 bên dưới theo mẫu ở trên, trạng thái ban đầu là Nháp.>`
+Phạm vi: US-17 đến US-22. Use case: U021 đến U024. Mọi endpoint theo quy ước chung ở đầu file (REST, JSON UTF-8, tiền tố `/api`, camelCase, id là UUID, thời gian ISO 8601 hậu tố Z và luôn có mili giây khi API trả về, dạng phản hồi `data`, `warnings`, `error`). Bảng và cột liên quan xem vùng TV3 trong `docs/data-dictionary.md`.
+
+### Quy định áp dụng cho TV3
+
+| Quy định | Nội dung áp dụng |
+| --- | --- |
+| BR-01 (không xếp trùng lịch cố định) | Mọi khung do hệ thống tạo (đề xuất, khung giờ bù, tái xếp) không giao sự kiện cố định; khung nối tiếp hợp lệ (nửa mở `[startsAt, endsAt)`); hai sự kiện cố định chồng nhau được gộp thành một khoảng bận. Không còn chỗ thì không xếp ép, trả danh sách rỗng kèm lý do. Khi xác nhận, server kiểm tra lại; khung đã trở nên trùng thì trả `409 CONFLICT` |
+| BR-03 (chỉ áp dụng sau khi xác nhận) | `auto-plan`, `missed-session`, `replan` chỉ tạo lượt đề xuất ở trạng thái chờ, lịch tuần không đổi. Lịch chỉ đổi ở `POST /api/scheduler/confirm` với `action = "accept"`, đúng một lần |
+| BR-04 (hạn chót, thời lượng mặc định) | TV3 đọc `dueAt` và `durationMinutes` của việc cần làm (TV2 bảo đảm luôn có, mặc định 60 phút). Việc đã quá hạn chót không được xếp và được báo lý do |
+| BR-07 (giờ Việt Nam, lưu UTC) | Server tính khung 07:00–22:00 và giới hạn 4 giờ mỗi ngày theo ngày giờ Việt Nam (`APP_TIMEZONE`), trả mọi mốc thời gian theo UTC |
+| BR-08 (tên việc) | TV3 không ghi tên việc. `taskTitle` trong phản hồi lấy từ `tasks.title` (đã chuẩn hóa NFC, 1 đến 200 ký tự) |
+| BR-02 (riêng tư) | Mọi endpoint TV3 chỉ đọc và ghi dữ liệu của chính người gọi (`userId` trong JWT). Khung giờ học không bao giờ trả cho người khác |
+
+Giá trị xếp lịch dùng trong các endpoint (Bảng 1.3 đặc tả TV3, chủ module đã chốt 07/11/2026): khoảng giờ 07:00–22:00; phạm vi 7 ngày kể từ lúc gọi; tối đa 4 giờ học mỗi ngày (tính khung `scheduled` và `studied`); mỗi khung tối đa 2 giờ; hai khung của cùng việc cách nhau ít nhất 30 phút; thứ tự: ưu tiên cao trước, rồi hạn chót sớm trước, rồi độ khó cao trước, kèm kiểm tra gộp theo hạn chót (yêu cầu 3.2).
+
+### Kiểu dữ liệu dùng chung trong TV3
+
+**StudySlot (khung giờ học):**
+
+```json
+{
+  "id": "b2b2b2b2-0000-4000-8000-000000000001",
+  "taskId": "55555555-6666-4777-8888-999999999999",
+  "taskTitle": "Ôn chương 3 Giải tích",
+  "startsAt": "2026-11-16T01:00:00.000Z",
+  "endsAt": "2026-11-16T03:00:00.000Z",
+  "status": "scheduled",
+  "needsReschedule": false
+}
+```
+
+- `status`: `proposed` (đang chờ, chỉ xuất hiện trong lượt đề xuất), `scheduled` ("Đã xếp"), `studied` ("Đã học"), `missed` ("Bỏ lỡ").
+- `needsReschedule`: `true` khi khung `scheduled` đang giao sự kiện cố định hoặc kết thúc sau hạn chót hiện tại của việc; giao diện hiện nhãn "Cần xếp lại" thay cho "Đã xếp" (yêu cầu 3.18). Không lưu ở CSDL.
+- `taskId: null` và `taskTitle: null` khi việc gốc đã bị xóa; giao diện hiện "Việc đã xóa" (quy ước chung, #57).
+
+**Proposal (lượt đề xuất):**
+
+```json
+{
+  "id": "a1a1a1a1-0000-4000-8000-000000000001",
+  "kind": "auto_plan",
+  "status": "pending",
+  "createdAt": "2026-11-16T00:00:00.000Z",
+  "slots": [
+    {
+      "id": "c3c3c3c3-0000-4000-8000-000000000001",
+      "taskId": "55555555-6666-4777-8888-999999999999",
+      "taskTitle": "Ôn chương 3 Giải tích",
+      "startsAt": "2026-11-16T01:00:00.000Z",
+      "endsAt": "2026-11-16T03:00:00.000Z",
+      "replacesSlot": null
+    }
+  ],
+  "taskResults": [
+    {
+      "taskId": "55555555-6666-4777-8888-999999999999",
+      "taskTitle": "Ôn chương 3 Giải tích",
+      "result": "partial",
+      "proposedMinutes": 120,
+      "missingMinutes": 120
+    }
+  ],
+  "missedSlotId": null
+}
+```
+
+- `kind`: `auto_plan` (US-17), `makeup` (US-20), `replan` (US-21). `status`: `pending`, `accepted`, `rejected`, `outdated`.
+- `slots[].replacesSlot`: chỉ có ở lượt `replan`, là `{ "id", "startsAt", "endsAt" }` của khung cũ sẽ bị dời; các loại khác là `null`.
+- `taskResults[].result`: `full` (xếp đủ phần còn thiếu), `partial` (chỉ xếp được một phần trước hạn chót: "Chỉ xếp được X/Y giờ trước hạn chót"), `beyond_range` (phần còn lại nằm ngoài 7 ngày: "Còn X giờ chưa xếp"), `not_enough_time` ("Không đủ thời gian trước hạn chót"), `overdue` ("Việc cần làm đã quá hạn chót"). Giao diện ghép thông báo của yêu cầu 3.6 từ `result`, `proposedMinutes`, `missingMinutes`.
+- `missedSlotId`: chỉ có ở lượt `makeup`.
+
+### Mã cảnh báo của TV3
+
+Đề xuất bổ sung vào bảng mã cảnh báo dùng chung ở đầu file:
+
+| Mã cảnh báo (`code`) | Quy tắc | Khi nào trả về |
+| --- | --- | --- |
+| `NO_TASKS_TO_SCHEDULE` | Yêu cầu 3.6 | Gọi `auto-plan` khi không có việc chưa hoàn thành ("Không có việc cần làm để xếp lịch"); `data.proposal` là `null` |
+| `NO_MAKEUP_SLOT` | BR-01, yêu cầu 3.14 | `missed-session` không tìm được khung giờ bù nào trong 7 ngày, trước hạn chót ("Không còn khung giờ bù trước hạn chót"); `data.proposal` là `null`, khung vẫn ghi nhận "Bỏ lỡ" |
+
+### Danh sách endpoint TV3
+
+| Phương thức và đường dẫn | Mô tả ngắn | Story | Quyền | Trạng thái |
+| --- | --- | --- | --- | --- |
+| POST /api/scheduler/auto-plan | Tính đề xuất khung giờ học | US-17 | Chủ tài khoản | Nháp |
+| POST /api/scheduler/confirm | Chấp nhận hoặc từ chối lượt đề xuất, chọn khung giờ bù | US-18, US-20, US-21 | Chủ tài khoản | Nháp |
+| POST /api/scheduler/missed-session | Báo lỡ khung giờ học, nhận khung giờ bù | US-19, US-20 | Chủ tài khoản | Nháp |
+| POST /api/scheduler/replan | Đề xuất tái xếp lịch khi có việc phát sinh | US-21 | Chủ tài khoản | Nháp |
+| POST /api/scheduler/completed-session | Đánh dấu khung đã học xong | US-22 | Chủ tài khoản | Nháp |
+
+Lịch tuần (khung "Đã xếp", "Đã học", "Bỏ lỡ" kèm `needsReschedule`) được trả ở `GET /api/schedule/week` của TV2, nên TV3 không có endpoint đọc lịch riêng.
+
+---
+
+### POST /api/scheduler/auto-plan
+
+Module: TV3 · Story: US-17 · Người viết: Nhi · Trạng thái: Nháp  
+Mô tả: Tính khung giờ học đề xuất cho các việc cần làm chưa hoàn thành và lưu thành một lượt đề xuất đang chờ; lịch tuần chưa đổi (BR-03).  
+Quyền: Chủ tài khoản.
+
+**Tham số đường dẫn và query**
+
+Không có.
+
+**Nội dung gửi lên (body)**
+
+Không có (gửi `{}` hoặc bỏ trống). Mốc thời gian là thời điểm server nhận yêu cầu.
+
+**Kết quả thành công (200)**
+
+```json
+{
+  "data": {
+    "proposal": {
+      "id": "a1a1a1a1-0000-4000-8000-000000000001",
+      "kind": "auto_plan",
+      "status": "pending",
+      "createdAt": "2026-11-16T00:00:00.000Z",
+      "slots": [
+        {
+          "id": "c3c3c3c3-0000-4000-8000-000000000001",
+          "taskId": "55555555-6666-4777-8888-999999999999",
+          "taskTitle": "Ôn chương 3 Giải tích",
+          "startsAt": "2026-11-16T01:00:00.000Z",
+          "endsAt": "2026-11-16T03:00:00.000Z",
+          "replacesSlot": null
+        },
+        {
+          "id": "c3c3c3c3-0000-4000-8000-000000000002",
+          "taskId": "55555555-6666-4777-8888-999999999999",
+          "taskTitle": "Ôn chương 3 Giải tích",
+          "startsAt": "2026-11-16T03:30:00.000Z",
+          "endsAt": "2026-11-16T05:30:00.000Z",
+          "replacesSlot": null
+        }
+      ],
+      "taskResults": [
+        {
+          "taskId": "55555555-6666-4777-8888-999999999999",
+          "taskTitle": "Ôn chương 3 Giải tích",
+          "result": "full",
+          "proposedMinutes": 240,
+          "missingMinutes": 0
+        }
+      ],
+      "missedSlotId": null
+    }
+  }
+}
+```
+
+Ví dụ trên ứng với US-17 tiêu chí 4: việc 4 giờ, trống liền 08:00–13:00 giờ Việt Nam, được chia thành 08:00–10:00 và 10:30–12:30.
+
+**Cảnh báo có thể gặp**
+
+| Mã cảnh báo (`warnings[].code`) | Điều kiện |
+| --- | --- |
+| `NO_TASKS_TO_SCHEDULE` | Không có việc cần làm chưa hoàn thành; `data.proposal` là `null`, không tạo lượt đề xuất |
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
+| 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ghi chú:
+- Có việc nhưng không xếp được khung nào (mọi việc quá hạn hoặc lịch kín): vẫn trả 200 với `proposal.slots` rỗng và `taskResults` ghi lý do từng việc; lượt này không cần xác nhận.
+- Chỉ xếp phần thời lượng còn thiếu (yêu cầu 3.5): thời lượng của việc trừ các khung `scheduled` (không tính khung "Cần xếp lại") và `studied`.
+- Gọi lại khi đang có lượt chờ: lượt cũ chuyển `outdated`, lượt mới thay thế.
+
+---
+
+### POST /api/scheduler/confirm
+
+Module: TV3 · Story: US-18, US-20, US-21 · Người viết: Nhi · Trạng thái: Nháp  
+Mô tả: Chấp nhận hoặc từ chối một lượt đề xuất; với lượt khung giờ bù thì chọn một khung. Đây là endpoint duy nhất làm lịch tuần thay đổi (BR-03).  
+Quyền: Chủ tài khoản (chủ của lượt đề xuất).
+
+**Nội dung gửi lên (body)**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `proposalId` | uuid | Có | Lượt đề xuất cần xử lý |
+| `action` | string | Có | `accept` hoặc `reject` |
+| `slotId` | uuid | Khi `accept` lượt `makeup` | Khung giờ bù sinh viên chạm chọn. Không gửi với lượt `auto_plan`, `replan` |
+
+```json
+{
+  "proposalId": "a1a1a1a1-0000-4000-8000-000000000002",
+  "action": "accept",
+  "slotId": "b2b2b2b2-0000-4000-8000-000000000003"
+}
+```
+
+**Kết quả thành công (200)**
+
+```json
+{
+  "data": {
+    "proposalId": "a1a1a1a1-0000-4000-8000-000000000002",
+    "status": "accepted",
+    "savedSlots": [
+      {
+        "id": "b2b2b2b2-0000-4000-8000-000000000003",
+        "taskId": "55555555-6666-4777-8888-999999999999",
+        "taskTitle": "Ôn chương 3 Giải tích",
+        "startsAt": "2026-11-12T08:00:00.000Z",
+        "endsAt": "2026-11-12T09:00:00.000Z",
+        "status": "scheduled",
+        "needsReschedule": false
+      }
+    ],
+    "removedSlotIds": []
+  }
+}
+```
+
+- `savedSlots`: các khung vừa thành "Đã xếp". `removedSlotIds`: khung đã bị gỡ khỏi lịch tuần (khung cũ của lượt `replan`, khung "Cần xếp lại" của việc có khung mới, yêu cầu 3.7).
+- `action = "reject"`: trả `{ "data": { "proposalId": "...", "status": "rejected", "savedSlots": [], "removedSlotIds": [] } }`.
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | Thiếu `proposalId` hoặc `action`; `action` ngoài danh mục; thiếu `slotId` khi chấp nhận lượt `makeup`; gửi `slotId` với lượt khác; `slotId` không thuộc lượt đề xuất |
+| 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
+| 404 | NOT_FOUND | Không có lượt đề xuất, hoặc lượt thuộc tài khoản khác |
+| 409 | CONFLICT | Lượt đã cũ, không lưu gì: `details` là `[{ "field": "proposalId", "issue": "schedule_changed" }]` khi một khung giao sự kiện cố định mới ("Lịch đã thay đổi, đề xuất đã được cập nhật"), `proposal_expired` khi có khung đã qua giờ bắt đầu ("Đề xuất đã hết hạn, đề xuất đã được cập nhật"), `proposal_closed` khi lượt đã bị từ chối hoặc đã được thay bằng lượt mới |
+| 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ghi chú:
+- Chống lưu trùng (yêu cầu 3.8, 3.13): gửi lại `accept` cho lượt đã `accepted` (bấm hai lần, hoặc chạm khung giờ bù thứ hai sau khung thứ nhất) trả 200 với đúng kết quả lần đầu, không tạo thêm khung.
+- Khi nhận 409 `schedule_changed` hoặc `proposal_expired`, frontend tự gọi lại endpoint đã tạo lượt (`auto-plan`, `missed-session` với cùng `slotId`, hoặc `replan`) và hiện đề xuất mới trên cùng màn hình, sinh viên không phải bấm "Xếp lịch" lại (yêu cầu 3.9, 3.14, 3.17).
+- Đóng hoặc rời màn hình mà không gọi endpoint này: lượt vẫn `pending`, lịch không đổi (BR-03); lượt sẽ thành `outdated` khi có lượt mới.
+
+---
+
+### POST /api/scheduler/missed-session
+
+Module: TV3 · Story: US-19, US-20 · Người viết: Nhi · Trạng thái: Nháp  
+Mô tả: Ghi nhận một khung "Đã xếp" bị lỡ và trả ngay đề xuất 1 hoặc 2 khung giờ bù đang chờ. Cũng dùng cho nút "Tìm khung giờ bù" trên khung đã "Bỏ lỡ".  
+Quyền: Chủ tài khoản (chủ của khung giờ học).
+
+**Nội dung gửi lên (body)**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `slotId` | uuid | Có | Khung giờ học bị lỡ |
+
+```json
+{ "slotId": "b2b2b2b2-0000-4000-8000-000000000002" }
+```
+
+**Kết quả thành công (200)**
+
+```json
+{
+  "data": {
+    "missedSlot": {
+      "id": "b2b2b2b2-0000-4000-8000-000000000002",
+      "taskId": "55555555-6666-4777-8888-999999999999",
+      "taskTitle": "Ôn chương 3 Giải tích",
+      "startsAt": "2026-11-12T02:00:00.000Z",
+      "endsAt": "2026-11-12T03:00:00.000Z",
+      "status": "missed",
+      "needsReschedule": false
+    },
+    "proposal": {
+      "id": "a1a1a1a1-0000-4000-8000-000000000002",
+      "kind": "makeup",
+      "status": "pending",
+      "createdAt": "2026-11-12T03:10:00.000Z",
+      "slots": [
+        { "id": "b2b2b2b2-0000-4000-8000-000000000003", "taskId": "55555555-6666-4777-8888-999999999999", "taskTitle": "Ôn chương 3 Giải tích", "startsAt": "2026-11-12T08:00:00.000Z", "endsAt": "2026-11-12T09:00:00.000Z", "replacesSlot": null },
+        { "id": "b2b2b2b2-0000-4000-8000-000000000004", "taskId": "55555555-6666-4777-8888-999999999999", "taskTitle": "Ôn chương 3 Giải tích", "startsAt": "2026-11-12T09:00:00.000Z", "endsAt": "2026-11-12T10:00:00.000Z", "replacesSlot": null }
+      ],
+      "taskResults": [],
+      "missedSlotId": "b2b2b2b2-0000-4000-8000-000000000002"
+    }
+  }
+}
+```
+
+**Cảnh báo có thể gặp**
+
+| Mã cảnh báo (`warnings[].code`) | Điều kiện |
+| --- | --- |
+| `NO_MAKEUP_SLOT` | Không còn khoảng trống đủ thời lượng trong 7 ngày, trước hạn chót; `data.proposal` là `null`, khung vẫn là "Bỏ lỡ" |
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | Thiếu `slotId` hoặc sai định dạng UUID; khung chưa đến giờ bắt đầu; khung đã "Đã học"; khung đang "Cần xếp lại"; khung "Bỏ lỡ" nhưng việc đã hoàn thành, đã bị xóa hoặc không còn thời lượng chưa xếp (phần bị lỡ đã được bù, yêu cầu 3.11) |
+| 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
+| 404 | NOT_FOUND | Không có khung, hoặc khung thuộc tài khoản khác |
+| 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ghi chú:
+- Thời lượng mỗi khung giờ bù bằng phần nhỏ hơn giữa thời lượng khung bị lỡ và phần còn thiếu của việc; khung thứ hai ưu tiên ngày khác; không áp dụng khoảng cách 30 phút; vẫn áp dụng 07:00–22:00, 4 giờ mỗi ngày, trước hạn chót, 7 ngày kể từ lúc gọi (yêu cầu 3.12).
+- Khung đã `missed` gọi lại thì không đổi trạng thái, chỉ tính lượt khung giờ bù mới theo lịch mới nhất (US-20 tiêu chí 6).
+- Phiên bản này chỉ ghi nhận bỏ lỡ khi sinh viên tự báo (yêu cầu 3.10).
+
+---
+
+### POST /api/scheduler/replan
+
+Module: TV3 · Story: US-21 · Người viết: Nhi · Trạng thái: Nháp  
+Mô tả: Kiểm tra việc phát sinh và tạo lượt đề xuất tái xếp lịch đang chờ: dời các khung "Đã xếp" chưa bắt đầu đang giao sự kiện cố định, và xếp khung cho việc cần làm mới.  
+Quyền: Chủ tài khoản.
+
+**Nội dung gửi lên (body)**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `taskId` | uuid | Không | Việc cần làm mới vừa tạo (US-21 tiêu chí 3). Bỏ trống khi việc phát sinh là sự kiện cố định mới hoặc sự kiện được sửa giờ |
+
+```json
+{ "taskId": "66666666-7777-4888-8999-000000000001" }
+```
+
+**Kết quả thành công (200)**
+
+Như `auto-plan`, với `proposal.kind = "replan"` và `slots[].replacesSlot` ghi khung cũ bị dời (khung của việc mới có `replacesSlot: null`). Không có khung nào bị giao và không có việc mới: `data.proposal` là `null`, không tạo lượt (U023 kịch bản phụ 2a).
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | `taskId` sai định dạng UUID |
+| 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
+| 404 | NOT_FOUND | `taskId` không tồn tại hoặc thuộc tài khoản khác |
+| 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ghi chú: Frontend gọi endpoint này ngay sau khi `POST /api/events`, `PATCH /api/events/{eventId}`, `POST /api/events/import/ics`, `POST /api/events/import/csv` hoặc `POST /api/tasks` của TV2 thành công (yêu cầu 3.15). Khung "Đã học", "Bỏ lỡ", khung đã bắt đầu và khung nối tiếp không bị dời. Khung của việc ưu tiên thấp hơn chỉ bị dời khi việc mới không còn chỗ trước hạn chót (yêu cầu 3.16). Khung không xếp lại được ghi `not_enough_time` trong `taskResults`.
+
+---
+
+### POST /api/scheduler/completed-session
+
+Module: TV3 · Story: US-22 · Người viết: Nhi · Trạng thái: Nháp  
+Mô tả: Đánh dấu một khung "Đã xếp" đã đến giờ bắt đầu là "Đã học".  
+Quyền: Chủ tài khoản (chủ của khung giờ học).
+
+**Nội dung gửi lên (body)**
+
+```json
+{ "slotId": "b2b2b2b2-0000-4000-8000-000000000001" }
+```
+
+**Kết quả thành công (200)**
+
+```json
+{
+  "data": {
+    "id": "b2b2b2b2-0000-4000-8000-000000000001",
+    "taskId": "55555555-6666-4777-8888-999999999999",
+    "taskTitle": "Ôn chương 3 Giải tích",
+    "startsAt": "2026-11-11T02:00:00.000Z",
+    "endsAt": "2026-11-11T03:00:00.000Z",
+    "status": "studied",
+    "needsReschedule": false
+  }
+}
+```
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | Thiếu `slotId` hoặc sai định dạng; khung chưa đến giờ bắt đầu; khung đã "Bỏ lỡ"; khung đang "Cần xếp lại" (yêu cầu 3.18, 3.21) |
+| 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
+| 404 | NOT_FOUND | Không có khung, hoặc khung thuộc tài khoản khác |
+| 500 | INTERNAL_ERROR | Lỗi máy chủ |
+
+Ghi chú: Gọi lại với khung đã "Đã học" trả 200 với cùng dữ liệu, không đổi gì, nên thời lượng chỉ được tính một lần trong thống kê (yêu cầu 3.20). Việc cần làm không tự chuyển sang hoàn thành (yêu cầu 3.21).
+
+---
+
+### Xác nhận liên module và lưu ý cho người review (Hưng)
+
+1. `tasks` và các endpoint `/api/tasks` thuộc vùng TV2. TV3 cần từ `tasks`: `due_at`, `priority`, `difficulty`, `duration_minutes`, `is_done`, `title`.
+2. Yêu cầu 3.19 chạy trong transaction của endpoint TV2: `DELETE /api/tasks/{taskId}` và `PATCH /api/tasks/{taskId}` (`isDone: true`) xóa khung `proposed` và khung `scheduled` chưa bắt đầu của việc, chỉ khung `studied` và `missed` nhận `task_id = NULL`; `PATCH` giảm `durationMinutes` thì xóa hoặc rút ngắn khung `scheduled` chưa bắt đầu từ khung muộn nhất. Ghi chú hiện tại ở vùng TV2 ghi "giữ nguyên khung học trên lịch" cho mọi khung nên cần thống nhất.
+3. `GET /api/schedule/week` (TV2) trả `studySlots` dùng các giá trị `status` ở trên, không trả khung `proposed`, và thêm `needsReschedule`.
 
 ---
 
