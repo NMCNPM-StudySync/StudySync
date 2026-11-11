@@ -247,13 +247,13 @@ Ghi chú: <Chỉ mục, quy tắc xóa, dữ liệu mẫu>
 #### users
 
 Mô tả: Mỗi dòng là một tài khoản StudySync của sinh viên (thực thể: Người dùng).  
-Module: TV1 · Migration tạo bảng: việc #69 · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
 | id | uuid | Không | Khóa chính (`pk_users`) | gen_random_uuid() | Mã tài khoản (UUID v4) |
 | email | varchar(254) | Không | Duy nhất (`uq_users_email`); CHECK `ck_users_email_normalized`: `email = lower(btrim(email))` | | Địa chỉ email dùng để đăng nhập; chuẩn hóa chữ thường và cắt khoảng trắng hai đầu |
-| password_hash | text | Không | | | Bản băm mật khẩu bảo mật (bcrypt hoặc argon2); không bao giờ lưu mật khẩu thô |
+| password_hash | text | Không | | | Bản băm mật khẩu bảo mật bằng bcrypt (bcryptjs, cost 10); không bao giờ lưu mật khẩu thô |
 | display_name | varchar(100) | Không | CHECK `ck_users_display_name_not_empty`: `char_length(display_name) >= 1`; CHECK `ck_users_display_name_trimmed`: `display_name = btrim(display_name)` | | Tên hiển thị của sinh viên; lưu chuỗi NFC đã cắt khoảng trắng, dài 1–100 code point (BR-08) |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo tài khoản (UTC, BR-07) |
 | updated_at | timestamptz | Không | Trigger `trg_users_set_updated_at` | now() | Thời điểm sửa đổi hồ sơ gần nhất (UTC, BR-07) |
@@ -262,12 +262,13 @@ Quyền riêng tư: `email` và `password_hash` là dữ liệu riêng tư tuy�
 Ghi chú: 
 - Backend chuẩn hóa email bằng `lower(btrim(email))` trước khi kiểm tra trùng hoặc lưu vào CSDL. Ràng buộc CHECK `ck_users_email_normalized` đóng vai trò lớp phòng thủ phụ ở CSDL nhằm ngăn chặn việc lách ràng buộc `uq_users_email` qua chữ hoa/chữ thường. Ràng buộc duy nhất `uq_users_email` tự động tạo chỉ mục duy nhất.
 - Tên hiển thị `display_name` dài từ 1–100 ký tự sau khi chuẩn hóa NFC và cắt khoảng trắng; không được để rỗng hoặc chỉ chứa khoảng trắng (BR-08).
+- Mật khẩu hợp lệ từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số; backend kiểm tra thêm `Buffer.byteLength(password, 'utf8') <= 72` do giới hạn 72 byte của thuật toán bcrypt (bcryptjs, cost 10).
 - Tài khoản người dùng không bị xóa trong phạm vi v0.1 (mục 1.5; mọi khóa ngoại từ các bảng khác trỏ về `users.id` đều dùng `ON DELETE RESTRICT`).
 
 #### groups
 
 Mô tả: Mỗi dòng là một nhóm đồ án hoặc nhóm học tập của sinh viên (thực thể: Nhóm); Trưởng nhóm được biểu diễn qua vai trò `leader` trong bảng `group_members`.  
-Module: TV1 · Migration tạo bảng: việc #69 · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -285,7 +286,7 @@ Ghi chú:
 #### group_members
 
 Mô tả: Mỗi dòng ghi nhận tư cách thành viên, vai trò và quyền hạn của một người dùng trong một nhóm cụ thể (thực thể: Thành viên nhóm; bảng nối giữa `users` và `groups`).  
-Module: TV1 · Migration tạo bảng: việc #69 · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -302,27 +303,30 @@ Quyền riêng tư: API danh sách thành viên (`GET /api/groups/{groupId}`) ch
 Ghi chú: 
 - Ràng buộc duy nhất `uq_group_members_group_id_user_id` trên `(group_id, user_id)` bảo đảm mỗi người dùng chỉ có duy nhất một dòng thành viên trong một nhóm (U005). Vì `group_id` đứng đầu chỉ mục duy nhất này nên đã thỏa mãn quy tắc chỉ mục khóa ngoại mục 1.3.
 - Chỉ mục `idx_group_members_user_id` trên `(user_id)` được tạo tường minh để tăng tốc truy vấn danh sách nhóm của một người dùng (`GET /api/groups`) và thỏa mãn quy tắc mục 1.3 ("Mỗi cột khóa ngoại có chỉ mục, hoặc đứng đầu một chỉ mục duy nhất").
-- Chỉ mục duy nhất có điều kiện (partial unique index) `uq_group_members_one_leader_per_group` trên `(group_id) WHERE role = 'leader'` để đảm bảo tại mức CSDL mỗi nhóm có tối đa một Trưởng nhóm tại mọi thời điểm.
+- Chỉ mục duy nhất có điều kiện (partial unique index) `uq_group_members_one_leader_per_group` trên `(group_id) WHERE role = 'leader'` để đảm bảo tại mức CSDL mỗi nhóm có tối đa một Trưởng nhóm tại mọi thời điểm. Do chỉ mục unique này không thể hoãn kiểm tra (non-deferrable), **mọi thao tác đổi Trưởng nhóm phải bỏ vai trò leader cũ trước khi gán leader mới**.
+- Giữ cả `joined_at` và `created_at`: `joined_at` mang ý nghĩa nghiệp vụ (thời điểm gia nhập nhóm, dùng để sắp xếp danh sách thành viên), còn `created_at` là cột kiểm toán hệ thống (audit trail) theo quy ước chuẩn của mục 1.4.
+- Cột `can_organize_meetings`: Giữ tên theo quy ước giao diện API và use case U036 (TV4); Trưởng nhóm mặc nhiên có quyền tổ chức họp (cột lưu `false` nhưng ở tầng API/nghiệp vụ coi như luôn có quyền), thành viên thường được Trưởng nhóm ủy quyền sẽ lưu `true`. Quyền này tự mất khi thành viên rời nhóm (US-07).
 - Khi chuyển Trưởng nhóm hoặc rời nhóm, các thao tác UPDATE/DELETE phải chạy trong một transaction (xem bảng Giao dịch TV1 nhiều bảng bên dưới).
 
 #### invitation_links
 
 Mô tả: Mỗi dòng lưu thông tin liên kết mời hiện hành của một nhóm đồ án (thực thể: Liên kết mời); mỗi nhóm duy trì tối đa một liên kết mời còn hiệu lực.  
-Module: TV1 · Migration tạo bảng: việc #69 · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
 | id | uuid | Không | Khóa chính (`pk_invitation_links`) | gen_random_uuid() | Mã dòng liên kết (UUID v4) |
 | group_id | uuid | Không | Khóa ngoại `fk_invitation_links_group_id` → `groups.id` (`ON DELETE CASCADE`); Duy nhất (`uq_invitation_links_group_id`) | | Nhóm được mời vào; mỗi nhóm có tối đa 1 dòng liên kết mời hiện hành |
-| token_hash | text | Không | Duy nhất (`uq_invitation_links_token_hash`) | | Bản băm SHA-256 của mã ngẫu nhiên (token thô) gửi trong URL; không lưu token thô trong CSDL |
-| expires_at | timestamptz | Không | | | Thời điểm hết hạn của liên kết, tính bằng thời điểm tạo hoặc tạo lại cộng 7 ngày (U004) |
+| token | text | Không | Duy nhất (`uq_invitation_links_token`) | | Chuỗi mã ngẫu nhiên bảo mật độ dài cao (ví dụ 32 bytes base64url) gửi trong URL mời |
+| expires_at | timestamptz | Không | | | Thời điểm hết hạn của liên kết, tính bằng thời điểm tạo hoặc tạo lại cộng 7 ngày (U004, yêu cầu 1.6) |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo hoặc làm mới liên kết mời (UTC, BR-07) |
 | updated_at | timestamptz | Không | Trigger `trg_invitation_links_set_updated_at` | now() | Thời điểm sửa gần nhất (UTC, BR-07) |
 
-Quyền riêng tư: Token thô chỉ trả duy nhất một lần cho Trưởng nhóm khi tạo mới hoặc tạo lại liên kết mời; `token_hash` không bao giờ được trả qua API. Endpoint xem lời mời công khai (`GET /api/invitations/{token}`) chỉ trả `groupName` và `expiresAt`, không trả `groupId`, số lượng hay danh sách thành viên nhóm.  
+Quyền riêng tư: `token` chỉ trả cho Trưởng nhóm của nhóm đó (hoặc xuất hiện trong đường dẫn lời mời chia sẻ cho người được mời); không lộ công khai qua API danh sách thành viên hay chi tiết nhóm. Endpoint xem lời mời công khai (`GET /api/invitations/{token}`) chỉ nhận token để tra cứu và trả `groupName`, `expiresAt`, không trả `groupId`, số lượng hay danh sách thành viên nhóm.  
 Ghi chú: 
-- Ràng buộc duy nhất `uq_invitation_links_group_id` đảm bảo mỗi nhóm chỉ có đúng 1 dòng liên kết mời trong CSDL. Khi Trưởng nhóm yêu cầu tạo lại liên kết (`POST /api/groups/{groupId}/invite-link/regenerate`), hệ thống UPDATE `token_hash` và `expires_at` trên dòng hiện có, làm cho liên kết cũ lập tức vô hiệu (U004).
-- Ứng dụng sinh token ngẫu nhiên mật mã đủ mạnh (ví dụ 32 bytes base64url), lưu `token_hash = sha256(raw_token)`. Khi xác thực lời mời, backend tính SHA-256 của token nhận được từ URL rồi truy vấn theo `token_hash`. Ràng buộc duy nhất `uq_invitation_links_token_hash` tự động tạo chỉ mục tìm kiếm nhanh và an toàn.
+- Ràng buộc duy nhất `uq_invitation_links_group_id` đảm bảo mỗi nhóm chỉ có đúng 1 dòng liên kết mời trong CSDL.
+- Lưu trữ token thô: Liên kết mời có hạn 7 ngày, chỉ trao quyền tham gia nhóm và vốn được chia sẻ công khai vào nhóm chat sinh viên, nên việc lưu trực tiếp `token` dạng text là phù hợp và đáp ứng yêu cầu 1.6 (U004) để backend có thể trả lại đúng liên kết còn hạn khi Trưởng nhóm gọi `POST /api/groups/{groupId}/invite-link`. Ràng buộc duy nhất `uq_invitation_links_token` tự động tạo chỉ mục tìm kiếm nhanh và an toàn.
+- Khi Trưởng nhóm yêu cầu tạo lại liên kết (`POST /api/groups/{groupId}/invite-link/regenerate`), hệ thống UPDATE `token` mới và gia hạn `expires_at = now() + interval '7 days'` trên dòng hiện có, làm cho liên kết cũ lập tức vô hiệu (U004).
 - Khóa ngoại `fk_invitation_links_group_id` sử dụng `ON DELETE CASCADE`: khi nhóm bị xóa, liên kết mời của nhóm sẽ tự động bị xóa theo (mục 1.5).
 
 #### Giao dịch TV1 nhiều bảng
@@ -332,12 +336,13 @@ Các thao tác sau tác động trên nhiều bảng hoặc đòi hỏi tính nh
 | Nghiệp vụ | Thao tác nguyên tử trong 1 Transaction |
 | --- | --- |
 | **Tạo nhóm (US-03, U003)** | 1. INSERT vào bảng `groups` để tạo nhóm mới.<br>2. INSERT vào bảng `group_members` gán người tạo vai trò `role = 'leader'`, `can_organize_meetings = false`.<br>*(Rollback toàn bộ nếu bất kỳ thao tác nào thất bại, bảo đảm không bao giờ có nhóm thiếu Trưởng nhóm).* |
-| **Chuyển Trưởng nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện hiện là `leader` và người nhận (`userId`) đang là `member` của nhóm.<br>3. UPDATE `group_members` của Trưởng nhóm cũ thành `role = 'member'`.<br>4. UPDATE `group_members` của người nhận thành `role = 'leader'` và đặt `can_organize_meetings = false` (vì Trưởng nhóm mặc nhiên có quyền). |
-| **Trưởng nhóm rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Đếm số thành viên nhóm. Nếu còn thành viên khác, bắt buộc có `successorId` hợp lệ là một `member` khác của nhóm.<br>3. UPDATE `group_members` của `successorId` thành `role = 'leader'` và `can_organize_meetings = false`.<br>4. DELETE dòng `group_members` của Trưởng nhóm cũ.<br>5. Xử lý quyền ủy quyền họp (tự mất do xóa dòng `group_members`) và chuyển thẻ Kanban TV5 đang giao cho người này về trạng thái chưa giao (`assigned_to_user_id = NULL`). |
-| **Thành viên thường rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện là `member`.<br>3. DELETE dòng `group_members` của thành viên.<br>4. Quyền ủy quyền họp `can_organize_meetings` tự mất; các thẻ Kanban TV5 được giao cho người này được chuyển về trạng thái chưa giao (`assigned_to_user_id = NULL`). |
+| **Chuyển Trưởng nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện hiện là `leader` và người nhận (`userId`) đang là `member` của nhóm.<br>3. UPDATE `group_members` của Trưởng nhóm cũ thành `role = 'member'` (hạ vai trò leader cũ trước).<br>4. UPDATE `group_members` của người nhận thành `role = 'leader'` và đặt `can_organize_meetings = false` (gán leader mới sau, tuân thủ `uq_group_members_one_leader_per_group`). |
+| **Trưởng nhóm rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Đếm số thành viên nhóm. Nếu còn thành viên khác, bắt buộc có `successorId` hợp lệ là một `member` khác của nhóm.<br>3. DELETE dòng `group_members` của Trưởng nhóm cũ trước (xóa vai trò leader cũ trước để không vi phạm partial unique index `uq_group_members_one_leader_per_group`).<br>4. UPDATE `group_members` của `successorId` thành `role = 'leader'` và `can_organize_meetings = false`.<br>5. Xử lý quyền ủy quyền họp (tự mất do xóa dòng `group_members`) và chuyển thẻ Kanban TV5 đang giao cho người này về trạng thái chưa giao (`assigned_to_user_id = NULL`); phản hồi lời mời họp của người rời nhóm (U033, U034) do TV4 xử lý trong cùng transaction. |
+| **Thành viên thường rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện là `member`.<br>3. DELETE dòng `group_members` của thành viên.<br>4. Quyền ủy quyền họp `can_organize_meetings` tự mất; các thẻ Kanban TV5 được giao cho người này được chuyển về trạng thái chưa giao (`assigned_to_user_id = NULL`); phản hồi lời mời họp của người rời nhóm (U033, U034) do TV4 xử lý trong cùng transaction. |
 | **Thành viên cuối cùng rời nhóm (US-07, U007, mục 4.8)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác nhận số lượng thành viên nhóm bằng 1.<br>3. DELETE dòng `groups`. Khóa ngoại `ON DELETE CASCADE` tự động xóa dòng `group_members` cuối cùng, dòng `invitation_links` và toàn bộ dữ liệu riêng của nhóm (thẻ Kanban TV5, đề xuất họp TV4).<br>4. Toàn bộ lịch cá nhân (`fixed_events`), việc cần làm (`tasks`) và khung giờ học (`study_slots`) của người dùng được giữ nguyên hoàn toàn (mục 1.5, 4.8). |
+| **Tham gia nhóm bằng liên kết mời (US-05, U005)** | 1. Khóa chia sẻ dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR SHARE;` (kiểm tra nhóm còn tồn tại; nếu nhóm vừa bị xóa bởi thành viên cuối cùng rời nhóm thì trả 404 NOT_FOUND thay vì lỗi khóa ngoại 500).<br>2. INSERT vào `group_members` với `group_id`, `user_id`, `role = 'member'`, `can_organize_meetings = false` kèm `ON CONFLICT (group_id, user_id) DO NOTHING`. |
 
-Việc lấy hoặc tạo liên kết mời (`POST /api/groups/{groupId}/invite-link`) sử dụng UPSERT theo `group_id` (`INSERT INTO invitation_links ... ON CONFLICT (group_id) DO UPDATE ...`) để bảo đảm không bao giờ sinh ra hai liên kết cùng lúc cho một nhóm. Thao tác tạo lại liên kết mời (`POST /api/groups/{groupId}/invite-link/regenerate`) chỉ tác động một dòng qua câu lệnh UPDATE trên `invitation_links`.
+Quy trình lấy hoặc tạo liên kết mời (`POST /api/groups/{groupId}/invite-link`): Backend khóa dòng nhóm (`SELECT id FROM groups WHERE id = $1 FOR UPDATE`). Nếu nhóm đã có dòng trong `invitation_links` với `expires_at > now()`, hệ thống trả lại đúng liên kết hiện hành đó (HTTP 200). Nếu chưa có hoặc liên kết cũ đã hết hạn, hệ thống sinh `token` ngẫu nhiên mới và gia hạn `expires_at = now() + interval '7 days'` (HTTP 201). Thao tác tạo lại liên kết mời (`POST /api/groups/{groupId}/invite-link/regenerate`) luôn tạo `token` mới và đặt lại hạn 7 ngày trên dòng hiện có, vô hiệu hóa liên kết cũ ngay lập tức.
 
 ---
 
