@@ -506,22 +506,101 @@ Bảng 3.2: Dữ liệu mẫu minh họa các bảng Module TV2
 
 ### TV3 – Đề xuất khung giờ học
 
-<!-- Vùng của TV3: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
+Trạng thái: Nháp · Người viết: Nhi · Người review: Hưng · Cập nhật: 12/11/2026
 
-#### study_slots
+Phạm vi: US-17 đến US-22 (Use Case U021 đến U024, yêu cầu 3.1 đến 3.21 của báo cáo Yêu cầu M2). Module TV3 sở hữu hai bảng: lượt đề xuất đang chờ sinh viên xác nhận (`schedule_proposals`) và khung giờ học (`study_slots`). TV3 chỉ đọc `tasks` (bảng của TV2, xem vùng TV2) và `starts_at`, `ends_at` của `fixed_events` của chính sinh viên.
 
-Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Khung giờ học đề xuất)  
-Module: TV3 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+Ánh xạ nhãn trên giao diện và giá trị lưu (Bảng 1.2, cột trạng thái dùng mã tiếng Anh, nhãn tiếng Việt do ứng dụng gắn):
+
+| Nhãn trên giao diện | Lưu ở đâu | Ghi chú |
+| --- | --- | --- |
+| Khung đề xuất đang chờ (chưa hiện trên lịch tuần) | `study_slots.status = 'proposed'` | BR-03: không hiện trên lịch tuần, không tính vào thời lượng đã xếp, không tính thống kê |
+| "Đã xếp" | `study_slots.status = 'scheduled'` | |
+| "Đã học" | `study_slots.status = 'studied'` | TV5 (`GET /api/statistics/weekly`) chỉ cộng giá trị này |
+| "Bỏ lỡ" | `study_slots.status = 'missed'` | |
+| "Cần xếp lại" | Không lưu, tính khi đọc | Khung `scheduled` đang giao với sự kiện cố định hoặc kết thúc sau hạn chót hiện tại của việc (yêu cầu 3.18). Tự trở lại "Đã xếp" khi hết lý do, nên không lưu thành trạng thái |
+| "Chưa xếp", "Còn X giờ chưa xếp" | Không lưu, tính khi đọc | Nhãn của việc cần làm: thời lượng của việc trừ tổng thời lượng các khung `scheduled` (trừ khung "Cần xếp lại") và `studied` (yêu cầu 3.5) |
+
+#### schedule_proposals
+
+Mô tả: Mỗi dòng là một lượt đề xuất của hệ thống: đề xuất xếp lịch (US-17), khung giờ bù (US-20) hoặc tái xếp lịch (US-21). Các khung trong lượt đề xuất là các dòng `study_slots` có `status = 'proposed'` trỏ về lượt này (thực thể: Lượt đề xuất xếp lịch).  
+Module: TV3 · Migration tạo bảng: `<sẽ điền khi làm migration>` · Người sở hữu: Nhi  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
-| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
-| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
-| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
-| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+| id | uuid | Không | Khóa chính (`pk_schedule_proposals`) | gen_random_uuid() | Mã lượt đề xuất |
+| user_id | uuid | Không | Khóa ngoại `fk_schedule_proposals_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Sinh viên nhận đề xuất |
+| kind | varchar(30) | Không | CHECK `ck_schedule_proposals_kind`: `kind IN ('auto_plan', 'makeup', 'replan')` | | Loại đề xuất (`auto_plan`: bấm "Xếp lịch", US-17; `makeup`: khung giờ bù, US-20; `replan`: tái xếp khi có việc phát sinh, US-21) |
+| status | varchar(30) | Không | CHECK `ck_schedule_proposals_status`: `status IN ('pending', 'accepted', 'rejected', 'outdated')` | `'pending'` | Trạng thái lượt đề xuất (`pending`: đang chờ; `accepted`: đã chấp nhận hoặc đã chọn khung bù; `rejected`: sinh viên từ chối; `outdated`: lịch đã đổi hoặc có khung đã qua giờ bắt đầu, phải tính lại, yêu cầu 3.9, 3.14) |
+| missed_slot_id | uuid | Có | Khóa ngoại `fk_schedule_proposals_missed_slot_id` → `study_slots.id` (`ON DELETE CASCADE`); CHECK `ck_schedule_proposals_missed_slot`: `(kind = 'makeup') = (missed_slot_id IS NOT NULL)` | NULL | Khung "Bỏ lỡ" cần bù. Chỉ có ở đề xuất `makeup`, các loại khác để rỗng |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo đề xuất (UTC), cũng là mốc bắt đầu của phạm vi 7 ngày (Bảng 1.3 đặc tả TV3) |
+| updated_at | timestamptz | Không | Trigger `trg_schedule_proposals_set_updated_at` | now() | Thời điểm đổi trạng thái gần nhất (UTC) |
 
-Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
-Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+Quyền riêng tư: Dữ liệu cá nhân, chỉ chủ tài khoản (`user_id`) đọc được; không trả cho thành viên khác trong nhóm (BR-02, mục 1.7).  
+Ghi chú:
+- Chỉ mục: `uq_schedule_proposals_user_id_pending` (chỉ mục duy nhất một phần) trên `(user_id)` với điều kiện `WHERE status = 'pending'`: mỗi sinh viên chỉ có một lượt đề xuất đang chờ. Tạo lượt mới thì lượt đang chờ cũ chuyển `outdated` trong cùng transaction. Chỉ mục này cũng là chỉ mục cho khóa ngoại `user_id` khi tra lượt đang chờ; thêm `idx_schedule_proposals_user_id` trên `(user_id)` để tra lịch sử. `idx_schedule_proposals_missed_slot_id` trên `(missed_slot_id)`.
+- Lượt đề xuất đã xử lý (`accepted`, `rejected`, `outdated`) được giữ lại để chống lưu trùng khi bấm hai lần (yêu cầu 3.8, 3.13). Chưa có việc dọn dữ liệu cũ trong phạm vi hiện tại.
+- Gắn trigger `trg_schedule_proposals_set_updated_at` gọi `set_updated_at()`.
+
+#### study_slots
+
+Mô tả: Mỗi dòng là một khung giờ học của một sinh viên cho một việc cần làm: khung đề xuất đang chờ, khung "Đã xếp", "Đã học" hoặc "Bỏ lỡ" (thực thể: Khung giờ học đề xuất).  
+Module: TV3 · Migration tạo bảng: `<sẽ điền khi làm migration>` · Người sở hữu: Nhi  
+
+| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
+| --- | --- | --- | --- | --- | --- |
+| id | uuid | Không | Khóa chính (`pk_study_slots`) | gen_random_uuid() | Mã khung giờ học |
+| user_id | uuid | Không | Khóa ngoại `fk_study_slots_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Chủ khung giờ học |
+| task_id | uuid | Có | Khóa ngoại `fk_study_slots_task_id` → `tasks.id` (`ON DELETE SET NULL`) | | Việc cần làm của khung. Cho phép rỗng vì khung "Đã học" và "Bỏ lỡ" được giữ khi việc bị xóa để còn thống kê (Bảng 1.3, yêu cầu 3.19, #56, #57) |
+| proposal_id | uuid | Có | Khóa ngoại `fk_study_slots_proposal_id` → `schedule_proposals.id` (`ON DELETE SET NULL`); CHECK `ck_study_slots_proposal_required`: `status <> 'proposed' OR proposal_id IS NOT NULL` | NULL | Lượt đề xuất đã tạo ra khung. Khung đang chờ bắt buộc có; khung đã chấp nhận giữ lại để truy vết |
+| replaces_slot_id | uuid | Có | Khóa ngoại `fk_study_slots_replaces_slot_id` → `study_slots.id` (`ON DELETE SET NULL`) | NULL | Chỉ dùng ở khung đề xuất của lượt `replan`: khung cũ sẽ bị dời. Khi sinh viên xác nhận, khung cũ bị xóa và khung này thành "Đã xếp" (yêu cầu 3.15, 3.17) |
+| status | varchar(30) | Không | CHECK `ck_study_slots_status`: `status IN ('proposed', 'scheduled', 'studied', 'missed')` | `'proposed'` | Trạng thái khung (xem bảng ánh xạ nhãn ở đầu vùng TV3) |
+| starts_at | timestamptz | Không | | | Thời điểm bắt đầu (UTC, BR-07) |
+| ends_at | timestamptz | Không | CHECK `ck_study_slots_ends_after_starts`: `ends_at > starts_at`; CHECK `ck_study_slots_max_2_hours`: `ends_at - starts_at <= interval '2 hours'` | | Thời điểm kết thúc (UTC, nửa mở `[starts_at, ends_at)`, BR-01, BR-07). Mỗi khung dài tối đa 2 giờ (yêu cầu 3.3; khung giờ bù không dài hơn khung bị lỡ, yêu cầu 3.12) |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| updated_at | timestamptz | Không | Trigger `trg_study_slots_set_updated_at` | now() | Thời điểm sửa gần nhất (UTC) |
+
+Quyền riêng tư: Toàn bộ bảng là dữ liệu cá nhân. Không trả cho thành viên khác trong nhóm và không tính là bận khi tìm giờ họp (BR-02, mục 1.7, yêu cầu 4.1). TV5 chỉ đọc khung `studied` của chính người đang đăng nhập để thống kê (US-33).  
+Ghi chú:
+- Chỉ mục: `idx_study_slots_user_id_starts_at` trên `(user_id, starts_at)` cho lịch tuần, thống kê tuần (TV5) và tìm khoảng trống; `idx_study_slots_task_id` trên `(task_id)`; `idx_study_slots_proposal_id` trên `(proposal_id)`; `idx_study_slots_replaces_slot_id` trên `(replaces_slot_id)`.
+- Thời gian bận khi xếp lịch gồm sự kiện cố định và khung `scheduled`, `studied` (yêu cầu 3.1). Khung `proposed` và `missed` không tính là bận.
+- Lịch tuần (`GET /api/schedule/week` của TV2) và thống kê tuần (TV5) không bao giờ trả khung `proposed` (BR-03).
+- Quy tắc xóa (mục 1.5): xóa thật. Khung `proposed` bị xóa khi lượt đề xuất bị từ chối hoặc hết hạn. Khi việc bị xóa hoặc được đánh dấu hoàn thành, ứng dụng xóa khung `proposed` và khung `scheduled` chưa bắt đầu của việc đó trong cùng transaction với thao tác của TV2 (yêu cầu 3.19); khung `studied`, `missed` còn lại mới nhận `task_id = NULL` qua `ON DELETE SET NULL`.
+- Gắn trigger `trg_study_slots_set_updated_at` gọi `set_updated_at()`.
+
+#### Giao dịch TV3 nhiều bảng
+
+| Nghiệp vụ | Thao tác trong một transaction |
+| --- | --- |
+| Tạo lượt đề xuất (US-17, US-20, US-21) | 1. Chuyển lượt `pending` cũ của sinh viên sang `outdated` và xóa các khung `proposed` của lượt đó.<br>2. INSERT `schedule_proposals` (`pending`).<br>3. INSERT các khung `study_slots` (`proposed`, có `proposal_id`). |
+| Chấp nhận đề xuất `auto_plan` hoặc `replan` (US-18, US-21, BR-03) | 1. `SELECT ... FROM schedule_proposals WHERE id = $1 FOR UPDATE`.<br>2. Lượt đã `accepted`: trả lại kết quả cũ, không ghi gì thêm (yêu cầu 3.8). Lượt `rejected` hoặc `outdated`: dừng, trả 409.<br>3. Kiểm tra lại từng khung: bắt đầu sau thời điểm hiện tại, không giao sự kiện cố định và khung `scheduled`, `studied` hiện có, việc còn tồn tại và chưa hoàn thành. Không đạt: chuyển lượt sang `outdated`, xóa khung `proposed`, trả 409 (yêu cầu 3.9, 3.17).<br>4. UPDATE khung `proposed` → `scheduled`. Với lượt `replan`: DELETE các khung cũ ghi ở `replaces_slot_id`. Với mỗi việc có khung mới: DELETE các khung "Cần xếp lại" của việc đó (yêu cầu 3.7).<br>5. UPDATE lượt → `accepted`. |
+| Chọn khung giờ bù (US-20) | Như trên, nhưng chỉ khung được chọn chuyển `scheduled`, khung còn lại bị xóa. Chạm lần hai (cùng khung hoặc khung kia) trả lại khung đã lưu (yêu cầu 3.13). |
+| Từ chối đề xuất (US-18, US-20, US-21) | UPDATE lượt → `rejected`, DELETE các khung `proposed` của lượt. Lịch tuần không đổi. |
+| Báo lỡ (US-19) | 1. Khóa dòng khung: `SELECT ... FROM study_slots WHERE id = $1 FOR UPDATE`.<br>2. UPDATE `scheduled` → `missed` (chỉ khi đã đến giờ bắt đầu và không phải khung "Cần xếp lại").<br>3. Tạo lượt đề xuất `makeup` như dòng đầu (có thể không có khung nào nếu lịch kín). |
+| Đánh dấu đã học (US-22) | UPDATE `scheduled` → `studied` khi đã đến giờ bắt đầu và không phải khung "Cần xếp lại". Khung đã `studied` thì không đổi gì (yêu cầu 3.20). |
+| Việc cần làm thay đổi (yêu cầu 3.19, chạy trong transaction của endpoint TV2) | Xóa việc hoặc đánh dấu hoàn thành: DELETE khung `proposed` và khung `scheduled` chưa bắt đầu của việc, rồi mới DELETE hoặc UPDATE `tasks`. Giảm thời lượng: xóa hoặc rút ngắn các khung `scheduled` chưa bắt đầu từ khung muộn nhất. Đổi hạn chót hoặc tăng thời lượng: không ghi gì, nhãn "Cần xếp lại" và "Còn X giờ chưa xếp" tự tính lại khi đọc. |
+
+#### Dữ liệu mẫu TV3
+
+Bảng 3.3: Dữ liệu mẫu minh họa các bảng Module TV3 (dùng lại `user_id` và `task_id` ở dữ liệu mẫu TV2)
+
+*Bảng `schedule_proposals`:*
+
+| id | user_id | kind | status | missed_slot_id | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| `a1a1a1a1-0000-4000-8000-000000000001` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `auto_plan` | `accepted` | NULL | `2026-11-11 01:05:00+00` | `2026-11-11 01:06:00+00` |
+| `a1a1a1a1-0000-4000-8000-000000000002` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `makeup` | `pending` | `b2b2b2b2-0000-4000-8000-000000000002` | `2026-11-12 03:10:00+00` | `2026-11-12 03:10:00+00` |
+
+*Bảng `study_slots`:*
+
+| id | user_id | task_id | proposal_id | replaces_slot_id | status | starts_at | ends_at |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `b2b2b2b2-0000-4000-8000-000000000001` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `55555555-6666-4777-8888-999999999999` | `a1a1a1a1-0000-4000-8000-000000000001` | NULL | `studied` | `2026-11-11 02:00:00+00` | `2026-11-11 03:00:00+00` |
+| `b2b2b2b2-0000-4000-8000-000000000002` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `55555555-6666-4777-8888-999999999999` | `a1a1a1a1-0000-4000-8000-000000000001` | NULL | `missed` | `2026-11-12 02:00:00+00` | `2026-11-12 03:00:00+00` |
+| `b2b2b2b2-0000-4000-8000-000000000003` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `55555555-6666-4777-8888-999999999999` | `a1a1a1a1-0000-4000-8000-000000000002` | NULL | `proposed` | `2026-11-12 08:00:00+00` | `2026-11-12 09:00:00+00` |
+| `b2b2b2b2-0000-4000-8000-000000000004` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `55555555-6666-4777-8888-999999999999` | `a1a1a1a1-0000-4000-8000-000000000002` | NULL | `proposed` | `2026-11-12 09:00:00+00` | `2026-11-12 10:00:00+00` |
+
+(Cột `created_at`, `updated_at` của `study_slots` lược bớt cho gọn.) Hai dòng cuối là 2 khung giờ bù đang chờ cho khung bị lỡ 09:00–10:00 Thứ 5 12/11 giờ Việt Nam: 15:00–16:00 và 16:00–17:00 cùng ngày. Hạn chót của việc là 00:00 Thứ 6 13/11 giờ Việt Nam nên không còn ngày khác, khung thứ hai lấy vị trí sớm nhất cùng ngày (yêu cầu 3.12).
 
 ---
 
