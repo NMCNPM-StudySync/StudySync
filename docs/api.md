@@ -175,15 +175,15 @@ Phạm vi: US-01 đến US-07. Use case: U001 đến U007. Mọi endpoint theo q
 ### Quy định áp dụng cho TV1
 
 | Mục | Quy định |
-| :-: | :-: |
-| Mật khẩu | Tối thiểu 8 ký tự, gồm cả chữ cái và chữ số (US-01, yêu cầu 1.2) |
+| --- | --- |
+| Mật khẩu | Từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số (US-01, yêu cầu 1.2; dùng thuật toán bcrypt qua thư viện bcryptjs cost 10, kiểm tra Buffer.byteLength(password, 'utf8') <= 72) |
 | Phiên đăng nhập | JWT trong header `Authorization: Bearer <token>`, hiệu lực 7 ngày (`JWT_EXPIRES_IN=7d`). Token gồm các claim `sub` (id người dùng), `iat`, `exp`. Hết hạn thì trả 401 UNAUTHORIZED và người dùng đăng nhập lại, hệ thống không có cơ chế làm mới token |
-| Đăng xuất | Không có endpoint. Frontend xóa token đã lưu. Phiên chấm dứt về phía người dùng, còn token cũ hết hạn tự nhiên sau 7 ngày |
-| Liên kết mời | Có hiệu lực 7 ngày. Mỗi nhóm chỉ có một liên kết còn hiệu lực. Tạo lại thì liên kết cũ vô hiệu ngay |
+| Đăng xuất | Không có endpoint. Frontend xóa token đã lưu. Phiên chấm dứt về phía người dùng, còn token cũ hết hạn tự nhiên sau 7 ngày (yêu cầu 1.4, U002) |
+| Liên kết mời | Có hiệu lực 7 ngày. Mỗi nhóm chỉ có một liên kết còn hiệu lực. Tạo lại thì liên kết cũ vô hiệu ngay (U004, yêu cầu 1.6) |
 | Tên nhóm, tên hiển thị (BR-08) | Backend chuẩn hóa NFC, cắt khoảng trắng hai đầu rồi đếm theo code point. Tối đa 100 ký tự, tối thiểu 1 ký tự. Giá trị lưu và giá trị trả về là chuỗi đã chuẩn hóa. Không tự cắt tên quá dài, chỉ báo lỗi |
 | Email | Backend cắt khoảng trắng và đổi chữ thường trước khi kiểm tra trùng, lưu và đối chiếu. Giá trị `email` trả về luôn là dạng đã chuẩn hóa |
 | Phân quyền | Quyền Trưởng nhóm được kiểm tra ở API, trả 403 FORBIDDEN khi không đủ quyền, không chỉ ẩn nút ở giao diện |
-| Riêng tư (BR-02) | Danh sách thành viên chỉ trả `userId`, `displayName`, vai trò và thời điểm vào nhóm. Không trả email, không trả dữ liệu lịch |
+| Riêng tư (BR-02) | Danh sách thành viên chỉ trả `userId`, `displayName`, `role`, `canOrganizeMeetings` và thời điểm vào nhóm `joinedAt`. Không trả email, không trả dữ liệu lịch |
 
 ### Kiểu dữ liệu dùng chung trong TV1
 
@@ -227,7 +227,7 @@ Member:
 ### Danh sách endpoint TV1
 
 | Phương thức và đường dẫn | Mô tả ngắn | Story | Quyền | Trạng thái |
-| :-: | :-: | :-: | :-: | :-: |
+| --- | --- | --- | --- | --- |
 | POST /api/auth/register | Đăng ký | US-01 | Công khai | Nháp |
 | POST /api/auth/login | Đăng nhập | US-02 | Công khai | Nháp |
 | GET /api/users/me | Lấy thông tin cá nhân | US-02, US-06 | Đã đăng nhập | Nháp |
@@ -260,7 +260,7 @@ Quyền: công khai.
 | --- | --- | --- | --- |
 | displayName | string | Có | Họ tên dùng làm tên hiển thị. Tối đa 100 ký tự sau chuẩn hóa (BR-08) |
 | email | string | Có | Địa chỉ email đúng định dạng, chưa gắn với tài khoản khác |
-| password | string | Có | Tối thiểu 8 ký tự, gồm chữ cái và chữ số |
+| password | string | Có | Từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số |
 
 ```json
 {
@@ -295,7 +295,7 @@ Quyền: công khai.
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| 400 | VALIDATION_ERROR | Họ tên rỗng, chỉ gồm khoảng trắng hoặc quá 100 ký tự; email sai định dạng; mật khẩu dưới 8 ký tự hoặc thiếu chữ cái hoặc chữ số |
+| 400 | VALIDATION_ERROR | Họ tên rỗng, chỉ gồm khoảng trắng hoặc quá 100 ký tự; email sai định dạng; mật khẩu dưới 8 ký tự, quá 72 ký tự hoặc thiếu chữ cái hoặc chữ số |
 | 409 | CONFLICT | Email đã được dùng cho tài khoản khác |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
@@ -307,7 +307,9 @@ Ví dụ lỗi 400:
     "code": "VALIDATION_ERROR",
     "message": "Dữ liệu đăng ký không hợp lệ",
     "details": [
-      { "field": "password", "issue": "Mật khẩu tối thiểu 8 ký tự, gồm cả chữ cái và chữ số" }
+      { "field": "displayName", "issue": "Họ tên không được để trống và tối đa 100 ký tự" },
+      { "field": "email", "issue": "Địa chỉ email không đúng định dạng" },
+      { "field": "password", "issue": "Mật khẩu từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số" }
     ]
   }
 }
@@ -573,6 +575,8 @@ Chưa có nhóm nào thì `groups` là mảng rỗng, vẫn trả 200.
 | 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
+**Ghi chú:** Danh sách nhóm được sắp xếp theo thời điểm tham gia mới nhất lên trước (`joinedAt DESC`). Trả mảng rỗng `groups: []` khi người dùng chưa tham gia nhóm nào.
+
 ---
 
 ### GET /api/groups/{groupId}
@@ -668,7 +672,7 @@ Quyền: Trưởng nhóm của nhóm.
 | 404 | NOT_FOUND | Không có nhóm với mã này |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
-**Ghi chú:** dùng POST dù có lúc chỉ trả lại liên kết cũ, vì endpoint có thể tạo dữ liệu. Gọi lặp lại là an toàn: không bao giờ sinh ra hai liên kết còn hiệu lực cho một nhóm. Phần đầu của `inviteUrl` lấy từ biến môi trường địa chỉ frontend (`CORS_ORIGIN`). `token` và `inviteUrl` chỉ trả cho Trưởng nhóm.
+**Ghi chú:** dùng POST dù có lúc chỉ trả lại liên kết cũ, vì endpoint có thể tạo dữ liệu. Gọi lặp lại là an toàn: không bao giờ sinh ra hai liên kết còn hiệu lực cho một nhóm. Phần đầu của `inviteUrl` lấy từ biến môi trường địa chỉ frontend (`CORS_ORIGIN`, chỉ chứa một địa chỉ duy nhất). `token` và `inviteUrl` chỉ trả cho Trưởng nhóm.
 
 ---
 
@@ -836,7 +840,7 @@ Quyền: Trưởng nhóm của nhóm.
 | 404 | NOT_FOUND | Không có nhóm với mã này, hoặc người nhận không còn là thành viên của nhóm ("Thành viên không còn trong nhóm") |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
-**Ghi chú:** việc hạ Trưởng nhóm cũ và nâng người mới chạy trong một transaction (xem mục Transaction trong từ điển dữ liệu), nên nhóm không có lúc nào thiếu hoặc thừa Trưởng nhóm. Người nhận quyền bị đặt lại `canOrganizeMeetings` về `false` vì Trưởng nhóm mặc nhiên có quyền tổ chức họp. Nếu Trưởng nhóm muốn rời hẳn nhóm thì gọi `POST /api/groups/{groupId}/leave` kèm `successorId`, không cần gọi endpoint này trước.
+**Ghi chú:** việc hạ Trưởng nhóm cũ và nâng người mới chạy trong một transaction (xem mục Transaction trong từ điển dữ liệu), nên nhóm không có lúc nào thiếu hoặc thừa Trưởng nhóm. Người nhận quyền bị đặt lại `canOrganizeMeetings` về `false` vì Trưởng nhóm mặc nhiên có quyền tổ chức họp. Nếu Trưởng nhóm muốn rời hẳn nhóm thì gọi `POST /api/groups/{groupId}/leave` kèm `successorId`, không cần gọi endpoint này trước. Chức năng mở rộng (thêm), chưa có trong tài liệu M2 và chưa có màn hình giao diện riêng trong v0.1 (M2 chỉ quy định chuyển Trưởng nhóm như một bước trong hộp thoại khi Trưởng nhóm rời nhóm ở US-07). Endpoint này được thiết kế để hỗ trợ quản trị phân quyền nhóm và sẵn sàng khi frontend bổ sung màn hình chuyển giao vai trò sau này.
 
 ---
 
@@ -903,14 +907,12 @@ Ví dụ lỗi 400:
 
 ---
 
-### Câu hỏi mở cho người review
+### Các điểm đã thống nhất sau review (Nhi)
 
-Những điểm dưới đây chưa có trong tài liệu nhóm, mình chọn tạm để bản Nháp chạy được. Nhi xem và chốt hoặc sửa.
-
-1. Địa chỉ gốc để dựng `inviteUrl`: `backend/.env.example` đã có `CORS_ORIGIN=http://localhost:5173`, mình tạm dùng biến này làm base URL cho liên kết mời. Nhi xem có cần thêm biến riêng `CLIENT_URL` không.
-2. Độ dài tối đa của mật khẩu chưa có quy định (hiện chỉ quy định tối thiểu 8 ký tự, gồm chữ cái và chữ số). Để tránh DoS khi băm mật khẩu quá dài (ví dụ bcrypt giới hạn 72 byte), đề xuất chặn tối đa 72 hoặc 128 ký tự ở tầng API.
-3. Đăng xuất hiện chỉ là việc của frontend (xóa token). Phiên làm việc kết thúc tự nhiên sau 7 ngày (`JWT_EXPIRES_IN=7d`). Nếu muốn vô hiệu hóa token ngay lập tức ở server thì cần thêm bảng blacklist token hoặc lưu session/refresh token, ảnh hưởng đến migration #69.
-4. `GET /api/invitations/{token}` để công khai nhằm báo liên kết lỗi ngay trước bước đăng nhập, khớp thứ tự trong U005 (bước 2 kiểm tra mã, bước 3 mới kiểm tra đăng nhập).
+1. **Địa chỉ gốc dựng `inviteUrl`:** Giữ `CORS_ORIGIN` (khai báo trong `.env.example`), không thêm biến `CLIENT_URL` (đã thống nhất ở #56 và Template 5). Lưu ý biến này chỉ chứa đúng một địa chỉ origin duy nhất của frontend.
+2. **Quy định mật khẩu và thuật toán băm:** Sử dụng thuật toán `bcrypt` qua thư viện `bcryptjs` với cost factor 10 (thuần JS). Giới hạn độ dài mật khẩu từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số; backend kiểm tra thêm `Buffer.byteLength(password, 'utf8') <= 72` do giới hạn 72 byte của bcrypt. Vi phạm trả lỗi `400 VALIDATION_ERROR` với thông báo `"Mật khẩu từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số"`.
+3. **Cơ chế đăng xuất:** Đồng ý xử lý hoàn toàn ở frontend (xóa token khỏi storage của trình duyệt) cho phiên bản v0.1; không tạo bảng blacklist token ở backend để giữ phạm vi gọn và không phát sinh bảng mới cho migration #69.
+4. **Endpoint `GET /api/invitations/{token}`:** Đồng ý giữ công khai (public) để hiển thị tên nhóm và hạn dùng trên màn hình lời mời trước khi yêu cầu sinh viên đăng nhập, khớp luồng use case U005 (bước 2 kiểm tra mã, bước 3 kiểm tra đăng nhập) và yêu cầu 1.8.
 
 <!-- TV1:END -->
 
