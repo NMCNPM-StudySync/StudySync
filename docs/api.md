@@ -108,13 +108,16 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV2 | `<GET /api/events>` | `<Xem lịch tuần>` | Nháp |
 | TV3 | `<POST /api/schedule/suggest>` | `<Đề xuất khung giờ học>` | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
-| TV5 | GET /api/groups/{groupId}/cards | Danh sách và lọc thẻ Kanban | Nháp |
-| TV5 | POST /api/groups/{groupId}/cards | Tạo thẻ Kanban mới | Nháp |
-| TV5 | PATCH /api/groups/{groupId}/cards/{cardId} | Sửa tên và hạn chót thẻ Kanban | Nháp |
-| TV5 | DELETE /api/groups/{groupId}/cards/{cardId} | Xóa thẻ Kanban | Nháp |
-| TV5 | PATCH /api/groups/{groupId}/cards/{cardId}/status | Chuyển cột trạng thái thẻ Kanban | Nháp |
-| TV5 | PATCH /api/groups/{groupId}/cards/{cardId}/assignee | Giao hoặc bỏ giao thẻ Kanban | Nháp |
-| TV5 | GET /api/statistics/weekly | Xem thống kê giờ học theo tuần | Nháp |
+| TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
+| TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
+| TV4 | `GET /api/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn | Nháp |
+| TV5 | `GET /api/groups/{groupId}/cards` | Danh sách và lọc thẻ Kanban | Nháp |
+| TV5 | `POST /api/groups/{groupId}/cards` | Tạo thẻ Kanban mới | Nháp |
+| TV5 | `PATCH /api/groups/{groupId}/cards/{cardId}` | Sửa tên và hạn chót thẻ Kanban | Nháp |
+| TV5 | `DELETE /api/groups/{groupId}/cards/{cardId}` | Xóa thẻ Kanban | Nháp |
+| TV5 | `PATCH /api/groups/{groupId}/cards/{cardId}/status` | Chuyển cột trạng thái thẻ Kanban | Nháp |
+| TV5 | `PATCH /api/groups/{groupId}/cards/{cardId}/assignee` | Giao hoặc bỏ giao thẻ Kanban | Nháp |
+| TV5 | `GET /api/statistics/weekly` | Xem thống kê giờ học theo tuần | Nháp |
 
 ## Mẫu một endpoint (sao chép cho mỗi endpoint)
 
@@ -184,7 +187,287 @@ Ghi chú: <Quy định nghiệp vụ áp dụng, giới hạn, lưu ý cho front
 
 <!-- Vùng của TV4: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
 
-`<Thêm các endpoint của TV4 bên dưới theo mẫu ở trên, trạng thái ban đầu là Nháp.>`
+### `POST /api/groups/{groupId}/meeting-slots/search`
+
+Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Tìm các khung giờ họp chung của nhóm trong khoảng thời gian được chọn, dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên; trả danh sách khung rảnh hoàn toàn (`allFreeSlots`) hoặc khung có nhiều người rảnh nhất (`partialSlots`) khi không có giờ chung (US-23, U031).  
+Quyền: Người tổ chức họp của nhóm – gồm **Trưởng nhóm** hoặc **Thành viên nhóm được Trưởng nhóm ủy quyền** (kiểm tra động theo CSDL của nhóm, U036); không phải quyền tĩnh chỉ theo vai trò.
+
+**Tham số đường dẫn**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `groupId` | `uuid` | Có | Mã nhóm cần tìm giờ họp chung |
+
+**Nội dung gửi lên (body)**
+
+```json
+{
+  "from": "2026-11-08T17:00:00.000Z",
+  "to": "2026-11-15T17:00:00.000Z",
+  "durationMinutes": 60
+}
+```
+
+| Trường | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `from` | `string` (ISO 8601 UTC) | Có | Thời điểm bắt đầu khoảng tìm kiếm (nửa mở `[from, to)`) |
+| `to` | `string` (ISO 8601 UTC) | Có | Thời điểm kết thúc khoảng tìm kiếm |
+| `durationMinutes` | `integer` | Không | Thời lượng tối thiểu của khung giờ họp (phút); mặc định `60`, bước nhảy `30`, tối đa `900` |
+
+**Kết quả thành công (200 OK)**
+
+```json
+{
+  "data": {
+    "allFreeSlots": [
+      {
+        "startsAt": "2026-11-10T01:00:00.000Z",
+        "endsAt": "2026-11-10T03:00:00.000Z",
+        "availableCount": 5,
+        "totalMembers": 5,
+        "busyMembers": []
+      }
+    ],
+    "partialSlots": []
+  }
+}
+```
+
+Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `partialSlots` trả tối đa 10 khung có nhiều thành viên rảnh nhất, sắp giảm dần theo `availableCount`, ưu tiên `startsAt` sớm hơn khi bằng nhau. Mỗi phần tử của `partialSlots` có thêm `busyMembers` chứa danh sách tên hiển thị (`displayName`) của thành viên bận tại khung đó – đây là tên hiển thị trong hồ sơ nhóm, **không phải** tên hay chi tiết sự kiện cá nhân (BR-02).
+
+```json
+{
+  "data": {
+    "allFreeSlots": [],
+    "partialSlots": [
+      {
+        "startsAt": "2026-11-10T04:00:00.000Z",
+        "endsAt": "2026-11-10T05:00:00.000Z",
+        "availableCount": 4,
+        "totalMembers": 5,
+        "busyMembers": [
+          { "displayName": "Nguyễn Văn B" }
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "MEMBER_NO_FIXED_EVENTS",
+      "message": "Thành viên Trần Thị C chưa nhập sự kiện cố định nào trong tuần được chọn."
+    }
+  ]
+}
+```
+
+**Cảnh báo có thể gặp**
+
+| Mã cảnh báo (`warnings[].code`) | Điều kiện |
+| --- | --- |
+| `MEMBER_NO_FIXED_EVENTS` | Có ít nhất một thành viên chưa nhập sự kiện cố định nào trong khoảng `[from, to)`; thành viên đó được coi là rảnh hoàn toàn trong khoảng (yêu cầu 4.1, U031) |
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; `from >= to`; toàn bộ khoảng `[from, to)` nằm trong quá khứ so với thời điểm hiện tại; `durationMinutes <= 0` hoặc `> 900`; `from` hoặc `to` không phải chuỗi ISO 8601 hậu tố Z (BR-07) |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+| `403` | `FORBIDDEN` | Người gọi không thuộc nhóm, hoặc là thành viên thường chưa được Trưởng nhóm ủy quyền tổ chức họp (U031, U036) |
+| `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
+
+Ghi chú:
+- Khoảng tìm kiếm hiểu theo nửa mở `[from, to)` tính bằng UTC (BR-01, BR-07); chỉ xét trong khung hoạt động `07:00–22:00` giờ Việt Nam (`Asia/Ho_Chi_Minh`) mỗi ngày và loại bỏ các mốc đã qua so với `now()` (yêu cầu 4.1).
+- **Tuyệt đối không lộ tên, loại, địa điểm, ghi chú sự kiện cá nhân (BR-02):** Service chỉ đọc `starts_at` và `ends_at` từ `fixed_events`; không đọc `title`, `kind`, `location`, `notes`, `source`. Không coi `tasks` hay `study_slots` là bận (yêu cầu 4.1, mục 1.7).
+- Phân quyền kiểm tra động: backend tra `group_members` xem `user_id` của token có vai trò `leader` hoặc có cờ ủy quyền tổ chức họp không (U036); không chỉ kiểm tra ở giao diện.
+
+---
+
+### `POST /api/groups/{groupId}/meeting-proposals`
+
+Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Người tổ chức họp tạo một đề xuất buổi họp cho nhóm (chốt một khung giờ từ kết quả tìm kiếm hoặc tự nhập) và gửi lời mời đến toàn bộ thành viên nhóm (U032).  
+Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành viên được ủy quyền, U036); kiểm tra động theo CSDL.
+
+**Tham số đường dẫn**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `groupId` | `uuid` | Có | Mã nhóm tổ chức buổi họp |
+
+**Nội dung gửi lên (body)**
+
+```json
+{
+  "title": "Họp đồ án tuần 4",
+  "startsAt": "2026-11-10T01:00:00.000Z",
+  "endsAt": "2026-11-10T03:00:00.000Z",
+  "location": "Phòng họp B2",
+  "notes": "Chuẩn bị slide demo"
+}
+```
+
+| Trường | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `title` | `string` | Có | Tên buổi họp; tối đa 200 code point, tối thiểu 1 ký tự sau cắt khoảng trắng (BR-08) |
+| `startsAt` | `string` (ISO 8601 UTC) | Có | Thời điểm bắt đầu buổi họp |
+| `endsAt` | `string` (ISO 8601 UTC) | Có | Thời điểm kết thúc buổi họp; phải sau `startsAt` |
+| `location` | `string` | Không | Địa điểm họp (tùy chọn) |
+| `notes` | `string` | Không | Ghi chú thêm (tùy chọn) |
+
+**Kết quả thành công (201 Created)**
+
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "groupId": "661f9500-f30c-52e5-b827-557766551111",
+    "organizerUserId": "772a0600-a41d-63f6-c938-668877662222",
+    "title": "Họp đồ án tuần 4",
+    "startsAt": "2026-11-10T01:00:00.000Z",
+    "endsAt": "2026-11-10T03:00:00.000Z",
+    "status": "open",
+    "location": "Phòng họp B2",
+    "notes": "Chuẩn bị slide demo",
+    "invitationsSent": 4,
+    "createdAt": "2026-11-09T10:00:00.000Z",
+    "updatedAt": "2026-11-09T10:00:00.000Z"
+  }
+}
+```
+
+- `invitationsSent`: số lời mời vừa được tạo (bằng số thành viên nhóm trừ Người tổ chức họp; Người tổ chức họp không tự gửi mời cho chính mình).
+- Hệ thống tạo một dòng `meeting_invitations` với `status = 'pending'` cho mỗi thành viên nhóm còn lại. Nếu đã có đề xuất `open` cũ cho cùng nhóm mà cùng thành viên chưa phản hồi, lời mời cũ chuyển sang `'superseded'` trước khi tạo lời mời mới (U032).
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | `title` rỗng hoặc vượt 200 ký tự (BR-08); `endsAt <= startsAt`; trường bắt buộc thiếu; `startsAt`/`endsAt` không phải ISO 8601 hậu tố Z (BR-07) |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+| `403` | `FORBIDDEN` | Người gọi không thuộc nhóm hoặc chưa được ủy quyền tổ chức họp (U036) |
+| `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` |
+
+Ghi chú:
+- Quy tắc lời mời `'superseded'` (U032): khi tạo đề xuất mới, lời mời `'pending'` của đề xuất cũ (cùng nhóm) đổi thành `'superseded'`; lời mời `'accepted'`/`'declined'` giữ nguyên để lưu vết lịch sử.
+- Khi thành viên rời nhóm sau khi đề xuất đã được tạo, lời mời của người đó không tính vào tổng lời mời đang mở (U033, U034, U036); logic do ứng dụng thực hiện cùng lúc xóa dòng `group_members` trong một transaction (mục 1.5).
+
+---
+
+### `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond`
+
+Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Thành viên nhóm phản hồi (chấp nhận hoặc từ chối) lời mời tham dự một buổi họp đã được đề xuất (U032).  
+Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); chỉ người có `user_id` khớp với `meeting_invitations.user_id` mới được phản hồi.
+
+**Tham số đường dẫn**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `groupId` | `uuid` | Có | Mã nhóm |
+| `proposalId` | `uuid` | Có | Mã đề xuất buổi họp |
+| `invitationId` | `uuid` | Có | Mã lời mời của thành viên |
+
+**Nội dung gửi lên (body)**
+
+```json
+{
+  "response": "accepted"
+}
+```
+
+| Trường | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `response` | `string` | Có | Phản hồi của thành viên: `"accepted"` hoặc `"declined"` |
+
+**Kết quả thành công (200 OK)**
+
+```json
+{
+  "data": {
+    "invitationId": "883b1700-b52e-74g7-d049-779988773333",
+    "proposalId": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "accepted",
+    "respondedAt": "2026-11-09T11:30:00.000Z"
+  }
+}
+```
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | `response` không phải `"accepted"` hoặc `"declined"` |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+| `403` | `FORBIDDEN` | Người gọi không phải chủ sở hữu lời mời (`invitationId`), hoặc không thuộc nhóm |
+| `404` | `NOT_FOUND` | Không tìm thấy `groupId`, `proposalId` hoặc `invitationId` |
+| `409` | `CONFLICT` | Lời mời đã ở trạng thái `'superseded'` (đề xuất cũ bị thay thế, U032) và không thể phản hồi |
+
+Ghi chú:
+- Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn đề xuất còn ở trạng thái `'open'`; mỗi lần phản hồi cập nhật `responded_at`.
+- Lời mời ở trạng thái `'superseded'` không được phản hồi (trả `409 CONFLICT`).
+
+---
+
+### `GET /api/users/me/reminders`
+
+Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Lấy danh sách nhắc việc sắp đến hạn của người dùng đang đăng nhập, sắp theo thời điểm nhắc gần nhất trước (U035).  
+Quyền: Người dùng đang đăng nhập (chỉ trả nhắc việc của chính `user_id` trong token; không trả của người khác).
+
+**Tham số query**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `from` | `string` (ISO 8601 UTC) | Không | Lọc nhắc việc có `remind_at >= from`; mặc định là thời điểm hiện tại (`now()`) |
+| `to` | `string` (ISO 8601 UTC) | Không | Lọc nhắc việc có `remind_at < to`; mặc định là 7 ngày sau `from` |
+| `limit` | `integer` | Không | Số nhắc việc tối đa trả về; mặc định `20`, tối đa `100` |
+
+**Nội dung gửi lên (body):** không có.
+
+**Kết quả thành công (200 OK)**
+
+```json
+{
+  "data": {
+    "reminders": [
+      {
+        "id": "994c2800-c63f-85h8-e150-880099884444",
+        "taskId": "aa5d3900-d74a-96i9-f261-991100995555",
+        "taskTitle": "Ôn tập Giải tích chương 3",
+        "taskDueAt": "2026-11-12T10:00:00.000Z",
+        "remindAt": "2026-11-11T10:00:00.000Z",
+        "isSent": false
+      }
+    ]
+  }
+}
+```
+
+| Trường trong `reminders[]` | Kiểu | Mô tả |
+| --- | --- | --- |
+| `id` | `uuid` | Mã nhắc việc |
+| `taskId` | `uuid` | Mã việc cần làm |
+| `taskTitle` | `string` | Tên việc cần làm (lấy từ `tasks.title`); dữ liệu cá nhân, chỉ trả cho chủ sở hữu (BR-02) |
+| `taskDueAt` | `string` (ISO 8601 UTC) | Hạn hoàn thành của việc |
+| `remindAt` | `string` (ISO 8601 UTC) | Thời điểm gửi thông báo nhắc |
+| `isSent` | `boolean` | Đã gửi thông báo chưa |
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | `from` hoặc `to` không phải ISO 8601 hậu tố Z; `from >= to`; `limit` ngoài khoảng `[1, 100]` (BR-07) |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+
+Ghi chú:
+- Nhắc việc chỉ trả cho chính người dùng đang đăng nhập; không có endpoint trả nhắc việc của người khác (BR-02).
+- Nhắc việc gắn với việc đã xóa sẽ bị xóa CASCADE từ `tasks` → không bao giờ trả `taskId` của việc đã xóa (mục 1.5, U035); `taskId` luôn hợp lệ, không có trường hợp `null` ở endpoint này (khác với `study_slots.task_id` có thể `null` theo quy ước từ `#57`).
+- Bộ hẹn giờ hệ thống (Timer, tác nhân `Timer` trong sơ đồ tuần tự) quét định kỳ và gửi thông báo; endpoint này chỉ đọc danh sách, không kích hoạt gửi thông báo.
+
+---
+
+> **Sơ đồ tuần tự TV4** (nháp, bổ sung sau khi hoàn thiện task tài liệu)
 
 ---
 
