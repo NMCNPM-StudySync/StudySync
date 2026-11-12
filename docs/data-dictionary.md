@@ -353,48 +353,85 @@ Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
 
 #### meeting_proposals
 
-Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Đề xuất buổi họp)  
-Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+Mô tả: Mỗi dòng là một đề xuất buổi họp nhóm do Người tổ chức họp tạo ra sau khi tìm giờ rảnh chung, ghi lại khung giờ được chọn để gửi lời mời đến các thành viên (US-23, U031, U032).  
+Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
-| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
-| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
+| id | uuid | Không | Khóa chính (`pk_meeting_proposals`) | gen_random_uuid() | Mã đề xuất buổi họp |
+| group_id | uuid | Không | Khóa ngoại `fk_meeting_proposals_group_id` → `groups.id` (`ON DELETE CASCADE`) | | Nhóm tổ chức buổi họp; khi nhóm bị xóa thì xóa toàn bộ đề xuất (mục 1.5, 4.8) |
+| organizer_user_id | uuid | Không | Khóa ngoại `fk_meeting_proposals_organizer_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Người tổ chức họp tạo đề xuất (Trưởng nhóm hoặc Thành viên được ủy quyền theo U036) |
+| title | varchar(200) | Không | CHECK `ck_meeting_proposals_title_not_empty`: `char_length(title) >= 1`; CHECK `ck_meeting_proposals_title_trimmed`: `title = btrim(title)` | | Tên buổi họp; lưu chuỗi NFC đã cắt khoảng trắng, tối đa 200 code point (BR-08) |
+| starts_at | timestamptz | Không | | | Thời điểm bắt đầu buổi họp đề xuất (UTC, BR-07) |
+| ends_at | timestamptz | Không | CHECK `ck_meeting_proposals_ends_after_starts`: `ends_at > starts_at` | | Thời điểm kết thúc buổi họp đề xuất (UTC, hiểu theo khoảng nửa mở `[starts_at, ends_at)` – BR-01, BR-07) |
+| status | varchar(30) | Không | CHECK `ck_meeting_proposals_status`: `status IN ('open', 'confirmed', 'cancelled')` | `'open'` | Trạng thái đề xuất: `open` – đang chờ phản hồi; `confirmed` – đã xác nhận; `cancelled` – đã hủy |
+| location | text | Có | | NULL | Địa điểm họp (tùy chọn; cho phép rỗng vì người tổ chức không bắt buộc nhập) |
+| notes | text | Có | | NULL | Ghi chú thêm cho buổi họp (tùy chọn; cho phép rỗng) |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
 | updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
 
-Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
-Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+Quyền riêng tư: Không có cột nào chứa dữ liệu lịch cá nhân của thành viên; bảng này chỉ lưu thông tin do Người tổ chức họp nhập vào và trả được cho mọi thành viên nhóm. Dữ liệu lịch cá nhân dùng để tìm giờ họp được truy vấn trực tiếp từ `fixed_events` và chỉ lấy `starts_at`, `ends_at` (BR-02, mục 1.7).  
+Ghi chú: Chỉ mục `idx_meeting_proposals_group_id_starts_at` trên `(group_id, starts_at)` để tra danh sách đề xuất theo nhóm và sắp theo thời gian. Trigger `trg_meeting_proposals_set_updated_at` gọi hàm `set_updated_at()`. Xóa thật khi nhóm bị xóa (CASCADE từ `group_id`); trong phạm vi nhóm còn tồn tại, Người tổ chức họp có thể hủy đề xuất bằng cách đổi `status` thành `'cancelled'` thay vì xóa, để lưu vết lịch sử. Trạng thái `'confirmed'` được đặt khi Người tổ chức họp xác nhận buổi họp (U032). Lời mời cũ của đề xuất bị thay thế chuyển sang `'superseded'` tại bảng `meeting_invitations` (xem ghi chú bảng đó, U032).
+
+Dữ liệu mẫu (cùng nhóm `7d2c9a51-...` và hai người dùng `0b8f6f5e-...`, `5c1e8d27-...` với dữ liệu mẫu TV5; nạp sau `users`, `groups`, `group_members`):
+
+| id | group_id | organizer_user_id | title | starts_at | ends_at | status | location | notes | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `e1a2b3c4-5555-4666-8777-888899990001` | `7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `Họp đồ án tuần 3` | `2026-11-03 02:00:00+00` | `2026-11-03 04:00:00+00` | `confirmed` | `Phòng họp B2` | `NULL` | `2026-11-01 04:00:00+00` | `2026-11-02 08:30:00+00` |
+| `e1a2b3c4-5555-4666-8777-888899990002` | `7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33` | `5c1e8d27-9a4b-4e3f-b6d1-2f7a0c8e4b19` | `Họp chốt demo sprint 1` | `2026-11-07 07:00:00+00` | `2026-11-07 08:00:00+00` | `cancelled` | `NULL` | `Hủy do trùng lịch thi giữa kỳ` | `2026-11-05 03:00:00+00` | `2026-11-06 02:15:00+00` |
+| `e1a2b3c4-5555-4666-8777-888899990003` | `7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `Họp đồ án tuần 4` | `2026-11-10 01:00:00+00` | `2026-11-10 03:00:00+00` | `open` | `Phòng họp B2` | `Chuẩn bị slide demo` | `2026-11-09 10:00:00+00` | `2026-11-09 10:00:00+00` |
 
 #### meeting_invitations
 
-Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Lời mời)  
-Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+Mô tả: Mỗi dòng là một lời mời gửi đến một thành viên nhóm cho một đề xuất buổi họp cụ thể, lưu trạng thái phản hồi của thành viên đó (U032, U033, U034, U036).  
+Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
-| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
-| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
-| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| id | uuid | Không | Khóa chính (`pk_meeting_invitations`) | gen_random_uuid() | Mã lời mời |
+| meeting_proposal_id | uuid | Không | Khóa ngoại `fk_meeting_invitations_meeting_proposal_id` → `meeting_proposals.id` (`ON DELETE CASCADE`); Duy nhất `uq_meeting_invitations_proposal_user`: `(meeting_proposal_id, user_id)` | | Đề xuất buổi họp liên kết; khi đề xuất bị xóa thì xóa toàn bộ lời mời |
+| user_id | uuid | Không | Khóa ngoại `fk_meeting_invitations_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Thành viên được mời; dùng RESTRICT vì tài khoản không bị xóa trong phạm vi hiện tại |
+| status | varchar(30) | Không | CHECK `ck_meeting_invitations_status`: `status IN ('pending', 'accepted', 'declined', 'superseded')` | `'pending'` | Trạng thái lời mời: `pending` – chờ phản hồi; `accepted` – đã chấp nhận; `declined` – đã từ chối; `superseded` – đã thay thế bởi đề xuất mới (U032) |
+| responded_at | timestamptz | Có | | NULL | Thời điểm thành viên phản hồi lần cuối (UTC); NULL khi chưa phản hồi |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo lời mời (UTC) |
 | updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
 
-Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
-Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+Quyền riêng tư: Không có cột dữ liệu lịch cá nhân; `status` phản hồi của từng thành viên là thông tin của buổi họp nhóm, trả được cho Người tổ chức họp. Danh sách thành viên đã chấp nhận/từ chối không trả tên sự kiện cá nhân (BR-02).  
+Ghi chú: Chỉ mục `idx_meeting_invitations_meeting_proposal_id` trên `(meeting_proposal_id)` để tra lời mời theo đề xuất; chỉ mục `idx_meeting_invitations_user_id` trên `(user_id)` để tra lời mời của một thành viên. Trigger `trg_meeting_invitations_set_updated_at` gọi hàm `set_updated_at()`. Ràng buộc duy nhất `uq_meeting_invitations_proposal_user` đảm bảo mỗi thành viên chỉ có một dòng lời mời cho mỗi đề xuất (U032: khi gửi đề xuất mới, lời mời cũ cùng thành viên chuyển sang `superseded`, tạo lời mời mới với `pending`). Khi thành viên rời nhóm, ứng dụng loại dòng `meeting_invitations` của người đó khỏi tổng lời mời đang mở của đề xuất (`status = 'pending'` hoặc `'accepted'` → không tính vào quorum), không xóa dòng vì khóa ngoại `user_id` dùng RESTRICT; ứng dụng thực hiện logic này cùng lúc xóa dòng `group_members` trong một transaction (U033, U034, U036, mục 1.5).
+
+Dữ liệu mẫu (3 lời mời của đề xuất `e1a2b3c4-...0003` ở bảng `meeting_proposals`, mỗi người được mời một dòng; người tổ chức `0b8f6f5e-...` không tự mời; `9e4a7c13-...` và `3f6b9d20-...` là hai thành viên nhóm khác, cần có sẵn trong `users` và `group_members` khi nạp):
+
+| id | meeting_proposal_id | user_id | status | responded_at | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| `d5e6f7a8-1111-4222-8333-aaaabbbb0001` | `e1a2b3c4-5555-4666-8777-888899990003` | `5c1e8d27-9a4b-4e3f-b6d1-2f7a0c8e4b19` | `accepted` | `2026-11-09 11:30:00+00` | `2026-11-09 10:00:00+00` | `2026-11-09 11:30:00+00` |
+| `d5e6f7a8-1111-4222-8333-aaaabbbb0002` | `e1a2b3c4-5555-4666-8777-888899990003` | `9e4a7c13-2d5b-4f86-a1c7-6b3d8e0f5a42` | `declined` | `2026-11-09 12:10:00+00` | `2026-11-09 10:00:00+00` | `2026-11-09 12:10:00+00` |
+| `d5e6f7a8-1111-4222-8333-aaaabbbb0003` | `e1a2b3c4-5555-4666-8777-888899990003` | `3f6b9d20-8c1e-4a57-b2d9-7e0a4c6f1b85` | `pending` | `NULL` | `2026-11-09 10:00:00+00` | `2026-11-09 10:00:00+00` |
 
 #### reminders
 
-Mô tả: `<Mỗi dòng đại diện cho cái gì>` (thực thể: Nhắc việc)  
-Module: TV4 · Migration tạo bảng: `<tên file migration>` · Người sở hữu: `<tên>`  
+Mô tả: Mỗi dòng là một lịch nhắc việc của người dùng gắn với một việc cần làm sắp đến hạn, lưu thời điểm sẽ gửi thông báo nhắc (U035).  
+Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
-| id | uuid | Không | Khóa chính | gen_random_uuid() | Mã dòng |
-| `<cột>` | `<kiểu>` | `<Có/Không>` | `<ràng buộc>` | `<...>` | `<...>` |
-| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
+| id | uuid | Không | Khóa chính (`pk_reminders`) | gen_random_uuid() | Mã nhắc việc |
+| task_id | uuid | Không | Khóa ngoại `fk_reminders_task_id` → `tasks.id` (`ON DELETE CASCADE`) | | Việc cần làm được nhắc; khi việc bị xóa thì xóa toàn bộ nhắc việc liên quan (mục 1.5, U035: nhắc việc không gửi cho việc đã xóa) |
+| user_id | uuid | Không | Khóa ngoại `fk_reminders_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Chủ sở hữu nhắc việc (người được nhắc) |
+| remind_at | timestamptz | Không | | | Thời điểm gửi thông báo nhắc (UTC, BR-07); hệ thống tính từ `tasks.due_at` trừ đi khoảng thời gian trước hạn |
+| is_sent | boolean | Không | | false | Đã gửi thông báo chưa; `false` – chờ gửi, `true` – đã gửi |
+| created_at | timestamptz | Không | | now() | Thời điểm tạo nhắc việc (UTC) |
 | updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
 
-Quyền riêng tư: `<Cột nào không được trả cho người khác trong nhóm (BR-02)>`  
-Ghi chú: `<Chỉ mục, quy tắc xóa, dữ liệu mẫu>`
+Quyền riêng tư: `remind_at` và trạng thái nhắc việc là dữ liệu cá nhân, chỉ trả cho chủ sở hữu (`user_id`), không trả cho thành viên khác trong nhóm (BR-02). Tên việc lấy từ `tasks.title`, không lưu lại ở bảng này; trường hợp việc bị xóa thì nhắc việc cũng bị xóa theo CASCADE nên không có tình huống nhắc việc mồ côi.  
+Ghi chú: Chỉ mục `idx_reminders_user_id_remind_at` trên `(user_id, remind_at)` để bộ hẹn giờ truy vấn nhanh các nhắc việc sắp đến (U035). Chỉ mục `idx_reminders_task_id` trên `(task_id)` hỗ trợ tra nhắc việc theo việc cần làm. Trigger `trg_reminders_set_updated_at` gọi hàm `set_updated_at()`. Bộ hẹn giờ hệ thống (Timer) quét định kỳ các dòng có `is_sent = false` và `remind_at <= now()` để gửi thông báo rồi đặt `is_sent = true`. Mỗi việc cần làm có thể có nhiều dòng nhắc (ví dụ nhắc 24 giờ trước, nhắc 1 giờ trước), hệ thống tạo tự động khi người dùng thêm/sửa việc.
+
+Dữ liệu mẫu (`task_id` trỏ tới `tasks.id` của TV2, nên nạp sau `tasks`; hai dòng cuối trùng `user_id` và `remind_at` để minh họa trường hợp trùng thời điểm nhắc, khi đó `GET /api/users/me/reminders` xếp theo `id` tăng dần):
+
+| id | task_id | user_id | remind_at | is_sent | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0001` | `aa5d3900-d74a-4a96-8f26-991100995555` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-11 10:00:00+00` | `true` | `2026-11-10 08:00:00+00` | `2026-11-11 10:00:30+00` |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0002` | `aa5d3900-d74a-4a96-8f26-991100995555` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 09:00:00+00` | `false` | `2026-11-10 08:00:00+00` | `2026-11-10 08:00:00+00` |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0003` | `bb6e4a11-e85b-4ba7-9a37-aa2211aa6666` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 09:00:00+00` | `false` | `2026-11-10 08:05:00+00` | `2026-11-10 08:05:00+00` |
 
 ---
 
