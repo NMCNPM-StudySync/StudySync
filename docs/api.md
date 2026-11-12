@@ -203,7 +203,7 @@ Phạm vi: US-29 đến US-34 (Use Case U041 đến U046, mục 3.2.1 Bảng 3.6
 | Mục | Quy định |
 | --- | --- |
 | Bảng Kanban 3 cột cố định (`U041`, `U042`, `5.2`) | Bảng gồm đúng 3 cột `todo` (`Cần làm`), `in_progress` (`Đang làm`) và `done` (`Đã xong`); không thêm, sửa hoặc xóa cột. Thẻ chuyển được theo mọi hướng, kể cả từ `done` quay về `in_progress` hoặc `todo`. Không dùng `description` hay `position`. |
-| Thứ tự sắp xếp (`U041`, `U042`) | Các thẻ trong mỗi cột luôn sắp xếp theo `dueAt` tăng dần; hai thẻ cùng `dueAt` thì thẻ có `createdAt` nhỏ hơn (tạo trước) nằm trên. Không sắp theo thứ tự kéo thả thủ công hay thời điểm chuyển cột. |
+| Thứ tự sắp xếp (`U041`, `U042`) | Các thẻ trong mỗi cột luôn sắp xếp theo `dueAt` tăng dần; hai thẻ cùng `dueAt` thì thẻ có `createdAt` nhỏ hơn (tạo trước) nằm trên; nếu cùng cả `dueAt` và `createdAt` thì sắp theo khóa chính `id` tăng dần (`dueAt ASC, createdAt ASC, id ASC`). Không sắp theo thứ tự kéo thả thủ công hay thời điểm chuyển cột. |
 | Tên thẻ Kanban (`BR-08`) | Bắt buộc, không có thời lượng ước tính (`durationMinutes`). Backend chuẩn hóa NFC, cắt khoảng trắng hai đầu rồi đếm theo code point Unicode (tối thiểu `1`, tối đa `200` ký tự); giá trị lưu và trả về là chuỗi đã chuẩn hóa. Quá dài thì báo `400 VALIDATION_ERROR`, không tự cắt. |
 | Hạn chót (`BR-04`, `BR-07`) | Bắt buộc gồm cả ngày và giờ dưới dạng chuỗi ISO 8601 UTC hậu tố `Z` (nhận dạng có hoặc không có `.000`, từ chối offset như `+07:00` và chuỗi thiếu `Z`; dữ liệu trả về luôn có `.000Z`). Hạn chót đã qua vẫn cho lưu và trả thêm `warnings` chứa `DEADLINE_PASSED`; khi không có cảnh báo thì không trả trường `warnings`. |
 | Giao thẻ (`U043`) | Mỗi thẻ có tối đa 1 người được giao (`assignedToUserId` hoặc `null`). Chỉ Trưởng nhóm (`role = 'leader'`) mới được giao hoặc bỏ giao thẻ (`403 FORBIDDEN` với thành viên thường). Giao người mới thì thay thế người cũ; không gửi thông báo riêng cho người nhận. Khi người được giao rời nhóm (`U007`), giao dịch TV1 tự đặt `assigned_to_user_id = NULL` và giữ nguyên cột. |
@@ -262,8 +262,8 @@ Phạm vi: US-29 đến US-34 (Use Case U041 đến U046, mục 3.2.1 Bảng 3.6
 | POST /api/groups/{groupId}/cards | Tạo thẻ Kanban mới | US-29 | Thành viên nhóm | Nháp |
 | PATCH /api/groups/{groupId}/cards/{cardId} | Sửa tên và hạn chót thẻ Kanban | US-34 | Người tạo thẻ hoặc Trưởng nhóm | Nháp |
 | DELETE /api/groups/{groupId}/cards/{cardId} | Xóa thẻ Kanban | US-34 | Người tạo thẻ hoặc Trưởng nhóm | Nháp |
-| PATCH /api/groups/{groupId}/cards/{cardId}/status | Chuyển cột trạng thái thẻ | US-30 | Thành viên nhóm | Nháp |
-| PATCH /api/groups/{groupId}/cards/{cardId}/assignee | Giao hoặc bỏ giao thẻ | US-31 | Trưởng nhóm | Nháp |
+| PATCH /api/groups/{groupId}/cards/{cardId}/status | Chuyển cột trạng thái thẻ Kanban | US-30 | Thành viên nhóm | Nháp |
+| PATCH /api/groups/{groupId}/cards/{cardId}/assignee | Giao hoặc bỏ giao thẻ Kanban | US-31 | Trưởng nhóm | Nháp |
 | GET /api/statistics/weekly | Xem thống kê giờ học theo tuần | US-33 | Chủ tài khoản | Nháp |
 
 ---
@@ -278,7 +278,7 @@ Quyền: Thành viên hiện tại của nhóm (kể cả Trưởng nhóm).
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
 | `groupId` | `uuid` | Có | (đường dẫn) Mã nhóm cần lấy bảng Kanban |
-| `assigneeId` | `uuid \| "unassigned"` | Không | (query) Lọc thẻ giao cho một thành viên theo `uuid`, hoặc truyền `"unassigned"` để lọc thẻ chưa giao (`U044`); bỏ qua tham số để lấy toàn bộ thẻ |
+| `assigneeId` | `uuid` \| `"unassigned"` | Không | (query) Lọc thẻ giao cho một thành viên theo `uuid`, hoặc truyền `"unassigned"` để lọc thẻ chưa giao (`U044`); bỏ qua tham số để lấy toàn bộ thẻ |
 
 **Nội dung gửi lên (body):** Không có.
 
@@ -342,7 +342,7 @@ Quyền: Thành viên hiện tại của nhóm (kể cả Trưởng nhóm).
 | 404 | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
 | 500 | `INTERNAL_ERROR` | Lỗi máy chủ |
 
-Ghi chú: Danh sách `cards` luôn sắp theo `dueAt ASC, createdAt ASC` nên frontend chia vào 3 cột `Cần làm`, `Đang làm`, `Đã xong` theo `status` là giữ nguyên thứ tự đúng. Nếu không có thẻ phù hợp, API vẫn trả `200` với `"cards": []`; khi lọc bằng `?assigneeId=<uuid>` ra rỗng, frontend hiện `"Chưa có thẻ nào được giao cho <Tên thành viên>"`, khi lọc `?assigneeId=unassigned` ra rỗng thì hiện `"Không có thẻ nào chưa giao"` (`U044` 2a, 2b). Nếu truyền `assigneeId` là UUID hợp lệ của người chưa có thẻ hoặc đã rời nhóm, API cũng trả `"cards": []`. Danh sách thành viên để đổ vào bộ lọc lấy từ `GET /api/groups/{groupId}`.
+Ghi chú: Danh sách `cards` luôn sắp theo `dueAt ASC, createdAt ASC, id ASC` nên frontend chia vào 3 cột `Cần làm`, `Đang làm`, `Đã xong` theo `status` là giữ nguyên thứ tự đúng. Nếu không có thẻ phù hợp, API vẫn trả `200` với `"cards": []`; khi lọc bằng `?assigneeId=<uuid>` ra rỗng, frontend hiện `"Chưa có thẻ nào được giao cho <Tên thành viên>"`, khi lọc `?assigneeId=unassigned` ra rỗng thì hiện `"Không có thẻ nào chưa giao"` (`U044` 2a, 2b). Nếu truyền `assigneeId` là UUID hợp lệ của người chưa có thẻ hoặc đã rời nhóm, API cũng trả `"cards": []`. Danh sách thành viên để đổ vào bộ lọc lấy từ `GET /api/groups/{groupId}`.
 
 ---
 
@@ -430,7 +430,7 @@ Trường hợp hạn chót đã qua thời điểm hiện tại (`BR-04`, vẫn
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | `groupId` sai UUID; `title` thiếu, rỗng hoặc chỉ gồm khoảng trắng ("Vui lòng nhập tên thẻ hợp lệ"); `title` vượt quá 200 ký tự ("Tên thẻ không được vượt quá 200 ký tự"); thiếu `dueAt` hoặc sai chuẩn ISO 8601 hậu tố `Z` / chứa `+07:00` / ngày không tồn tại ("Vui lòng chọn đầy đủ ngày và giờ cho hạn chót"); hoặc gửi trường ngoài phạm vi như `status`, `durationMinutes` |
+| 400 | `VALIDATION_ERROR` | `groupId` sai UUID; `title` thiếu, rỗng hoặc chỉ gồm khoảng trắng ("Vui lòng nhập tên thẻ hợp lệ"); `title` vượt quá 200 ký tự ("Tên thẻ không được vượt quá 200 ký tự"); thiếu `dueAt` hoặc sai chuẩn ISO 8601 hậu tố `Z` / chứa `+07:00` / ngày không tồn tại ("Vui lòng chọn đầy đủ ngày và giờ cho hạn chót"); hoặc gửi trường ngoài phạm vi như `status`, `assignedToUserId`, `durationMinutes` |
 | 401 | `UNAUTHORIZED` | Chưa đăng nhập hoặc token hết hạn |
 | 403 | `FORBIDDEN` | Người gọi không phải thành viên hiện tại của nhóm (`U041` 1a) |
 | 404 | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
@@ -529,7 +529,7 @@ Nếu `dueAt` của thẻ sau cập nhật nhỏ hơn thời điểm hiện tạ
 | 404 | `NOT_FOUND` | Không tìm thấy nhóm `groupId`, hoặc thẻ `cardId` không tồn tại trong nhóm ("Thẻ không còn tồn tại", `U046` 5a) |
 | 500 | `INTERNAL_ERROR` | Lỗi máy chủ |
 
-Ghi chú: Chỉ sửa được tên và hạn chót (`U046`); đổi cột dùng `PATCH /api/groups/{groupId}/cards/{cardId}/status`, đổi người được giao dùng `PATCH /api/groups/{groupId}/cards/{cardId}/assignee`. Nếu người tạo thẻ đã rời nhóm (`U007`), thẻ vẫn giữ trên bảng và Trưởng nhóm sửa bình thường (`U046` 1b). Sau khi sửa `dueAt`, frontend cập nhật vị trí thẻ theo thứ tự `dueAt ASC, createdAt ASC`.
+Ghi chú: Chỉ sửa được tên và hạn chót (`U046`); đổi cột dùng `PATCH /api/groups/{groupId}/cards/{cardId}/status`, đổi người được giao dùng `PATCH /api/groups/{groupId}/cards/{cardId}/assignee`. Nếu người tạo thẻ đã rời nhóm (`U007`), thẻ vẫn giữ trên bảng và Trưởng nhóm sửa bình thường (`U046` 1b). Sau khi sửa `dueAt`, frontend cập nhật vị trí thẻ theo thứ tự `dueAt ASC, createdAt ASC, id ASC`.
 
 ---
 
@@ -619,7 +619,7 @@ Quyền: Thành viên hiện tại của nhóm (kể cả Trưởng nhóm).
 | 404 | `NOT_FOUND` | Không tìm thấy nhóm `groupId`, hoặc thẻ `cardId` đã bị thành viên khác xóa trước khi lưu ("Thẻ không còn tồn tại", `U042` 3c) |
 | 500 | `INTERNAL_ERROR` | Lỗi máy chủ |
 
-Ghi chú: Cho phép chuyển theo mọi hướng, kể cả từ `"done"` sang `"in_progress"` hoặc `"todo"` (`U042` 2a). Thao tác lũy đẳng nếu gửi trùng trạng thái hiện tại. Không lưu `position`; thẻ ở cột đích vẫn tự xếp theo `dueAt ASC, createdAt ASC`, giữ nguyên `title`, `dueAt` và `assignedToUserId`. Trên điện thoại, giao diện chạm thẻ chọn cột đích gọi cùng endpoint này (không cần kéo thả). Khi gọi lỗi (kể cả mất mạng), frontend hoàn thẻ về cột cũ và báo lỗi (`U042` 3a); nếu đang bật bộ lọc theo người được giao (`U044` 2c), bộ lọc vẫn được giữ nguyên.
+Ghi chú: Cho phép chuyển theo mọi hướng, kể cả từ `"done"` sang `"in_progress"` hoặc `"todo"` (`U042` 2a). Thao tác lũy đẳng nếu gửi trùng trạng thái hiện tại. Không lưu `position`; thẻ ở cột đích vẫn tự xếp theo `dueAt ASC, createdAt ASC, id ASC`, giữ nguyên `title`, `dueAt` và `assignedToUserId`. Trên điện thoại, giao diện chạm thẻ chọn cột đích gọi cùng endpoint này (không cần kéo thả). Khi gọi lỗi (kể cả mất mạng), frontend hoàn thẻ về cột cũ và báo lỗi (`U042` 3a); nếu đang bật bộ lọc theo người được giao (`U044` 2c), bộ lọc vẫn được giữ nguyên.
 
 ---
 
@@ -639,7 +639,7 @@ Quyền: Chỉ Trưởng nhóm hiện tại của nhóm (`role = 'leader'`).
 
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
-| `assignedToUserId` | `uuid \| null` | Có | Mã thành viên hiện tại của nhóm (kể cả chính Trưởng nhóm) để giao thẻ; truyền `null` để bỏ giao thẻ (`U043`) |
+| `assignedToUserId` | `uuid` \| `null` | Có | Mã thành viên hiện tại của nhóm (kể cả chính Trưởng nhóm) để giao thẻ; truyền `null` để bỏ giao thẻ (`U043`) |
 
 ```json
 {
