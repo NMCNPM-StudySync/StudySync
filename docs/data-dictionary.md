@@ -380,7 +380,7 @@ Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở h�
 Quyền riêng tư: Dữ liệu cá nhân của sinh viên, không công khai cho người khác trong nhóm (BR-02).  
 Ghi chú:
 - Chỉ mục (mọi tên định danh <= 63 byte): `idx_recurring_rules_user_id` (27 byte) trên `(user_id)` phục vụ tra cứu quy tắc lặp của sinh viên.
-- Xóa thật khỏi CSDL. Khi xóa một quy tắc lặp, các sự kiện con trong `fixed_events` tự động được gán `recurring_rule_id = NULL` (`ON DELETE SET NULL`) hoặc bị xóa theo chuỗi tùy theo lựa chọn của người dùng tại giao diện. Trigger `trg_recurring_rules_set_updated_at` tự động cập nhật `updated_at`.
+- Xóa thật khỏi CSDL. Khi xóa một sự kiện trong chuỗi qua API `DELETE /api/events/{eventId}`, mặc định `scope=single` chỉ xóa buổi chỉ định; nếu người dùng chọn xóa toàn bộ chuỗi (`scope=all`), database transaction sẽ xóa toàn bộ các dòng `fixed_events` có cùng `recurring_rule_id` và xóa dòng `recurring_rules` tương ứng. Khi xóa trực tiếp dòng `recurring_rules`, các sự kiện con còn lại trong `fixed_events` được gán `recurring_rule_id = NULL` (`ON DELETE SET NULL`). Trigger `trg_recurring_rules_set_updated_at` tự động cập nhật `updated_at`.
 
 #### imported_files
 
@@ -395,11 +395,12 @@ Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở h�
 | file_format | varchar(30) | Không | CHECK `ck_imported_files_format`: `file_format IN ('ics', 'csv')` | | Định dạng tệp nạp (`ics`: iCalendar, `csv`: Bảng tính) |
 | file_size_bytes | integer | Không | CHECK `ck_imported_files_size`: `file_size_bytes >= 1 AND file_size_bytes <= 5242880` | | Dung lượng tệp tính bằng byte (tối đa đúng 5.242.880 byte theo BR-05) |
 | total_events | integer | Không | CHECK `ck_imported_files_total_events`: `total_events >= 0` | `0` | Tổng số sự kiện cố định được phân tích và lưu thành công vào CSDL từ tệp này |
-| status | varchar(30) | Không | CHECK `ck_imported_files_status`: `status IN ('success', 'failed')` | `'success'` | Trạng thái xử lý tệp (`success`: thành công, `failed`: thất bại) |
+| status | varchar(30) | Không | CHECK `ck_imported_files_status`: `status IN ('success', 'failed')` | `'success'` | Trạng thái xử lý tệp (`success`: thành công, `failed`: thất bại; dự phòng cho xử lý nền) |
 | created_at | timestamptz | Không | | now() | Thời điểm sinh viên nạp tệp vào hệ thống (UTC, BR-07) |
 
 Quyền riêng tư: Dữ liệu nhật ký cá nhân của tài khoản sinh viên, không chia sẻ cho người khác trong nhóm (BR-02).  
 Ghi chú:
+- Ý nghĩa giá trị `'failed'` của cột `status`: Được thiết kế dự phòng cho kịch bản nạp tệp bất đồng bộ qua hàng đợi nền (background queue) trong tương lai. Ở luồng API đồng bộ hiện tại của TV2, theo nguyên tắc dừng ngắt BR-06 (Atomic Rejection), nếu tệp có bất kỳ lỗi định dạng hay dòng sai sót nào thì toàn bộ database transaction bị hủy bỏ (rollback) và không lưu bất kỳ bản ghi nào vào CSDL, do đó các bản ghi nhật ký nạp tệp được lưu thành công ở luồng đồng bộ hiện tại luôn mang trạng thái `'success'`.
 - Chỉ mục (mọi tên định danh <= 63 byte): `idx_imported_files_user_id_created_at` (38 byte) trên `(user_id, created_at DESC)` hỗ trợ truy vấn hiển thị lịch sử nạp tệp của người dùng theo thứ tự thời gian mới nhất.
 - Khi người dùng xóa nhật ký nạp tệp, các sự kiện đã lưu trong `fixed_events` được giữ nguyên và `imported_file_id` được đặt `SET NULL`.
 
@@ -411,7 +412,7 @@ Các thao tác sau tác động trên nhiều bảng hoặc đòi hỏi tính ng
 | --- | --- |
 | **Nạp tệp lịch nguyên tử (Atomic File Rejection - BR-06, US-11, US-15)** | 1. Đọc và kiểm tra toàn bộ tệp (kiểm tra dung lượng $\le 5\text{ MB}$ theo BR-05, kiểm tra cấu trúc RFC 5545 / RFC 4180, kiểm tra logic thời gian $ends\_at > starts\_at$, kiểm tra độ dài tên $\le 200$ ký tự theo BR-08).<br>2. Nếu phát hiện bất kỳ lỗi nào, **hủy bỏ toàn bộ**, không ghi bất kỳ dòng nào vào CSDL, phản hồi HTTP 422 kèm danh sách tối đa 20 dòng lỗi đầu tiên (BR-06).<br>3. Nếu tệp hoàn toàn hợp lệ: Mở Transaction $\rightarrow$ INSERT 1 dòng vào `imported_files` $\rightarrow$ INSERT các dòng vào `recurring_rules` (nếu có sự kiện lặp) $\rightarrow$ BATCH INSERT toàn bộ sự kiện vào `fixed_events` (gắn `imported_file_id` và `recurring_rule_id`) $\rightarrow$ Commit Transaction.<br>*(Bảo đảm nguyên tắc Atomic Rejection: hoặc toàn bộ sự kiện được lưu, hoặc không có bản ghi rác nào lọt vào CSDL).* |
 | **Xóa việc cần làm có khung giờ học liên kết (US-12, #56, #57)** | 1. Mở Transaction.<br>2. UPDATE các dòng `study_slots` có `task_id = $1` đặt thành `task_id = NULL`.<br>3. DELETE dòng `tasks` có `id = $1`.<br>4. Commit Transaction.<br>*(Bảo đảm các khung học đã xếp của TV3 không bị lỗi vi phạm khóa ngoại mà hiển thị nhãn "Việc đã xóa" theo quy ước #56 và #57).* |
-| **Xóa chuỗi sự kiện lặp (U011, US-12)** | Khi người dùng xác nhận xóa toàn bộ chuỗi lặp: Mở Transaction $\rightarrow$ DELETE toàn bộ các dòng `fixed_events` có `recurring_rule_id = $1` $\rightarrow$ DELETE dòng `recurring_rules` có `id = $1` $\rightarrow$ Commit Transaction. |
+| **Xóa chuỗi sự kiện lặp (U011, US-12, DELETE /api/events/{eventId}?scope=all)** | Khi người dùng xác nhận xóa toàn bộ chuỗi lặp (`scope=all`): Mở Transaction $\rightarrow$ DELETE toàn bộ các dòng `fixed_events` có `recurring_rule_id = $1` $\rightarrow$ DELETE dòng `recurring_rules` có `id = $1` $\rightarrow$ Commit Transaction. |
 
 #### Dữ liệu mẫu TV2
 

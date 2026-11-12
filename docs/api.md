@@ -208,13 +208,15 @@ Phạm vi: US-08 đến US-15. Use case: U011 đến U015. Mọi endpoint tuân 
   "source": "manual",
   "recurringRuleId": "33333333-4444-4555-8666-777777777777",
   "importedFileId": null,
+  "hasOverlap": false,
   "createdAt": "2026-11-11T02:00:00.000Z",
   "updatedAt": "2026-11-11T02:00:00.000Z"
 }
 ```
 
 `kind` nhận một trong các giá trị: `class` (buổi học), `exam` (lịch thi), `work_shift` (ca làm thêm), `other` (việc cá nhân có giờ cố định khác).  
-`source` nhận: `manual` (nhập tay), `ics` (tệp iCalendar), `csv` (tệp bảng tính).
+`source` nhận: `manual` (nhập tay), `ics` (tệp iCalendar), `csv` (tệp bảng tính).  
+`hasOverlap` (boolean, tùy chọn): trường tính toán động (computed field) khi hiển thị lịch tuần (`GET /api/schedule/week`) hoặc truy vấn sự kiện, cho biết sự kiện có bị trùng khung thời gian với sự kiện cố định khác hay không (BR-01) để giao diện hiển thị cảnh báo; trường này không lưu thành cột trực tiếp trong bảng `fixed_events` của CSDL.
 
 **Task (Việc cần làm cá nhân):**
 
@@ -534,7 +536,7 @@ Quyền: Chủ tài khoản sở hữu sự kiện.
 ### DELETE /api/events/{eventId}
 
 Module: TV2 · Story: US-12 · Người viết: Hưng · Trạng thái: Nháp  
-Mô tả: Xóa một sự kiện cố định khỏi lịch cá nhân (thực hiện xóa thật khỏi CSDL).  
+Mô tả: Xóa một sự kiện cố định khỏi lịch cá nhân hoặc xóa toàn bộ chuỗi sự kiện lặp (thực hiện xóa thật khỏi CSDL).  
 Quyền: Chủ tài khoản sở hữu sự kiện.
 
 **Tham số đường dẫn**
@@ -542,6 +544,12 @@ Quyền: Chủ tài khoản sở hữu sự kiện.
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
 | `eventId` | uuid | Có | Mã định danh sự kiện cố định cần xóa |
+
+**Tham số query**
+
+| Tên | Kiểu | Bắt buộc | Mặc định | Mô tả |
+| --- | --- | --- | --- | --- |
+| `scope` | string | Không | `'single'` | Phạm vi xóa sự kiện:<br>- `single`: chỉ xóa sự kiện đơn lẻ được chỉ định (`eventId`). Nếu sự kiện thuộc chuỗi lặp, chỉ xóa buổi này còn quy tắc lặp và các buổi khác được bảo lưu.<br>- `all`: thực thi database transaction xóa toàn bộ các sự kiện có cùng `recurring_rule_id` và xóa luôn dòng `recurring_rules` tương ứng (nếu sự kiện là đơn lẻ không có `recurring_rule_id` thì tương đương `single`). |
 
 **Nội dung gửi lên (body)**
 
@@ -555,7 +563,7 @@ Phản hồi mã HTTP 204 No Content, body rỗng.
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| 400 | VALIDATION_ERROR | `eventId` không phải định dạng UUID hợp lệ |
+| 400 | VALIDATION_ERROR | `eventId` không phải định dạng UUID hợp lệ hoặc `scope` không thuộc `['single', 'all']` |
 | 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
 | 404 | NOT_FOUND | Không tìm thấy sự kiện, hoặc sự kiện thuộc người dùng khác |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
