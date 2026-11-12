@@ -4,13 +4,13 @@ StudySync là ứng dụng web tự động xếp lịch học cá nhân và qu�
 
 ## Tính năng
 
-| Mã | Tính năng |
-|---|---|
-| TV1 | Tài khoản và nhóm |
-| TV2 | Lịch cá nhân và nhập lịch (.ics, .csv) |
+| Mã  | Tính năng                                            |
+| --- | ---------------------------------------------------- |
+| TV1 | Tài khoản và nhóm                                    |
+| TV2 | Lịch cá nhân và nhập lịch (.ics, .csv)               |
 | TV3 | Xếp lịch tự động theo độ ưu tiên, độ khó, thời lượng |
-| TV4 | Tìm giờ rảnh chung và nhắc việc |
-| TV5 | Bảng Kanban và thống kê |
+| TV4 | Tìm giờ rảnh chung và nhắc việc                      |
+| TV5 | Bảng Kanban và thống kê                              |
 
 ## Quy định nghiệp vụ
 
@@ -50,7 +50,11 @@ studysync/
 │   ├── tests/           # Test (Vitest + Supertest)
 │   ├── .env.example     # Danh sách biến môi trường cần có
 │   └── package.json
-├── frontend/            # React + Vite (Hưng dựng ở Tuần 3)
+├── frontend/            # Single Page Application (React 19 + Vite + TypeScript + Tailwind CSS)
+│   ├── src/             # Mã nguồn giao diện, layout và các trang module
+│   ├── tests/           # Kiểm thử Vitest + React Testing Library
+│   ├── .env.example     # Biến môi trường mẫu cho frontend
+│   └── package.json
 ├── docs/                # Tài liệu kỹ thuật
 ├── .nvmrc               # Phiên bản Node dùng chung (24)
 ├── .prettierrc.json     # Quy tắc định dạng chung
@@ -72,23 +76,53 @@ npm run dev
 
 Mở http://localhost:3000/health, thấy `{"status":"ok",...}` là chạy được.
 
-| Lệnh (chạy trong `backend/`) | Tác dụng |
-|---|---|
-| `npm run dev` | Chạy server, tự khởi động lại khi sửa code |
-| `npm run build` | Biên dịch TypeScript sang `dist/` |
-| `npm start` | Chạy bản đã build |
-| `npm run lint` | Kiểm tra lỗi code (ESLint) và định dạng (Prettier) |
-| `npm run format` | Tự định dạng lại code |
-| `npm test` | Chạy test |
+| Lệnh (chạy trong `backend/`) | Tác dụng                                           |
+| ---------------------------- | -------------------------------------------------- |
+| `npm run dev`                | Chạy server, tự khởi động lại khi sửa code         |
+| `npm run build`              | Biên dịch TypeScript sang `dist/`                  |
+| `npm start`                  | Chạy bản đã build                                  |
+| `npm run lint`               | Kiểm tra lỗi code (ESLint) và định dạng (Prettier) |
+| `npm run format`             | Tự định dạng lại code                              |
+| `npm test`                   | Chạy test                                          |
 
 ### Biến môi trường
 
-| Biến | Ý nghĩa | Mặc định |
-|---|---|---|
+| Biến       | Ý nghĩa                                 | Mặc định      |
+| ---------- | --------------------------------------- | ------------- |
 | `NODE_ENV` | `development`, `production` hoặc `test` | `development` |
-| `PORT` | Cổng của backend | `3000` |
+| `PORT`     | Cổng của backend                        | `3000`        |
 
 Không commit file `.env`. Khi thêm biến mới, cập nhật `backend/.env.example` và bảng trên.
+
+## Cài đặt và chạy frontend
+
+Yêu cầu: Node.js 24 (xem `.nvmrc`), Git.
+
+```bash
+cd StudySync/frontend
+npm install
+cp .env.example .env     # Windows PowerShell: Copy-Item .env.example .env
+npm run dev
+```
+
+Mở http://localhost:5173, thấy giao diện StudySync với thanh điều hướng và trang Lịch cá nhân là chạy được.
+
+| Lệnh (chạy trong `frontend/`) | Tác dụng                                                      |
+| ----------------------------- | ------------------------------------------------------------- |
+| `npm run dev`                 | Khởi chạy máy chủ phát triển Vite tại `http://localhost:5173` |
+| `npm run build`               | Kiểm tra kiểu TypeScript (`tsc -b`) và biên dịch sang `dist/` |
+| `npm run preview`             | Chạy thử bản biên dịch production tại máy cục bộ              |
+| `npm run lint`                | Kiểm tra lỗi code (ESLint) và định dạng (Prettier)            |
+| `npm run format`              | Tự định dạng lại code                                         |
+| `npm test`                    | Chạy bộ kiểm thử tự động với Vitest                           |
+
+### Biến môi trường frontend
+
+| Biến           | Ý nghĩa                           | Mặc định                    |
+| -------------- | --------------------------------- | --------------------------- |
+| `VITE_API_URL` | Địa chỉ API backend của StudySync | `http://localhost:3000/api` |
+
+Không commit file `.env`. Khi thêm biến mới, cập nhật `frontend/.env.example` và bảng trên.
 
 ## Quy trình làm việc
 
@@ -96,13 +130,13 @@ Xem [CONTRIBUTING.md](CONTRIBUTING.md): đặt tên nhánh, viết commit, mở 
 
 ## Thành viên
 
-| Thành viên | Vai trò |
-|---|---|
-| Nguyễn Đình Trung Kiên | Team Leader, BA/PO, UI/UX |
-| Trịnh Nguyễn Huỳnh Nhi | Backend Lead |
-| Lê Huỳnh Anh Thư | System/DB Architect, DevOps |
-| Đỗ Quỳnh Anh Thư | QA/Tester, Technical Writer |
-| Đào Ngọc Hưng | Developer |
+| Thành viên             | Vai trò                     |
+| ---------------------- | --------------------------- |
+| Nguyễn Đình Trung Kiên | Team Leader, BA/PO, UI/UX   |
+| Trịnh Nguyễn Huỳnh Nhi | Backend Lead                |
+| Lê Huỳnh Anh Thư       | System/DB Architect, DevOps |
+| Đỗ Quỳnh Anh Thư       | QA/Tester, Technical Writer |
+| Đào Ngọc Hưng          | Developer                   |
 
 ## Tài liệu
 
