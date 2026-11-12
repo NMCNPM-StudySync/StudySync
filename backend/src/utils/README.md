@@ -28,7 +28,7 @@ import {
 2. **UTC**: mọi `Date` là thời điểm UTC. Đổi sang giờ Việt Nam chỉ làm ở tầng hiển thị (BR-07).
 3. **Ở ranh giới API thì đổi kiểu**: body gửi lên là chuỗi, dùng `toInterval` để đổi sang `TimeInterval`; trước khi trả về, dùng `toSlot` để có `{ startsAt, endsAt }` dạng `2026-11-05T13:00:00.000Z`. Chuỗi có `+07:00` hoặc thiếu `Z` bị từ chối.
 4. **Lỗi là `RangeError`**: `start > end`, `Date` không hợp lệ, chuỗi sai định dạng, `minMinutes` âm hoặc `NaN`. Ở tầng API, bắt `RangeError` và trả `400 VALIDATION_ERROR` theo dòng Thời gian của `docs/api.md`.
-5. **Kết quả luôn là danh sách chuẩn**: đã sắp xếp theo `start`, không chồng, không chạm, không có khoảng độ dài 0. Đầu vào không cần chuẩn hóa trước, và thư viện không sửa đầu vào.
+5. **Hàm trả về danh sách luôn trả danh sách chuẩn**: đã sắp xếp theo `start`, không chồng, không chạm, không có khoảng độ dài 0. Đầu vào không cần chuẩn hóa trước, và thư viện không sửa đầu vào.
 
 ## Các hàm
 
