@@ -71,10 +71,19 @@ frontend/
 │   ├── App.tsx               # Khai báo hệ thống điều hướng (Routes)
 │   ├── index.css             # Chỉ thị Tailwind CSS và kiểu chữ hệ thống
 │   ├── components/           # Các component dùng chung
-│   │   └── layout/           # Bố cục khung giao diện
-│   │       ├── Layout.tsx    # Khung giao diện chính kết hợp Header và Footer
-│   │       ├── Header.tsx    # Thanh điều hướng nổi (Floating Navbar) chuẩn Figma
-│   │       └── Footer.tsx    # Chân trang hệ thống
+│   │   ├── layout/           # Bố cục khung giao diện
+│   │   │   ├── Layout.tsx    # Khung giao diện chính kết hợp Header và Footer
+│   │   │   ├── Header.tsx    # Thanh điều hướng nổi (Floating Navbar) chuẩn Figma
+│   │   │   └── Footer.tsx    # Chân trang hệ thống
+│   │   └── ui/               # Reusable UI Components (Issue #70)
+│   │       ├── Badge.tsx     # Nhãn trạng thái & mảng cảnh báo warnings[]
+│   │       ├── Button.tsx    # Nút bấm đa kích thước và trạng thái
+│   │       ├── Card.tsx      # Thẻ chứa nội dung và thẻ tương tác
+│   │       ├── InputField.tsx# Trường nhập liệu có đếm ký tự (BR-08)
+│   │       ├── Modal.tsx     # Hộp thoại popup có hỗ trợ phím ESC và backdrop
+│   │       └── index.ts      # Barrel export các component dùng chung
+│   ├── utils/                # Hàm tiện ích dùng chung
+│   │   └── vietnam-time.ts   # Tiện ích hiển thị giờ Việt Nam UTC+7 (BR-07)
 │   └── pages/                # Các trang đại diện cho 5 module nghiệp vụ
 │       ├── groups/           # Module TV1: Quản lý nhóm (`/groups`)
 │       ├── calendar/         # Module TV2: Lịch cá nhân và nạp lịch (`/calendar`)
@@ -85,7 +94,11 @@ frontend/
 │       └── not-found/        # Trang thông báo 404 không tìm thấy đường dẫn
 └── tests/                    # Bộ kiểm thử tự động
     ├── setup.ts              # Cấu hình mở rộng jest-dom cho Vitest
-    └── App.test.tsx          # Kiểm thử tích hợp bố cục và điều hướng
+    ├── App.test.tsx          # Kiểm thử tích hợp bố cục và điều hướng
+    ├── components/           # Kiểm thử các component UI dùng chung
+    │   └── ui.test.tsx       # Unit test Button, Card, InputField, Modal, Badge
+    └── utils/                # Kiểm thử các hàm tiện ích
+        └── vietnam-time.test.ts # Unit test hàm giờ VN (bao phủ ca biên nửa đêm)
 ```
 
 ## 6. Danh sách Module và Định tuyến (Routing)
