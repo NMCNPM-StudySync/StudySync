@@ -285,7 +285,7 @@ Ghi chú:
 
 ### `POST /api/groups/{groupId}/meeting-proposals`
 
-Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Module: TV4 · Story: US-24 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Người tổ chức họp tạo một đề xuất buổi họp cho nhóm (chốt một khung giờ từ kết quả tìm kiếm hoặc tự nhập) và gửi lời mời đến toàn bộ thành viên nhóm (U032).  
 Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành viên được ủy quyền, U036); kiểm tra động theo CSDL.
 
@@ -356,8 +356,8 @@ Ghi chú:
 
 ### `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond`
 
-Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
-Mô tả: Thành viên nhóm phản hồi (chấp nhận hoặc từ chối) lời mời tham dự một buổi họp đã được đề xuất (U032).  
+Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Thành viên nhóm phản hồi (chấp nhận hoặc từ chối) lời mời tham dự một buổi họp đã được đề xuất (U033).  
 Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); chỉ người có `user_id` khớp với `meeting_invitations.user_id` mới được phản hồi.
 
 **Tham số đường dẫn**
@@ -411,7 +411,7 @@ Ghi chú:
 
 ### `GET /api/users/me/reminders`
 
-Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Module: TV4 · Story: US-28 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Lấy danh sách nhắc việc sắp đến hạn của người dùng đang đăng nhập, sắp theo thời điểm nhắc gần nhất trước (U035).  
 Quyền: Người dùng đang đăng nhập (chỉ trả nhắc việc của chính `user_id` trong token; không trả của người khác).
 
@@ -1025,74 +1025,6 @@ Ghi chú:
 2. **Tham chiếu mã trạng thái bảng `study_slots` (`#63`):** Khi TV3 (Nhi) điền bảng `study_slots` ở `#63`, hàm truy vấn của `GET /api/statistics/weekly` sẽ khớp đúng mã chuỗi snake_case ứng với nhãn `"Đã học"` đã chốt tại đó.
 
 <!-- TV5:END -->
-
----
-
-## Ví dụ điền sẵn: `POST /api/groups/{groupId}/meeting-slots/search` (TV4)
-
-> Ví dụ minh họa cách điền một endpoint theo mẫu trên. Xóa hoặc chuyển vào vùng TV4 khi viết bản chính thức ở việc 11 (`#77`).
-
-### `POST /api/groups/{groupId}/meeting-slots/search`
-
-Mô tả: Tìm các khung giờ họp chung của nhóm trong tuần được chọn dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên (US-23, U031).  
-Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
-Quyền: Người tổ chức họp của nhóm (gồm Trưởng nhóm hoặc Thành viên nhóm được Trưởng nhóm ủy quyền theo U036).  
-
-Tham số đường dẫn (Path parameters):
-
-| Tên | Kiểu | Bắt buộc | Mô tả |
-| --- | --- | --- | --- |
-| `groupId` | `uuid` | Có | Mã nhóm cần tìm giờ họp chung |
-
-Dữ liệu gửi lên (Request body):
-
-```json
-{
-  "from": "2026-11-08T17:00:00.000Z",
-  "to": "2026-11-15T17:00:00.000Z",
-  "durationMinutes": 60
-}
-```
-
-Phản hồi thành công (`200 OK`):
-
-```json
-{
-  "data": {
-    "allFreeSlots": [
-      {
-        "startsAt": "2026-11-10T01:00:00.000Z",
-        "endsAt": "2026-11-10T03:00:00.000Z",
-        "availableCount": 5,
-        "totalMembers": 5,
-        "busyMembers": []
-      }
-    ],
-    "partialSlots": []
-  },
-  "warnings": [
-    {
-      "code": "MEMBER_NO_FIXED_EVENTS",
-      "message": "Thành viên Nguyễn Văn B chưa nhập sự kiện cố định nào trong tuần được chọn."
-    }
-  ]
-}
-```
-
-Lỗi có thể gặp:
-
-| HTTP | Mã lỗi (`code`) | Khi nào xảy ra |
-| --- | --- | --- |
-| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; khoảng `[from, to)` không hợp lệ hoặc tuần đã qua hoàn toàn; `durationMinutes <= 0` hoặc `> 900` (vượt quá khung 07:00–22:00 giờ VN) |
-| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
-| `403` | `FORBIDDEN` | Người gọi không thuộc nhóm hoặc là thành viên thường chưa được Trưởng nhóm ủy quyền tổ chức họp (U031, U036) |
-| `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
-
-Ghi chú:
-- Khoảng thời gian tìm kiếm hiểu theo nửa mở `[from, to)` tính bằng UTC (BR-01, BR-07), chỉ xét trong khung hoạt động `07:00–22:00` giờ Việt Nam mỗi ngày và loại bỏ các mốc thời gian đã qua so với hiện tại (yêu cầu 4.1).
-- `durationMinutes` mặc định là `60` phút nếu client không truyền (bước nhảy 30 phút).
-- Chỉ coi sự kiện cố định (`fixed_events`) là bận; không lấy tên/chi tiết sự kiện cố định (BR-02) và không coi việc cần làm (`tasks`) hay khung giờ học (`study_slots`) là bận.
-- Nếu không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), hệ thống trả tối đa 10 khung giờ có nhiều thành viên rảnh nhất trong `partialSlots` (xếp giảm dần theo số người rảnh, ưu tiên thời gian sớm hơn) kèm danh sách tên hiển thị của các thành viên bận (`busyMembers`) ở từng khung (U031).
 
 ---
 
