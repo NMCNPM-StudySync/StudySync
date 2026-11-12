@@ -1,7 +1,7 @@
 # Thiết kế sơ bộ thư viện khoảng thời gian
 
 > Issue: #5, #56 · Module: Chung (TV3, TV4) · Người làm: Nhi · Người review: Thư H.A. (#5), Thư Q.A. (#56)
-> Trạng thái: bản thiết kế giao diện (interface), chưa có code. Code và unit test làm ở Issue #71.
+> Trạng thái: bản đầu đã có code và unit test (Issue #71): `backend/src/utils/interval.ts`, test ở `backend/tests/interval.test.ts`, hướng dẫn dùng ở `backend/src/utils/README.md`.
 > Căn cứ: mục 3.6, 4.8, 4.9 tài liệu dự án; BR-07 (giờ Việt Nam, lưu UTC, API ISO 8601 hậu tố Z); rủi ro mục 5.4.
 > Cập nhật theo Issue #56: thêm kiểu `TimeSlot` và hai hàm chuyển đổi, hàm `hasOverlap`, hàm `countCoveringLists`, bảng nhu cầu TV3 và TV4.
 
@@ -312,7 +312,7 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 
 - **Trong phạm vi:** 2 kiểu dữ liệu (`TimeInterval`, `TimeSlot`), 3 hàm chính, `hasOverlap`, `countCoveringLists`, 2 hàm chuyển đổi, 2 hàm phụ, trường hợp biên ở trên.
 - **Ngoài phạm vi:** đọc lịch từ CSDL, đổi múi giờ, làm tròn theo bước phút, chấm điểm khung giờ (TV3, TV4 tự làm).
-- **Vị trí code dự kiến:** `backend/src/lib/interval/` (chốt khi dựng khung backend).
+- **Vị trí code:** `backend/src/utils/interval.ts` (chốt ở Issue #71).
 - **Issue #56 (Task Tuần 4, việc 3):** chốt interface trong tài liệu này, hạn 12:00 Thứ 3 10/11/2026.
 - **Issue #71 (Task Tuần 4, việc 19):** cài các hàm, viết unit test theo bảng ở mục 4, PR xong Thứ 6 13/11/2026.
 - **Tuần 6:** hàm khoảng thời gian hoàn chỉnh. Mọi thay đổi chữ ký hàm phải báo Thư Q.A. (TV4) trước.
