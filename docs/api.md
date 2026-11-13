@@ -140,7 +140,7 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
-| TV4 | `GET /api/users/me/meeting-invitations` | Lấy danh sách lời mời họp của sinh viên | Nháp |
+| TV4 | `GET /api/users/me/meeting-invitations` | Lấy danh sách lời mời họp của tôi (chờ phản hồi hoặc đã bị thay thế) | Nháp |
 | TV4 | `GET /api/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn | Nháp |
 | TV5 | `GET /api/groups/{groupId}/cards` | Danh sách và lọc thẻ Kanban | Nháp |
 | TV5 | `POST /api/groups/{groupId}/cards` | Tạo thẻ Kanban mới | Nháp |
@@ -2530,19 +2530,13 @@ Ghi chú:
 
 ### `GET /api/users/me/meeting-invitations`
 
-Module: TV4 · Story: US-25 · Người viết: Thư Q.A. · Trạng thái: Nháp  
-Mô tả: Lấy danh sách các lời mời tham dự buổi họp nhóm gửi đến người dùng đang đăng nhập, kèm thông tin buổi họp và trạng thái phản hồi (U033).  
+Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Lấy các lời mời họp đang chờ phản hồi hoặc đã bị thay thế bằng đề xuất mới của người dùng đang đăng nhập, để thành viên mở lời mời và gọi endpoint phản hồi (U033, U032 4a).  
 Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chính `user_id` trong token; chỉ trả lời mời thuộc các nhóm mà người dùng hiện đang là thành viên hoạt động).
 
-**Tham số query**
+**Tham số query:** Không có.
 
-| Tên | Kiểu | Bắt buộc | Mô tả |
-| --- | --- | --- | --- |
-| `status` | `string` | Không | Lọc theo trạng thái lời mời: `'pending'` (mặc định), `'accepted'`, `'declined'`, `'superseded'` hoặc `'all'` để lấy tất cả |
-| `groupId` | `uuid` | Không | Lọc lời mời theo nhóm cụ thể |
-| `limit` | `integer` | Không | Số lời mời tối đa trả về; mặc định `20`, tối đa `100` |
-
-**Nội dung gửi lên (body):** không có.
+**Nội dung gửi lên (body):** Không có.
 
 **Kết quả thành công (200 OK)**
 
@@ -2551,38 +2545,35 @@ Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chín
   "data": {
     "invitations": [
       {
-        "id": "883b1700-b52e-74g7-d049-779988773333",
+        "invitationId": "883b1700-b52e-74g7-d049-779988773333",
         "proposalId": "550e8400-e29b-41d4-a716-446655440000",
-        "groupId": "7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33",
-        "groupName": "Nhóm Đồ án CNPM",
+        "groupId": "661f9500-f30c-52e5-b827-557766551111",
+        "groupName": "Đồ án NMCNPM nhóm 04",
+        "organizerDisplayName": "Nguyễn Văn An",
         "title": "Họp đồ án tuần 4",
         "startsAt": "2026-11-10T01:00:00.000Z",
         "endsAt": "2026-11-10T03:00:00.000Z",
-        "location": "Phòng họp B2",
-        "notes": "Chuẩn bị slide demo",
-        "proposalStatus": "open",
-        "organizerDisplayName": "Trần Thị B",
-        "status": "pending",
-        "respondedAt": null,
-        "createdAt": "2026-11-09T10:00:00.000Z"
+        "status": "pending"
       }
     ]
   }
 }
 ```
 
+`status` nhận `pending` hoặc `superseded`. Lời mời `superseded` giao diện hiển thị "Lời mời đã được thay bằng giờ mới" (U032 4a).
+
 **Lỗi có thể gặp**
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| `400` | `VALIDATION_ERROR` | `groupId` không đúng định dạng UUID, hoặc `status` không hợp lệ, hoặc `limit` vượt quá 100 |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
 
 Ghi chú:
-- Quy tắc bảo đảm toàn vẹn khi thành viên rời nhóm (US-07, U033, U034, U036, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT`, nên các bản ghi `meeting_invitations` vẫn được lưu trữ làm dữ liệu kiểm toán. Tuy nhiên, endpoint này **chỉ lọc và trả về các lời mời thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG**:
-  `WHERE user_id = $currentUserId AND group_id IN (SELECT group_id FROM group_members WHERE user_id = $currentUserId)`.
-  Nếu người dùng đã rời nhóm (hoặc bị mời ra khỏi nhóm), toàn bộ lời mời thuộc nhóm đó sẽ tự động bị ẩn khỏi danh sách này.
-- Tiêu chuẩn sắp xếp tất định: Sắp xếp theo `starts_at ASC, id ASC`.
+- BR-02: chỉ trả tên nhóm, thời gian buổi họp và tên người gửi, không có dữ liệu lịch hay tên sự kiện cá nhân.
+- Sắp xếp theo `startsAt ASC, invitationId ASC`.
+- Quy tắc lọc bảo đảm toàn vẹn khi thành viên rời nhóm (U033 2a, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT` để ngăn xóa người dùng khi còn dữ liệu tham chiếu, ứng dụng giữ lại các dòng `meeting_invitations` để lưu lịch sử kiểm toán. Bảng `meeting_invitations` không có cột `group_id`, do đó câu truy vấn cần JOIN với `meeting_proposals` và chỉ lấy các lời mời (`pending`, `superseded`) thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG:
+  `SELECT mi.id AS invitation_id, mi.meeting_proposal_id AS proposal_id, mp.group_id, g.name AS group_name, u.display_name AS organizer_display_name, mp.title, mp.starts_at, mp.ends_at, mi.status FROM meeting_invitations mi JOIN meeting_proposals mp ON mi.meeting_proposal_id = mp.id JOIN groups g ON mp.group_id = g.id JOIN users u ON mp.organizer_user_id = u.id JOIN group_members gm ON gm.group_id = mp.group_id AND gm.user_id = mi.user_id WHERE mi.user_id = $currentUserId AND mi.status IN ('pending', 'superseded') AND mp.created_at >= gm.joined_at ORDER BY mp.starts_at ASC, mi.id ASC`.
+  Điều kiện `mp.created_at >= gm.joined_at` đảm bảo nếu thành viên rời nhóm rồi sau đó tham gia lại (qua link mời mới), người này sẽ không thấy lại các lời mời cũ đã hết hạn từ đợt tham gia trước.
 
 ---
 
