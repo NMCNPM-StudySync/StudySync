@@ -2390,7 +2390,7 @@ Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `part
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; `from >= to`; toàn bộ khoảng `[from, to)` nằm trong quá khứ so với thời điểm hiện tại; `durationMinutes <= 0` hoặc `> 900`; `from` hoặc `to` không phải chuỗi ISO 8601 hậu tố Z (BR-07) |
+| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; `from >= to`; toàn bộ khoảng `[from, to)` nằm trong quá khứ so với thời điểm hiện tại; `durationMinutes` nhỏ hơn 30, lớn hơn 900 hoặc không chia hết cho 30; `from` hoặc `to` không phải chuỗi ISO 8601 hậu tố Z (BR-07) |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
 | `403` | `FORBIDDEN` | Người gọi không thuộc nhóm, hoặc là thành viên thường chưa được Trưởng nhóm ủy quyền tổ chức họp (U031, U036) |
 | `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
