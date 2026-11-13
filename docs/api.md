@@ -62,6 +62,8 @@ Bảng mã cảnh báo dùng chung (đã chốt ở việc 3 – `#56`):
 | `FIXED_EVENT_OVERLAP` | BR-01 | Sự kiện cố định vừa tạo/nhập bị chồng thời gian với sự kiện cố định khác (vẫn cho lưu thành công kèm cảnh báo) |
 | `DEADLINE_PASSED` | BR-04 | Việc cần làm được lưu với hạn hoàn thành (`dueAt`) đã qua so với thời điểm hiện tại |
 | `MEMBER_NO_FIXED_EVENTS` | Yêu cầu 4.1 (U031) | Khi tìm giờ họp chung mà trong nhóm có thành viên chưa nhập sự kiện cố định nào trong tuần được chọn |
+| `NO_TASKS_TO_SCHEDULE` | Yêu cầu 3.6 (U021) | Gọi xếp lịch khi không có việc cần làm chưa hoàn thành; không tạo đề xuất |
+| `NO_MAKEUP_SLOT` | BR-01, yêu cầu 3.14 (U022) | Báo lỡ nhưng không còn khung giờ bù trong 7 ngày, trước hạn chót; khung vẫn ghi nhận "Bỏ lỡ" |
 
 ## Mã HTTP khi thành công
 
@@ -130,7 +132,11 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV2 | PATCH /api/tasks/{taskId} | Cập nhật việc cần làm hoặc đánh dấu hoàn thành | Nháp |
 | TV2 | DELETE /api/tasks/{taskId} | Xóa việc cần làm | Nháp |
 | TV2 | GET /api/schedule/week | Xem lịch tuần tổng hợp | Nháp |
-| TV3 | `<POST /api/schedule/suggest>` | `<Đề xuất khung giờ học>` | Nháp |
+| TV3 | POST /api/scheduler/auto-plan | Đề xuất khung giờ học | Nháp |
+| TV3 | POST /api/scheduler/confirm | Chấp nhận hoặc từ chối đề xuất, chọn khung giờ bù | Nháp |
+| TV3 | POST /api/scheduler/missed-session | Báo lỡ khung giờ học và nhận khung giờ bù | Nháp |
+| TV3 | POST /api/scheduler/replan | Đề xuất tái xếp lịch khi có việc phát sinh | Nháp |
+| TV3 | POST /api/scheduler/completed-session | Đánh dấu khung giờ học đã học xong | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
@@ -1980,7 +1986,7 @@ Giá trị xếp lịch dùng trong các endpoint (Bảng 1.3 đặc tả TV3, c
 
 ### Mã cảnh báo của TV3
 
-Đề xuất bổ sung vào bảng mã cảnh báo dùng chung ở đầu file:
+Hai mã này đã có trong bảng mã cảnh báo dùng chung ở đầu file:
 
 | Mã cảnh báo (`code`) | Quy tắc | Khi nào trả về |
 | --- | --- | --- |

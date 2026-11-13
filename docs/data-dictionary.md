@@ -216,6 +216,7 @@ Cú pháp cụ thể theo `backend/README.md`. Các bước dưới đây gọi 
 | TV2 | `tasks` | Việc cần làm (dùng chung với TV3) | Nháp |
 | TV2 | `recurring_rules` | Quy tắc lặp sự kiện | Nháp |
 | TV2 | `imported_files` | Lịch sử tệp nạp | Nháp |
+| TV3 | `schedule_proposals` | Lượt đề xuất xếp lịch | Nháp |
 | TV3 | `study_slots` | Khung giờ học đề xuất | Nháp |
 | TV4 | `meeting_proposals` | Đề xuất buổi họp | Nháp |
 | TV4 | `meeting_invitations` | Lời mời | Nháp |
@@ -567,6 +568,7 @@ Ghi chú:
 - Lịch tuần (`GET /api/schedule/week` của TV2) và thống kê tuần (TV5) không bao giờ trả khung `proposed` (BR-03).
 - Quy tắc xóa (mục 1.5): xóa thật. Khung `proposed` bị xóa khi lượt đề xuất bị từ chối hoặc hết hạn. Khi việc bị xóa hoặc được đánh dấu hoàn thành, ứng dụng xóa khung `proposed` và khung `scheduled` chưa bắt đầu của việc đó trong cùng transaction với thao tác của TV2 (yêu cầu 3.19); khung `studied`, `missed` còn lại mới nhận `task_id = NULL` qua `ON DELETE SET NULL`.
 - Gắn trigger `trg_study_slots_set_updated_at` gọi `set_updated_at()`.
+- Khóa ngoại vòng giữa hai bảng TV3: `study_slots.proposal_id` → `schedule_proposals` và `schedule_proposals.missed_slot_id` → `study_slots`. Migration tạo bảng `schedule_proposals` chưa có `missed_slot_id`, rồi tạo `study_slots`, sau đó thêm cột và khóa ngoại `fk_schedule_proposals_missed_slot_id` bằng `ALTER TABLE` (người viết migration ở #68 lưu ý). Phần `down` làm ngược lại: bỏ khóa ngoại này trước khi xóa hai bảng.
 
 #### Giao dịch TV3 nhiều bảng
 
