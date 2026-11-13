@@ -140,6 +140,7 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
+| TV4 | `GET /api/users/me/meeting-invitations` | Lấy danh sách lời mời họp của tôi (chờ phản hồi hoặc đã bị thay thế) | Nháp |
 | TV4 | `GET /api/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn | Nháp |
 | TV5 | `GET /api/groups/{groupId}/cards` | Danh sách và lọc thẻ Kanban | Nháp |
 | TV5 | `POST /api/groups/{groupId}/cards` | Tạo thẻ Kanban mới | Nháp |
@@ -1814,7 +1815,7 @@ Phản hồi mã HTTP 204 No Content, body rỗng.
 | 404 | NOT_FOUND | Không tìm thấy việc cần làm, hoặc việc thuộc tài khoản khác |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
-Ghi chú: Khi việc cần làm bị xóa, các bản ghi khung giờ học đề xuất (`study_slots`) liên kết với việc này sẽ được cập nhật trường `task_id = NULL` (thực hiện trong cùng Database Transaction theo quy ước #56 và #57); giao diện hiển thị nhãn mặc định "Việc đã xóa".
+Ghi chú: Khi việc cần làm bị xóa, giao dịch xóa thực hiện đồng thời trong cùng Database Transaction: (1) xóa các khung giờ học đề xuất (`study_slots`) đang chờ (`status = 'proposed'`) và các khung đã xếp (`status = 'scheduled'`) chưa bắt đầu; (2) các khung đã học (`studied`) và bỏ lỡ (`missed`) trong quá khứ được giữ lại với `task_id = NULL` (thực hiện qua `ON DELETE SET NULL`) để phục vụ thống kê tuần của TV5 (US-33, yêu cầu 3.19, #56, #57) kèm nhãn hiển thị "Việc đã xóa"; (3) toàn bộ thông báo nhắc việc (`reminders`) gắn với việc này tự động bị xóa qua khóa ngoại `ON DELETE CASCADE` (U035: không gửi nhắc việc cho việc đã xóa).
 
 ---
 
@@ -1895,7 +1896,7 @@ Ghi chú: Lịch tuần được tính theo khoảng nửa mở 7 ngày `[weekSt
 
 1. **Xác nhận quyết định bảng `tasks` dùng chung với TV3 (quy ước #57 & PR #83):**
    - Bảng `tasks` thuộc quyền quản lý trực tiếp của TV2 (nghiệp vụ `U012`) nhưng đóng vai trò là dữ liệu đầu vào cốt lõi cho thuật toán xếp lịch tự động `study_slots` của TV3 (Nhi). Cột `duration_minutes` mặc định 60 phút (1 giờ) khi người dùng xóa trống hoặc không nhập (`BR-04`, quy ước `#57`).
-   - Khi sinh viên xóa một việc cần làm (`DELETE /api/tasks/{taskId}`), giao dịch xóa của TV2 tự động cập nhật các khung học liên kết trong CSDL thành `task_id = NULL` (mục 1.5, `#56`, `#57`), giữ nguyên các khung học đã xếp trên lịch với nhãn hiển thị mặc định "Việc đã xóa".
+   - Khi sinh viên xóa một việc cần làm (`DELETE /api/tasks/{taskId}`), giao dịch xóa thực hiện đồng thời: xóa các khung `proposed` và các khung `scheduled` chưa bắt đầu trong tương lai; giữ lại các khung `studied` và `missed` trong quá khứ với `task_id = NULL` (ON DELETE SET NULL) để bảo toàn dữ liệu thống kê tuần của TV5 (mục 1.5, #56, #57); đồng thời các nhắc việc (`reminders`) liên kết tự động bị xóa qua ON DELETE CASCADE (U035).
 2. **Tiêu chuẩn sắp xếp tất định (Sorting Determinism):**
    - Toàn bộ các endpoint trả về danh sách lịch và việc (`GET /api/events`, `GET /api/tasks`, `GET /api/schedule/week`) đều được gắn khóa chính `id ASC` làm tiêu chí tie-breaker phụ cuối cùng, đảm bảo dữ liệu hiển thị không bao giờ bị xáo trộn ngẫu nhiên giữa các lần truy vấn.
 3. **Cấu trúc cảnh báo khi import tệp có sự kiện trùng lịch (BR-01):**
@@ -2455,7 +2456,7 @@ Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành v
 ```
 
 - `invitationsSent`: số lời mời vừa được tạo (bằng số thành viên nhóm trừ Người tổ chức họp; Người tổ chức họp không tự gửi mời cho chính mình).
-- Hệ thống tạo một dòng `meeting_invitations` với `status = 'pending'` cho mỗi thành viên nhóm còn lại. Nếu đã có đề xuất `open` cũ cho cùng nhóm mà cùng thành viên chưa phản hồi, lời mời cũ chuyển sang `'superseded'` trước khi tạo lời mời mới (U032).
+- Hệ thống tạo một dòng `meeting_invitations` với `status = 'pending'` cho mỗi thành viên nhóm còn lại. Trước khi tạo lời mời mới, mọi lời mời `'pending'` thuộc các đề xuất `open` cũ trong cùng nhóm chuyển sang `'superseded'` (U032); lời mời `'accepted'` và `'declined'` giữ nguyên để lưu vết lịch sử.
 
 **Lỗi có thể gặp**
 
@@ -2524,6 +2525,55 @@ Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); ch
 Ghi chú:
 - Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn đề xuất còn ở trạng thái `'open'`; mỗi lần phản hồi cập nhật `responded_at`.
 - Lời mời ở trạng thái `'superseded'` không được phản hồi (trả `409 CONFLICT`).
+
+---
+
+### `GET /api/users/me/meeting-invitations`
+
+Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Lấy các lời mời họp đang chờ phản hồi hoặc đã bị thay thế bằng đề xuất mới của người dùng đang đăng nhập, để thành viên mở lời mời và gọi endpoint phản hồi (U033, U032 4a).  
+Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chính `user_id` trong token; chỉ trả lời mời thuộc các nhóm mà người dùng hiện đang là thành viên hoạt động).
+
+**Tham số query:** Không có.
+
+**Nội dung gửi lên (body):** Không có.
+
+**Kết quả thành công (200 OK)**
+
+```json
+{
+  "data": {
+    "invitations": [
+      {
+        "invitationId": "883b1700-b52e-74g7-d049-779988773333",
+        "proposalId": "550e8400-e29b-41d4-a716-446655440000",
+        "groupId": "661f9500-f30c-52e5-b827-557766551111",
+        "groupName": "Đồ án NMCNPM nhóm 04",
+        "organizerDisplayName": "Nguyễn Văn An",
+        "title": "Họp đồ án tuần 4",
+        "startsAt": "2026-11-10T01:00:00.000Z",
+        "endsAt": "2026-11-10T03:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+}
+```
+
+`status` nhận `pending` hoặc `superseded`. Lời mời `superseded` giao diện hiển thị "Lời mời đã được thay bằng giờ mới" (U032 4a).
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+
+Ghi chú:
+- BR-02: chỉ trả tên nhóm, thời gian buổi họp và tên người gửi, không có dữ liệu lịch hay tên sự kiện cá nhân.
+- Sắp xếp theo `startsAt ASC, invitationId ASC`.
+- Quy tắc lọc bảo đảm toàn vẹn khi thành viên rời nhóm (U033 2a, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT` để ngăn xóa người dùng khi còn dữ liệu tham chiếu, ứng dụng giữ lại các dòng `meeting_invitations` để lưu lịch sử kiểm toán. Bảng `meeting_invitations` không có cột `group_id`, do đó câu truy vấn cần JOIN với `meeting_proposals` và chỉ lấy các lời mời (`pending`, `superseded`) thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG:
+  `SELECT mi.id AS invitation_id, mi.meeting_proposal_id AS proposal_id, mp.group_id, g.name AS group_name, u.display_name AS organizer_display_name, mp.title, mp.starts_at, mp.ends_at, mi.status FROM meeting_invitations mi JOIN meeting_proposals mp ON mi.meeting_proposal_id = mp.id JOIN groups g ON mp.group_id = g.id JOIN users u ON mp.organizer_user_id = u.id JOIN group_members gm ON gm.group_id = mp.group_id AND gm.user_id = mi.user_id WHERE mi.user_id = $currentUserId AND mi.status IN ('pending', 'superseded') AND mp.created_at >= gm.joined_at ORDER BY mp.starts_at ASC, mi.id ASC`.
+  Điều kiện `mp.created_at >= gm.joined_at` đảm bảo nếu thành viên rời nhóm rồi sau đó tham gia lại (qua link mời mới), người này sẽ không thấy lại các lời mời từ đợt tham gia trước.
 
 ---
 
