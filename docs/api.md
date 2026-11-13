@@ -2292,6 +2292,248 @@ Quyền: Chủ tài khoản (chủ của khung giờ học).
 Ghi chú: Gọi lại với khung đã "Đã học" trả 200 với cùng dữ liệu, không đổi gì, nên thời lượng chỉ được tính một lần trong thống kê (yêu cầu 3.20). Việc cần làm không tự chuyển sang hoàn thành (yêu cầu 3.21).
 
 ---
+### Sơ đồ tuần tự TV3
+
+#### Sơ đồ 1. Đề xuất và chấp nhận lịch học tự động (U021)
+
+Sơ đồ mô tả luồng người dùng tạo việc cần làm (endpoint `POST /api/tasks` của TV2), bấm "Xếp lịch" và xác nhận đề xuất. Service gọi Scheduler Engine, engine dùng thư viện khoảng thời gian `backend/src/utils/interval.ts` để loại trừ sự kiện cố định (`BR-01`) trong khung 07:00–22:00 giờ Việt Nam (`BR-07`), xếp khung theo độ ưu tiên, hạn chót, độ khó (`BR-04`) và lưu một lượt đề xuất đang chờ vào `schedule_proposals` cùng các khung `study_slots` trạng thái `proposed`. Lịch tuần chỉ thay đổi khi người dùng bấm "Chấp nhận" (`POST /api/scheduler/confirm`), lúc đó khung chuyển sang `scheduled` ("Đã xếp") đúng một lần (`BR-03`).
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Người dùng
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service và Scheduler Engine
+    participant DB as CSDL
+
+    Note over ND,DB: Giai đoạn 0 - Người dùng tạo việc cần làm (endpoint của TV2)
+    ND->>FE: Nhập việc cần làm (tên, hạn chót, thời lượng, độ ưu tiên, độ khó) và bấm Lưu
+    FE->>API: POST /api/tasks
+    API->>SVC: Tạo việc cần làm (userId, dữ liệu việc)
+    Note over SVC,DB: BR-04 - Việc luôn có hạn chót, thời lượng mặc định 60 phút nếu không nhập
+    SVC->>DB: INSERT tasks
+    DB-->>SVC: Việc đã lưu
+    SVC-->>API: Thông tin việc
+    API-->>FE: 201 Created
+    FE-->>ND: Hiển thị việc mới với nhãn Chưa xếp
+
+    Note over ND,DB: Giai đoạn 1 - Yêu cầu xếp lịch và nhận đề xuất (U021 bước 1 đến 5)
+    ND->>FE: Bấm Xếp lịch trên màn hình lịch tuần
+    FE->>API: POST /api/scheduler/auto-plan
+    API->>API: Xác thực JWT
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>ND: Yêu cầu đăng nhập lại
+    else Đã đăng nhập
+        API->>SVC: Yêu cầu xếp lịch (userId, thời điểm nhận yêu cầu)
+        Note over SVC,DB: BR-02 - Chỉ đọc dữ liệu của chính userId
+        SVC->>DB: Lấy tasks chưa hoàn thành (title, due_at, priority, difficulty, duration_minutes)
+        SVC->>DB: Lấy starts_at, ends_at của fixed_events và study_slots scheduled, studied trong 7 ngày tới
+        DB-->>SVC: Danh sách việc, khoảng bận (UTC) và khung đã xếp
+        alt Không có việc cần làm chưa hoàn thành
+            SVC-->>API: proposal null kèm cảnh báo NO_TASKS_TO_SCHEDULE
+            API-->>FE: 200 OK { data, warnings }
+            FE-->>ND: Hiển thị Không có việc cần làm để xếp lịch
+        else Có việc cần xếp
+            SVC->>SVC: Engine sắp việc - ưu tiên cao trước, hạn chót sớm trước, độ khó cao trước - và tính phần thời lượng còn thiếu của từng việc (yêu cầu 3.2, 3.5)
+            Note over SVC,DB: BR-01, BR-07 - Khoảng nửa mở [startsAt, endsAt), chỉ xếp trong 07:00-22:00 giờ VN, khung nối tiếp không tính là trùng
+            SVC->>SVC: Gọi thư viện khoảng thời gian - toInterval đổi dữ liệu sang TimeInterval, mergeIntervals gộp sự kiện cố định và khung đã xếp thành khoảng bận, subtractIntervals lấy khung 07:00-22:00 trừ khoảng bận ra khoảng trống, filterByMinDuration bỏ khoảng quá ngắn
+            SVC->>SVC: Engine đặt khung theo thứ tự việc - mỗi khung tối đa 2 giờ, hai khung cùng việc cách nhau ít nhất 30 phút, tối đa 4 giờ mỗi ngày, kết thúc trước hạn chót
+            Note over SVC,DB: BR-04 - Việc quá hạn chót không được xếp, taskResults ghi lý do (overdue, not_enough_time, partial, beyond_range)
+            Note over SVC,DB: Các thao tác ghi dưới đây chạy trong một transaction
+            SVC->>DB: UPDATE schedule_proposals pending cũ của userId thành outdated, DELETE study_slots proposed của lượt cũ
+            SVC->>DB: INSERT schedule_proposals (kind auto_plan, status pending)
+            SVC->>DB: INSERT study_slots (status proposed, proposal_id của lượt mới)
+            DB-->>SVC: Đã lưu lượt đề xuất
+            Note over SVC,DB: BR-03 - Đề xuất chỉ ở trạng thái chờ, lịch tuần chưa đổi, khung proposed không hiện trên lịch tuần
+            SVC->>SVC: toSlot đổi khung sang TimeSlot (startsAt, endsAt có mili giây)
+            SVC-->>API: Lượt đề xuất (slots, taskResults)
+            API-->>FE: 200 OK { data.proposal }
+            FE-->>ND: Hiển thị khung đề xuất theo giờ VN và thông báo của từng việc, nút Chấp nhận và Từ chối
+        end
+    end
+
+    Note over ND,DB: Giai đoạn 2 - Người dùng xác nhận đề xuất (U021 bước 6, 7)
+    alt Người dùng đóng hoặc rời màn hình
+        Note over ND,DB: BR-03 - Không gọi API, lượt vẫn pending, lịch tuần không đổi
+    else Người dùng bấm Từ chối
+        ND->>FE: Bấm Từ chối
+        FE->>API: POST /api/scheduler/confirm (proposalId, action reject)
+        API->>SVC: Từ chối lượt đề xuất (userId, proposalId)
+        SVC->>DB: UPDATE schedule_proposals thành rejected, DELETE study_slots proposed của lượt
+        DB-->>SVC: Đã cập nhật
+        SVC-->>API: status rejected
+        API-->>FE: 200 OK
+        FE-->>ND: Lịch tuần không đổi, việc chưa có khung hiển thị Chưa xếp
+    else Người dùng bấm Chấp nhận
+        ND->>FE: Bấm Chấp nhận
+        FE->>API: POST /api/scheduler/confirm (proposalId, action accept)
+        API->>API: Xác thực JWT và kiểm tra proposalId, action
+        alt Chưa đăng nhập hoặc dữ liệu sai định dạng
+            API-->>FE: 401 UNAUTHORIZED hoặc 400 VALIDATION_ERROR
+            FE-->>ND: Yêu cầu đăng nhập lại hoặc hiển thị lỗi
+        else Hợp lệ
+            API->>SVC: Chấp nhận lượt đề xuất (userId, proposalId)
+            SVC->>DB: SELECT schedule_proposals theo proposalId và user_id FOR UPDATE kèm các study_slots proposed
+            DB-->>SVC: Lượt đề xuất và các khung
+            alt Không có lượt hoặc lượt thuộc tài khoản khác
+                SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+                API-->>FE: 404 NOT_FOUND
+                FE-->>ND: Hiển thị thông báo không tìm thấy đề xuất
+            else Lượt đã accepted do bấm Chấp nhận nhiều lần
+                Note over SVC,DB: Yêu cầu 3.8 - Không ghi thêm, trả lại đúng kết quả lần đầu
+                SVC-->>API: Kết quả đã lưu lần đầu
+                API-->>FE: 200 OK
+                FE-->>ND: Lịch tuần giữ nguyên các khung đã lưu
+            else Lượt đã rejected hoặc outdated
+                SVC-->>API: Lỗi xung đột proposal_closed
+                API-->>FE: 409 CONFLICT
+                FE-->>ND: Hiển thị thông báo đề xuất không còn hiệu lực
+            else Lượt đang pending
+                SVC->>DB: Lấy lại starts_at, ends_at của fixed_events, study_slots scheduled, studied và tasks liên quan
+                DB-->>SVC: Lịch mới nhất
+                SVC->>SVC: Engine kiểm tra lại từng khung bằng hasOverlap với khoảng bận và so giờ bắt đầu với thời điểm hiện tại (BR-01)
+                alt Có khung giao sự kiện cố định mới hoặc đã qua giờ bắt đầu
+                    SVC->>DB: UPDATE schedule_proposals thành outdated, DELETE study_slots proposed của lượt
+                    SVC-->>API: Lỗi xung đột schedule_changed hoặc proposal_expired
+                    API-->>FE: 409 CONFLICT
+                    FE-->>ND: Báo Lịch đã thay đổi hoặc Đề xuất đã hết hạn, tự gọi lại auto-plan và hiện đề xuất mới
+                else Mọi khung còn hợp lệ
+                    Note over SVC,DB: BR-03 - Chỉ bước này làm lịch tuần thay đổi, đúng một lần, trong một transaction
+                    SVC->>DB: UPDATE study_slots của lượt từ proposed sang scheduled
+                    SVC->>DB: DELETE khung Cần xếp lại của các việc vừa có khung mới (yêu cầu 3.7)
+                    SVC->>DB: UPDATE schedule_proposals thành accepted
+                    DB-->>SVC: Đã lưu
+                    SVC-->>API: savedSlots, removedSlotIds
+                    API-->>FE: 200 OK { data }
+                    FE-->>ND: Cập nhật lịch tuần, các khung hiển thị nhãn Đã xếp theo giờ VN
+                end
+            end
+        end
+    end
+```
+
+#### Sơ đồ 2. Báo lỡ buổi học và chọn khung giờ bù (U022, tình huống demo 2)
+
+Sơ đồ mô tả tình huống demo 2: người dùng lỡ buổi ôn thi vì tăng ca, bấm "Bỏ lỡ" (`POST /api/scheduler/missed-session`). Service ghi nhận khung `missed` ("Bỏ lỡ"), Scheduler Engine tìm tối đa 2 khung giờ bù trống trong 7 ngày tới, trước hạn chót, không giao sự kiện cố định (`BR-01`, `BR-07`) và lưu thành lượt đề xuất `makeup` đang chờ. Người dùng chạm chọn một khung (`POST /api/scheduler/confirm` kèm `slotId`), khung đó thành "Đã xếp", khung còn lại bị bỏ (`BR-03`).
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Người dùng
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service và Scheduler Engine
+    participant DB as CSDL
+
+    Note over ND,DB: Giai đoạn 1 - Báo lỡ buổi học và nhận khung giờ bù (U022 bước 1 đến 4, tình huống demo 2)
+    ND->>FE: Mở khung giờ học Đã xếp đã đến giờ bắt đầu (buổi ôn thi bị lỡ vì tăng ca) và bấm Bỏ lỡ
+    FE->>API: POST /api/scheduler/missed-session (slotId)
+    API->>API: Xác thực JWT và kiểm tra slotId đúng định dạng UUID
+    alt Chưa đăng nhập hoặc slotId sai định dạng
+        API-->>FE: 401 UNAUTHORIZED hoặc 400 VALIDATION_ERROR
+        FE-->>ND: Yêu cầu đăng nhập lại hoặc hiển thị lỗi
+    else Hợp lệ
+        API->>SVC: Báo lỡ khung giờ học (userId, slotId)
+        SVC->>DB: SELECT study_slots theo slotId và user_id FOR UPDATE kèm tasks (due_at, is_done, duration_minutes)
+        DB-->>SVC: Khung giờ học và việc cần làm
+        alt Không có khung hoặc khung thuộc tài khoản khác
+            SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>ND: Hiển thị thông báo không tìm thấy khung giờ học
+        else Khung chưa đến giờ bắt đầu, đã Đã học, đang Cần xếp lại, hoặc việc đã hoàn thành
+            SVC-->>API: Lỗi dữ liệu nghiệp vụ (VALIDATION_ERROR)
+            API-->>FE: 400 VALIDATION_ERROR
+            FE-->>ND: Hiển thị thông báo không báo lỡ được khung này
+        else Khung hợp lệ để báo lỡ
+            Note over SVC,DB: Các thao tác ghi dưới đây chạy trong một transaction
+            SVC->>DB: UPDATE study_slots từ scheduled sang missed (khung đã missed thì giữ nguyên)
+            SVC->>DB: Lấy starts_at, ends_at của fixed_events và study_slots scheduled, studied trong 7 ngày tới
+            DB-->>SVC: Khoảng bận (UTC) và khung đã xếp
+            Note over SVC,DB: BR-01, BR-07 - Khoảng nửa mở, chỉ xét 07:00-22:00 giờ VN, tối đa 4 giờ mỗi ngày, trước hạn chót, trong 7 ngày kể từ lúc báo lỡ
+            SVC->>SVC: Gọi thư viện khoảng thời gian - mergeIntervals gộp khoảng bận, subtractIntervals lấy khung 07:00-22:00 trừ khoảng bận, filterByMinDuration giữ khoảng đủ dài cho khung giờ bù
+            SVC->>SVC: Engine chọn tối đa 2 khung giờ bù sớm nhất, không giao nhau, ưu tiên 2 ngày khác nhau, mỗi khung dài bằng phần nhỏ hơn giữa khung bị lỡ và phần còn thiếu của việc (yêu cầu 3.12)
+            alt Không còn khoảng trống phù hợp
+                SVC->>DB: Kết thúc transaction, chỉ lưu khung Bỏ lỡ, không tạo lượt đề xuất
+                SVC-->>API: missedSlot, proposal null kèm cảnh báo NO_MAKEUP_SLOT
+                API-->>FE: 200 OK { data, warnings }
+                FE-->>ND: Báo Không còn khung giờ bù trước hạn chót, khung giữ nhãn Bỏ lỡ, lịch tuần không đổi
+            else Tìm được 1 hoặc 2 khung giờ bù
+                SVC->>DB: UPDATE schedule_proposals pending cũ thành outdated, DELETE study_slots proposed của lượt cũ
+                SVC->>DB: INSERT schedule_proposals (kind makeup, status pending, missed_slot_id)
+                SVC->>DB: INSERT 1 hoặc 2 study_slots (status proposed, proposal_id của lượt mới)
+                DB-->>SVC: Đã lưu khung Bỏ lỡ và lượt đề xuất
+                Note over SVC,DB: BR-03 - Khung giờ bù chỉ ở trạng thái chờ, lịch tuần chưa đổi
+                SVC-->>API: missedSlot và proposal (kind makeup, slots)
+                API-->>FE: 200 OK { data }
+                FE-->>ND: Hiển thị 2 khung giờ bù trong tuần theo giờ VN, mỗi khung chọn bằng một chạm
+            end
+        end
+    end
+
+    Note over ND,DB: Giai đoạn 2 - Người dùng xác nhận một khung giờ bù bằng một chạm (U022 bước 5, 6)
+    alt Người dùng đóng hoặc rời màn hình
+        Note over ND,DB: BR-03 - Không gọi API, lịch tuần không đổi, khung bị lỡ có nút Tìm khung giờ bù
+    else Người dùng bấm Từ chối
+        ND->>FE: Bấm Từ chối
+        FE->>API: POST /api/scheduler/confirm (proposalId, action reject)
+        API->>SVC: Từ chối lượt khung giờ bù (userId, proposalId)
+        SVC->>DB: UPDATE schedule_proposals thành rejected, DELETE study_slots proposed của lượt
+        DB-->>SVC: Đã cập nhật
+        SVC-->>API: status rejected
+        API-->>FE: 200 OK
+        FE-->>ND: Lịch tuần không đổi, khung giữ nhãn Bỏ lỡ và có nút Tìm khung giờ bù
+    else Người dùng chạm chọn một khung giờ bù
+        ND->>FE: Chạm vào một khung giờ bù
+        FE->>API: POST /api/scheduler/confirm (proposalId, action accept, slotId của khung được chọn)
+        API->>API: Xác thực JWT và kiểm tra proposalId, action, slotId
+        alt Chưa đăng nhập hoặc dữ liệu sai định dạng
+            API-->>FE: 401 UNAUTHORIZED hoặc 400 VALIDATION_ERROR
+            FE-->>ND: Yêu cầu đăng nhập lại hoặc hiển thị lỗi
+        else Hợp lệ
+            API->>SVC: Chọn khung giờ bù (userId, proposalId, slotId)
+            SVC->>DB: SELECT schedule_proposals theo proposalId và user_id FOR UPDATE kèm các study_slots proposed
+            DB-->>SVC: Lượt đề xuất và các khung giờ bù
+            alt Không có lượt hoặc lượt thuộc tài khoản khác
+                SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+                API-->>FE: 404 NOT_FOUND
+                FE-->>ND: Hiển thị thông báo không tìm thấy đề xuất
+            else Lượt đã accepted do chạm nhiều lần, cùng khung hoặc cả hai khung
+                Note over SVC,DB: Yêu cầu 3.13 - Chỉ đúng một khung giờ bù được lưu, trả lại khung đã lưu
+                SVC-->>API: Khung giờ bù đã lưu lần đầu
+                API-->>FE: 200 OK
+                FE-->>ND: Lịch tuần giữ nguyên khung giờ bù đã chọn
+            else Lượt đã rejected hoặc outdated
+                SVC-->>API: Lỗi xung đột proposal_closed
+                API-->>FE: 409 CONFLICT
+                FE-->>ND: Hiển thị thông báo đề xuất không còn hiệu lực
+            else Lượt đang pending
+                SVC->>DB: Lấy lại starts_at, ends_at của fixed_events và study_slots scheduled, studied
+                DB-->>SVC: Lịch mới nhất
+                SVC->>SVC: Engine kiểm tra lại khung được chọn bằng hasOverlap và so giờ bắt đầu với thời điểm hiện tại (BR-01)
+                alt Khung giao sự kiện cố định mới hoặc đã qua giờ bắt đầu
+                    SVC->>DB: UPDATE schedule_proposals thành outdated, DELETE study_slots proposed của lượt
+                    SVC-->>API: Lỗi xung đột schedule_changed hoặc proposal_expired
+                    API-->>FE: 409 CONFLICT
+                    FE-->>ND: Báo Lịch đã thay đổi hoặc Đề xuất đã hết hạn, tự gọi lại missed-session với cùng slotId và hiện khung giờ bù mới
+                else Khung còn hợp lệ
+                    Note over SVC,DB: BR-03 - Chỉ bước này làm lịch tuần thay đổi, đúng một lần, trong một transaction
+                    SVC->>DB: UPDATE khung được chọn từ proposed sang scheduled, DELETE khung giờ bù còn lại
+                    SVC->>DB: UPDATE schedule_proposals thành accepted
+                    DB-->>SVC: Đã lưu
+                    SVC-->>API: savedSlots (1 khung giờ bù)
+                    API-->>FE: 200 OK { data }
+                    FE-->>ND: Cập nhật lịch tuần - khung giờ bù hiển thị Đã xếp, khung bị lỡ giữ nhãn Bỏ lỡ
+                end
+            end
+        end
+    end
+```
+
+---
 
 ### Xác nhận liên module và lưu ý cho người review (Hưng)
 
