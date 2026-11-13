@@ -9,16 +9,23 @@
     "lint": "eslint . && prettier --check src tests",
     "format": "prettier --write src tests",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "migrate:create": "node-pg-migrate create -j ts",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:redo": "node-pg-migrate redo"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
     "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^10.13.0",

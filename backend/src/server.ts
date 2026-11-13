@@ -1,8 +1,24 @@
 import { createApp } from './app';
+import { closePool } from './config/db';
 import { env } from './config/env';
 
 const app = createApp();
 
-app.listen(env.port, () => {
+const server = app.listen(env.port, () => {
   console.log(`Backend chạy tại http://localhost:${env.port} (${env.nodeEnv})`);
+});
+
+async function handleShutdown(): Promise<void> {
+  server.close(async () => {
+    await closePool();
+    process.exit(0);
+  });
+}
+
+process.on('SIGINT', () => {
+  void handleShutdown();
+});
+
+process.on('SIGTERM', () => {
+  void handleShutdown();
 });
