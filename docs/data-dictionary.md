@@ -1,6 +1,6 @@
 # Từ điển dữ liệu StudySync
 
-Trạng thái: Đã tích hợp 5 module (Chờ review ERD v1) · Người soạn: Thư H.A. · Người review: Thư Q.A. · Ngày cập nhật: 13/11/2026
+Trạng thái: Đã tích hợp 5 module & ERD v1 (Chờ Nhi review #73) · Người soạn: Thư H.A., Thư Q.A. · Người review: Nhi · Ngày cập nhật: 13/11/2026
 
 Phần 1 là quy ước thiết kế cơ sở dữ liệu (CSDL), Phần 2 là quyết định chọn công cụ migration và quy trình dùng chung. Từ điển từng bảng theo module đặt từ Phần 3 trở đi, theo khung của Thư Q.A. (việc 1 ở Task Tuần 4) và Template 8, cập nhật cùng Pull Request với migration. Số hiệu "việc" trong tài liệu này là số thứ tự ở tab Task Tuần 4.
 
@@ -538,7 +538,7 @@ Module: TV3 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở h�
 | --- | --- | --- | --- | --- | --- |
 | id | uuid | Không | Khóa chính (`pk_study_slots`) | gen_random_uuid() | Mã khung giờ học |
 | user_id | uuid | Không | Khóa ngoại `fk_study_slots_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Chủ khung giờ học |
-| task_id | uuid | Có | Khóa ngoại `fk_study_slots_task_id` → `tasks.id` (`ON DELETE SET NULL`) | | Việc cần làm của khung. Cho phép rỗng vì khung "Đã học" và "Bỏ lỡ" được giữ khi việc bị xóa để còn thống kê (Bảng 1.3, yêu cầu 3.19, #56, #57) |
+| task_id | uuid | Có | Khóa ngoại `fk_study_slots_task_id` → `tasks.id` (`ON DELETE SET NULL`) | NULL | Việc cần làm của khung. Cho phép rỗng vì khung "Đã học" và "Bỏ lỡ" được giữ khi việc bị xóa để còn thống kê (Bảng 1.3, yêu cầu 3.19, #56, #57) |
 | proposal_id | uuid | Có | Khóa ngoại `fk_study_slots_proposal_id` → `schedule_proposals.id` (`ON DELETE SET NULL`); CHECK `ck_study_slots_proposal_required`: `status <> 'proposed' OR proposal_id IS NOT NULL` | NULL | Lượt đề xuất đã tạo ra khung. Khung đang chờ bắt buộc có; khung đã chấp nhận giữ lại để truy vết |
 | replaces_slot_id | uuid | Có | Khóa ngoại `fk_study_slots_replaces_slot_id` → `study_slots.id` (`ON DELETE SET NULL`) | NULL | Chỉ dùng ở khung đề xuất của lượt `replan`: khung cũ sẽ bị dời. Khi sinh viên xác nhận, khung cũ bị xóa và khung này thành "Đã xếp" (yêu cầu 3.15, 3.17) |
 | status | varchar(30) | Không | CHECK `ck_study_slots_status`: `status IN ('proposed', 'scheduled', 'studied', 'missed')` | `'proposed'` | Trạng thái khung (xem bảng ánh xạ nhãn ở đầu vùng TV3) |
@@ -675,18 +675,18 @@ Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở h�
 | remind_at | timestamptz | Không | | | Thời điểm gửi thông báo nhắc (UTC, BR-07); hệ thống tính từ `tasks.due_at` trừ đi khoảng thời gian trước hạn |
 | is_sent | boolean | Không | | false | Đã gửi thông báo chưa; `false` – chờ gửi, `true` – đã gửi |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo nhắc việc (UTC) |
-| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+| updated_at | timestamptz | Không | Trigger `trg_reminders_set_updated_at` | now() | Thời điểm sửa gần nhất (UTC) |
 
 Quyền riêng tư: `remind_at` và trạng thái nhắc việc là dữ liệu cá nhân, chỉ trả cho chủ sở hữu (`user_id`), không trả cho thành viên khác trong nhóm (BR-02). Tên việc lấy từ `tasks.title`, không lưu lại ở bảng này; trường hợp việc bị xóa thì nhắc việc cũng bị xóa theo CASCADE nên không có tình huống nhắc việc mồ côi.  
 Ghi chú: Chỉ mục `idx_reminders_user_id_remind_at` trên `(user_id, remind_at)` để bộ hẹn giờ truy vấn nhanh các nhắc việc sắp đến (U035). Chỉ mục `idx_reminders_task_id` trên `(task_id)` hỗ trợ tra nhắc việc theo việc cần làm. Trigger `trg_reminders_set_updated_at` (28 byte) gọi hàm `set_updated_at()`. Bộ hẹn giờ hệ thống (Timer) quét định kỳ bằng truy vấn `SELECT r.* FROM reminders r JOIN tasks t ON t.id = r.task_id WHERE r.is_sent = false AND r.remind_at <= now() AND t.is_done = false` để gửi thông báo rồi đặt `is_sent = true`. Nhắc việc của việc đã hoàn thành được giữ nguyên trong CSDL nhưng không được gửi; nhắc việc của việc đã xóa tự bị xóa qua `ON DELETE CASCADE`. Mỗi việc cần làm có thể có nhiều dòng nhắc (ví dụ nhắc 24 giờ trước, nhắc 1 giờ trước), hệ thống tạo tự động khi người dùng thêm/sửa việc.
 
-Dữ liệu mẫu (`task_id` trỏ tới `tasks.id` của TV2, nên nạp sau `tasks`; hai dòng cuối trùng `user_id` và `remind_at` để minh họa trường hợp trùng thời điểm nhắc, khi đó `GET /api/users/me/reminders` xếp theo `id` tăng dần):
+Dữ liệu mẫu (`task_id` trỏ tới `tasks.id` ở dữ liệu mẫu TV2, nên nạp sau `tasks`; hai dòng cuối trùng `user_id` và `remind_at` để minh họa trường hợp trùng thời điểm nhắc, khi đó `GET /api/users/me/reminders` xếp theo `id` tăng dần):
 
 | id | task_id | user_id | remind_at | is_sent | created_at | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| `f7a8b9c0-2222-4333-8444-ccccdddd0001` | `aa5d3900-d74a-4a96-8f26-991100995555` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-11 10:00:00+00` | `true` | `2026-11-10 08:00:00+00` | `2026-11-11 10:00:30+00` |
-| `f7a8b9c0-2222-4333-8444-ccccdddd0002` | `aa5d3900-d74a-4a96-8f26-991100995555` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 09:00:00+00` | `false` | `2026-11-10 08:00:00+00` | `2026-11-10 08:00:00+00` |
-| `f7a8b9c0-2222-4333-8444-ccccdddd0003` | `bb6e4a11-e85b-4ba7-9a37-aa2211aa6666` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 09:00:00+00` | `false` | `2026-11-10 08:05:00+00` | `2026-11-10 08:05:00+00` |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0001` | `55555555-6666-4777-8888-999999999999` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-11 17:00:00+00` | `true` | `2026-11-11 01:00:00+00` | `2026-11-11 17:00:30+00` |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0002` | `55555555-6666-4777-8888-999999999999` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 16:00:00+00` | `false` | `2026-11-11 01:00:00+00` | `2026-11-11 01:00:00+00` |
+| `f7a8b9c0-2222-4333-8444-ccccdddd0003` | `66666666-7777-4888-8999-000000000000` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `2026-11-12 16:00:00+00` | `false` | `2026-11-11 01:30:00+00` | `2026-11-11 01:30:00+00` |
 
 ---
 
@@ -865,198 +865,211 @@ Bên cạnh các ràng buộc mức CSDL, các nghiệp vụ tác động xuyên
      2. `DROP TABLE study_slots`.
      3. `DROP TABLE schedule_proposals`.
 
-### 4.4 Sơ đồ quan hệ thực thể tổng thể (ERD v1 Input)
+### 4.4 Sơ đồ quan hệ thực thể tổng thể (ERD v1)
 
-Dưới đây là sơ đồ quan hệ thực thể tổng thể chuẩn hóa cả 14 bảng và các mối liên kết chính làm đầu vào trực tiếp cho Thư Q.A. vẽ sơ đồ ERD v1 (#73):
+Dưới đây là sơ đồ quan hệ thực thể mức vật lý/logic (ERD v1, Issue #73) chuẩn hóa toàn bộ **14 bảng**, **116 cột** và **24 mối quan hệ** của 5 module (TV1–TV5), khớp 100% với từ điển dữ liệu ở Phần 3 và ma trận khóa ngoại ở Bảng 4.1, Bảng 4.2:
 
 ```mermaid
+%%{init: {'theme': 'neutral'}}%%
 erDiagram
-    users ||--o{ group_members : "tham gia (1:N)"
-    groups ||--o{ group_members : "thuộc về (1:N)"
-    groups ||--o| invitation_links : "sở hữu tối đa 1 (1:0..1)"
-    
-    users ||--o{ fixed_events : "sở hữu (1:N)"
-    recurring_rules |o--o{ fixed_events : "áp dụng (0..1:N)"
-    imported_files |o--o{ fixed_events : "nạp từ (0..1:N)"
-    users ||--o{ recurring_rules : "tạo (1:N)"
-    users ||--o{ imported_files : "nạp (1:N)"
-    
-    users ||--o{ tasks : "sở hữu (1:N)"
-    tasks |o--o{ study_slots : "phân bổ vào (0..1:N)"
-    tasks ||--o{ reminders : "hẹn nhắc (1:N)"
-    
-    users ||--o{ schedule_proposals : "nhận đề xuất (1:N)"
-    users ||--o{ study_slots : "sở hữu (1:N)"
-    schedule_proposals |o--o{ study_slots : "đề xuất khung (0..1:N)"
-    study_slots |o--o{ schedule_proposals : "bù cho khung lỡ (0..1:N)"
-    study_slots |o--o{ study_slots : "thay thế slot cũ (0..1:N)"
-    
-    groups ||--o{ meeting_proposals : "tổ chức (1:N)"
-    users ||--o{ meeting_proposals : "chủ trì (organizer) (1:N)"
-    meeting_proposals ||--o{ meeting_invitations : "gửi lời mời (1:0..N)"
-    users ||--o{ meeting_invitations : "nhận lời mời (1:N)"
-    users ||--o{ reminders : "nhận nhắc việc (1:N)"
-    
-    groups ||--o{ kanban_cards : "quản lý trên bảng (1:N)"
-    users ||--o{ kanban_cards : "tạo thẻ (created_by) (1:N)"
-    users |o--o{ kanban_cards : "được giao (assigned_to) (0..1:N)"
+    %% =====================================================================
+    %% QUAN HỆ GIỮA CÁC THỰC THỂ (24 MỐI QUAN HỆ - CHUẨN HÓA THEO BẢNG 4.1 & 4.2)
+    %% =====================================================================
+
+    %% Module TV1: Tài khoản và nhóm (Quan hệ N-N giữa users và groups qua group_members)
+    users ||--o{ group_members : "tham gia (1:0..N) [ON DELETE RESTRICT]"
+    groups ||--|{ group_members : "có thành viên (1:1..N) [ON DELETE CASCADE]"
+    groups ||--o| invitation_links : "duy trì tối đa 1 (1:0..1) [ON DELETE CASCADE]"
+
+    %% Module TV2: Lịch cá nhân, sự kiện cố định, việc cần làm, quy tắc lặp, tệp nạp
+    users ||--o{ fixed_events : "sở hữu (1:0..N) [ON DELETE RESTRICT]"
+    recurring_rules |o--o{ fixed_events : "sinh chuỗi lặp (0..1:0..N) [ON DELETE SET NULL]"
+    imported_files |o--o{ fixed_events : "nạp từ tệp (0..1:0..N) [ON DELETE SET NULL]"
+    users ||--o{ recurring_rules : "thiết lập (1:0..N) [ON DELETE RESTRICT]"
+    users ||--o{ imported_files : "tải lên (1:0..N) [ON DELETE RESTRICT]"
+    users ||--o{ tasks : "sở hữu (1:0..N) [ON DELETE RESTRICT]"
+
+    %% Module TV3: Đề xuất xếp lịch và khung giờ học
+    users ||--o{ schedule_proposals : "nhận đề xuất (1:0..N) [ON DELETE RESTRICT]"
+    users ||--o{ study_slots : "sở hữu (1:0..N) [ON DELETE RESTRICT]"
+    tasks |o--o{ study_slots : "phân bổ vào (0..1:0..N) [ON DELETE SET NULL]"
+    schedule_proposals |o--o{ study_slots : "đề xuất khung (0..1:0..N) [ON DELETE SET NULL]"
+    study_slots |o--o{ schedule_proposals : "bù cho khung lỡ (0..1:0..N) [ON DELETE CASCADE]"
+    study_slots |o--o{ study_slots : "thay thế khung cũ (0..1:0..N) [ON DELETE SET NULL]"
+
+    %% Module TV4: Họp nhóm, lời mời (N-N giữa meeting_proposals và users) & nhắc việc
+    groups ||--o{ meeting_proposals : "tổ chức (1:0..N) [ON DELETE CASCADE]"
+    users ||--o{ meeting_proposals : "chủ trì (organizer) (1:0..N) [ON DELETE RESTRICT]"
+    meeting_proposals ||--o{ meeting_invitations : "gửi lời mời (1:0..N) [ON DELETE CASCADE]"
+    users ||--o{ meeting_invitations : "nhận lời mời (1:0..N) [ON DELETE RESTRICT]"
+    tasks ||--o{ reminders : "hẹn mốc nhắc (1:0..N) [ON DELETE CASCADE]"
+    users ||--o{ reminders : "nhận nhắc việc (1:0..N) [ON DELETE RESTRICT]"
+
+    %% Module TV5: Bảng Kanban (dùng thêm study_slots của TV3 để thống kê tuần)
+    groups ||--o{ kanban_cards : "quản lý trên bảng (1:0..N) [ON DELETE CASCADE]"
+    users ||--o{ kanban_cards : "tạo thẻ (created_by) (1:0..N) [ON DELETE RESTRICT]"
+    users |o--o{ kanban_cards : "phụ trách (assigned_to) (0..1:0..N) [ON DELETE RESTRICT]"
+
+    %% =====================================================================
+    %% ĐỊNH NGHĨA CHI TIẾT 14 BẢNG (116 CỘT - KHỚP 100% DATA DICTIONARY)
+    %% =====================================================================
 
     users {
-        uuid id PK
-        varchar email UK
-        text password_hash
-        varchar display_name
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        varchar email UK "varchar(254) NOT NULL, uq_users_email, lower(btrim)"
+        text password_hash "NOT NULL, bcrypt cost 10"
+        varchar display_name "varchar(100) NOT NULL, NFC btrim 1..100 (BR-08)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_users_set_updated_at"
     }
 
     groups {
-        uuid id PK
-        varchar name
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        varchar name "varchar(100) NOT NULL, NFC btrim 1..100 (BR-08)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_groups_set_updated_at"
     }
 
     group_members {
-        uuid id PK
-        uuid group_id FK
-        uuid user_id FK
-        varchar role
-        boolean can_organize_meetings
-        timestamptz joined_at
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid group_id FK,UK "NOT NULL -> groups.id (ON DELETE CASCADE), uq(group_id,user_id)"
+        uuid user_id FK,UK "NOT NULL -> users.id (ON DELETE RESTRICT), uq(group_id,user_id)"
+        varchar role "varchar(30) NOT NULL, DEFAULT 'member', IN ('leader','member')"
+        boolean can_organize_meetings "NOT NULL, DEFAULT false (U036)"
+        timestamptz joined_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_group_members_set_updated_at"
     }
 
     invitation_links {
-        uuid id PK
-        uuid group_id FK,UK
-        text token UK
-        timestamptz expires_at
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid group_id FK,UK "NOT NULL -> groups.id (ON DELETE CASCADE), uq_invitation_links_group_id"
+        text token UK "NOT NULL, uq_invitation_links_token"
+        timestamptz expires_at "NOT NULL, hạn 7 ngày (U004)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_invitation_links_set_updated_at"
     }
 
     fixed_events {
-        uuid id PK
-        uuid user_id FK
-        varchar title
-        varchar kind
-        timestamptz starts_at
-        timestamptz ends_at
-        text location
-        text notes
-        varchar source
-        uuid recurring_rule_id FK
-        uuid imported_file_id FK
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar title "varchar(200) NOT NULL, NFC btrim 1..200 (BR-08)"
+        varchar kind "varchar(30) NOT NULL, DEFAULT 'class', IN ('class','exam','work_shift','other')"
+        timestamptz starts_at "NOT NULL (UTC, BR-07)"
+        timestamptz ends_at "NOT NULL, ends_at > starts_at (BR-01, BR-07)"
+        text location "NULL, DEFAULT NULL"
+        text notes "NULL, DEFAULT NULL"
+        varchar source "varchar(30) NOT NULL, DEFAULT 'manual', IN ('manual','ics','csv')"
+        uuid recurring_rule_id FK "NULL, DEFAULT NULL -> recurring_rules.id (ON DELETE SET NULL)"
+        uuid imported_file_id FK "NULL, DEFAULT NULL -> imported_files.id (ON DELETE SET NULL)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_fixed_events_set_updated_at"
     }
 
     tasks {
-        uuid id PK
-        uuid user_id FK
-        varchar title
-        timestamptz due_at
-        varchar priority
-        varchar difficulty
-        integer duration_minutes
-        boolean is_done
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar title "varchar(200) NOT NULL, NFC btrim 1..200 (BR-08)"
+        timestamptz due_at "NOT NULL (UTC, BR-04, BR-07)"
+        varchar priority "varchar(30) NOT NULL, DEFAULT 'medium', IN ('low','medium','high')"
+        varchar difficulty "varchar(30) NOT NULL, DEFAULT 'medium', IN ('easy','medium','hard')"
+        integer duration_minutes "NOT NULL, DEFAULT 60, > 0 (BR-04)"
+        boolean is_done "NOT NULL, DEFAULT false"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_tasks_set_updated_at"
     }
 
     recurring_rules {
-        uuid id PK
-        uuid user_id FK
-        varchar frequency
-        integer interval_value
-        varchar by_weekday
-        timestamptz until_at
-        integer count
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar frequency "varchar(30) NOT NULL, IN ('daily','weekly','monthly')"
+        integer interval_value "NOT NULL, DEFAULT 1, >= 1"
+        varchar by_weekday "varchar(50) NULL, DEFAULT NULL"
+        timestamptz until_at "NULL, DEFAULT NULL (UTC, BR-07)"
+        integer count "NULL, DEFAULT NULL, IS NULL OR >= 1"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_recurring_rules_set_updated_at"
     }
 
     imported_files {
-        uuid id PK
-        uuid user_id FK
-        varchar file_name
-        varchar file_format
-        integer file_size_bytes
-        integer total_events
-        varchar status
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar file_name "varchar(255) NOT NULL"
+        varchar file_format "varchar(30) NOT NULL, IN ('ics','csv')"
+        integer file_size_bytes "NOT NULL, 1..5242880 (BR-05)"
+        integer total_events "NOT NULL, DEFAULT 0, >= 0"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'success', IN ('success','failed')"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_imported_files_set_updated_at"
     }
 
     schedule_proposals {
-        uuid id PK
-        uuid user_id FK
-        varchar kind
-        varchar status
-        uuid missed_slot_id FK
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar kind "varchar(30) NOT NULL, IN ('auto_plan','makeup','replan')"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'pending', IN ('pending','accepted','rejected','outdated')"
+        uuid missed_slot_id FK "NULL, DEFAULT NULL -> study_slots.id (ON DELETE CASCADE)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_schedule_proposals_set_updated_at"
     }
 
     study_slots {
-        uuid id PK
-        uuid user_id FK
-        uuid task_id FK
-        uuid proposal_id FK
-        uuid replaces_slot_id FK
-        varchar status
-        timestamptz starts_at
-        timestamptz ends_at
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        uuid task_id FK "NULL, DEFAULT NULL -> tasks.id (ON DELETE SET NULL)"
+        uuid proposal_id FK "NULL, DEFAULT NULL -> schedule_proposals.id (ON DELETE SET NULL)"
+        uuid replaces_slot_id FK "NULL, DEFAULT NULL -> study_slots.id (ON DELETE SET NULL)"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'proposed', IN ('proposed','scheduled','studied','missed')"
+        timestamptz starts_at "NOT NULL (UTC, BR-07)"
+        timestamptz ends_at "NOT NULL, ends_at > starts_at, <= 2h (BR-01, BR-07)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_study_slots_set_updated_at"
     }
 
     meeting_proposals {
-        uuid id PK
-        uuid group_id FK
-        uuid organizer_user_id FK
-        varchar title
-        timestamptz starts_at
-        timestamptz ends_at
-        varchar status
-        text location
-        text notes
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid group_id FK "NOT NULL -> groups.id (ON DELETE CASCADE)"
+        uuid organizer_user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        varchar title "varchar(200) NOT NULL, NFC btrim 1..200 (BR-08)"
+        timestamptz starts_at "NOT NULL (UTC, BR-07)"
+        timestamptz ends_at "NOT NULL, ends_at > starts_at (BR-01, BR-07)"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'open', IN ('open','confirmed','cancelled')"
+        text location "NULL, DEFAULT NULL"
+        text notes "NULL, DEFAULT NULL"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_meeting_proposals_set_updated_at"
     }
 
     meeting_invitations {
-        uuid id PK
-        uuid meeting_proposal_id FK
-        uuid user_id FK
-        varchar status
-        timestamptz responded_at
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid meeting_proposal_id FK,UK "NOT NULL -> meeting_proposals.id (ON DELETE CASCADE), uq(proposal,user)"
+        uuid user_id FK,UK "NOT NULL -> users.id (ON DELETE RESTRICT), uq(proposal,user)"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'pending', IN ('pending','accepted','declined','superseded')"
+        timestamptz responded_at "NULL, DEFAULT NULL (UTC, BR-07)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_meeting_invitations_set_updated_at"
     }
 
     reminders {
-        uuid id PK
-        uuid task_id FK
-        uuid user_id FK
-        timestamptz remind_at
-        boolean is_sent
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid task_id FK "NOT NULL -> tasks.id (ON DELETE CASCADE)"
+        uuid user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        timestamptz remind_at "NOT NULL (UTC, BR-07)"
+        boolean is_sent "NOT NULL, DEFAULT false"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_reminders_set_updated_at"
     }
 
     kanban_cards {
-        uuid id PK
-        uuid group_id FK
-        varchar title
-        varchar status
-        timestamptz due_at
-        uuid created_by_user_id FK
-        uuid assigned_to_user_id FK
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK "NOT NULL, DEFAULT gen_random_uuid()"
+        uuid group_id FK "NOT NULL -> groups.id (ON DELETE CASCADE)"
+        varchar title "varchar(200) NOT NULL, NFC btrim 1..200 (BR-08)"
+        varchar status "varchar(30) NOT NULL, DEFAULT 'todo', IN ('todo','in_progress','done')"
+        timestamptz due_at "NOT NULL (UTC, BR-04, BR-07)"
+        uuid created_by_user_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        uuid assigned_to_user_id FK "NULL, DEFAULT NULL -> users.id (ON DELETE RESTRICT)"
+        timestamptz created_at "NOT NULL, DEFAULT now() (UTC, BR-07)"
+        timestamptz updated_at "NOT NULL, DEFAULT now(), trg_kanban_cards_set_updated_at"
     }
 ```
 
