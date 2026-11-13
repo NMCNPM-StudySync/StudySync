@@ -57,7 +57,7 @@ Bảng 1.2: Kiểu dữ liệu chuẩn
 | Tên việc, sự kiện cố định, thẻ Kanban | `varchar(200)` | BR-08 |
 | Văn bản tùy chọn chưa có giới hạn nghiệp vụ (địa điểm, ghi chú của sự kiện cố định) | `text`, cho phép rỗng | BR-08 chưa quy định độ dài cho các trường này. Muốn giới hạn thì bổ sung vào BR-08 trước, rồi đổi sang `varchar(n)` |
 | Trạng thái, loại | `varchar(30)` kèm CHECK liệt kê giá trị | Giá trị lưu là mã tiếng Anh snake_case không dấu (ví dụ `scheduled`, `missed`), nhãn tiếng Việt như "Đã xếp", "Bỏ lỡ" do ứng dụng gắn (yêu cầu A1 của báo cáo Yêu cầu). Không dùng kiểu ENUM của PostgreSQL, vì đổi hoặc bỏ một giá trị ENUM khó hơn nhiều khi viết migration và rollback. Nới độ dài khi giá trị dài hơn 30 ký tự |
-| Mức có thứ tự (độ ưu tiên, độ khó) | `smallint` kèm CHECK khoảng hợp lệ | Mỗi loại có 3 mức (US-09). Lưu số để sắp thứ tự được, nhãn Thấp, Trung bình, Cao do ứng dụng gắn. Chủ module chốt giá trị cụ thể |
+| Mức có thứ tự (độ ưu tiên, độ khó) | `varchar(30)` kèm CHECK liệt kê giá trị | Lưu chuỗi mã tiếng Anh chữ thường không dấu: `priority IN ('low', 'medium', 'high')`; `difficulty IN ('easy', 'medium', 'hard')` (US-09, yêu cầu 2.3). Nhãn Thấp/Trung bình/Cao và Dễ/Trung bình/Khó do ứng dụng gắn. Không dùng ENUM để thuận tiện migration và rollback |
 | Thời lượng | `integer`, đơn vị phút | Giao diện nhập theo giờ, bước 0,5 (yêu cầu 2.3), nên 1,5 giờ lưu là 90. Chỉ việc cần làm có thời lượng, mặc định 60 (BR-04). Thẻ Kanban không có cột này |
 | Đúng/sai | `boolean NOT NULL DEFAULT false` | |
 | Mật khẩu | `text` | Chỉ lưu bản băm, không lưu thô |
@@ -200,8 +200,7 @@ Cú pháp cụ thể theo `backend/README.md`. Các bước dưới đây gọi 
 
 ## Phần 3. Từ điển bảng theo module
 
-> Khung tài liệu theo Template 8 và các quy ước đã chốt ở Phần 1. Mỗi module điền vào vùng riêng của mình, cập nhật cùng Pull Request với migration.
-> Ký hiệu: `<nội dung>` là chỗ cần điền (thay cả dấu ngoặc nhọn). Xóa các ghi chú *Hướng dẫn* khi dùng thật.
+> Khung tài liệu theo Template 8 và các quy ước đã chốt ở Phần 1. Bản tích hợp đầy đủ 14 bảng CSDL của 5 module.
 > Thư H.A. sở hữu lược đồ và chốt tên bảng khi vẽ ERD; Thư Q.A. cùng vẽ ERD và viết từ điển.
 
 ### Tổng quan bảng theo module và Ánh xạ Báo cáo M3
@@ -224,24 +223,6 @@ Bảng sau tổng hợp 14 bảng CSDL của 5 module, kèm đối chiếu số 
 | TV4 | `meeting_invitations` | Lời mời | Bảng 2.13 | Đã tích hợp (Chờ review) |
 | TV4 | `reminders` | Nhắc việc | Bảng 2.14 | Đã tích hợp (Chờ review) |
 | TV5 | `kanban_cards` | Thẻ Kanban | Bảng 2.15 | Đã tích hợp (Chờ review) |
-
-### Mẫu một bảng (sao chép cho mỗi bảng)
-
-```markdown
-#### <tên_bảng>
-Mô tả: <Bảng này lưu gì, mỗi dòng đại diện cho cái gì>  
-Module: TV<x> · Migration tạo bảng: <tên file migration> · Người sở hữu: <tên>  
-
-| Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
-| --- | --- | --- | --- | --- | --- |
-| id | uuid | Không | Khóa chính (`pk_<tên_bảng>`) | gen_random_uuid() | Mã dòng |
-| <cột> | <kiểu> | <Có/Không> | <khóa ngoại → bảng.cột, duy nhất, CHECK...> | <...> | <...> |
-| created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
-| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
-
-Quyền riêng tư: <Cột nào không được trả cho người khác trong nhóm (BR-02)>  
-Ghi chú: <Chỉ mục, quy tắc xóa, dữ liệu mẫu>
-```
 
 ---
 
@@ -342,7 +323,7 @@ Các thao tác sau tác động trên nhiều bảng hoặc đòi hỏi tính nh
 | --- | --- |
 | **Tạo nhóm (US-03, U003)** | 1. INSERT vào bảng `groups` để tạo nhóm mới.<br>2. INSERT vào bảng `group_members` gán người tạo vai trò `role = 'leader'`, `can_organize_meetings = false`.<br>*(Rollback toàn bộ nếu bất kỳ thao tác nào thất bại, bảo đảm không bao giờ có nhóm thiếu Trưởng nhóm).* |
 | **Chuyển Trưởng nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện hiện là `leader` và người nhận (`userId`) đang là `member` của nhóm.<br>3. UPDATE `group_members` của Trưởng nhóm cũ thành `role = 'member'` (hạ vai trò leader cũ trước).<br>4. UPDATE `group_members` của người nhận thành `role = 'leader'` và đặt `can_organize_meetings = false` (gán leader mới sau, tuân thủ `uq_group_members_one_leader_per_group`). |
-| **Trưởng nhóm rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Đếm số thành viên nhóm. Nếu còn thành viên khác, bắt buộc có `successorId` hợp lệ là một `member` khác của nhóm.<br>3. DELETE dòng `group_members` của Trưởng nhóm cũ trước (xóa vai trò leader cũ trước để không vi phạm partial unique index `uq_group_members_one_leader_per_group`).<br>4. UPDATE `group_members` của `successorId` thành `role = 'leader'` và `can_organize_meetings = false`.<br>5. Xử lý quyền ủy quyền họp (tự mất do xóa dòng `group_members`) và chuyển thẻ Kanban TV5 đang giao cho người này về trạng thái chưa giao (`assigned_to_user_id = NULL`); phản hồi lời mời họp của người rời nhóm (U033, U034) do TV4 xử lý trong cùng transaction. |
+| **Trưởng nhóm rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Đếm số thành viên nhóm. Nếu còn thành viên khác, bắt buộc có `successorId` hợp lệ là một `member` khác của nhóm.<br>3. UPDATE `group_members` của Trưởng nhóm cũ thành `role = 'member'` (hạ vai trò leader cũ trước để không vi phạm partial unique index `uq_group_members_one_leader_per_group`).<br>4. UPDATE `group_members` của `successorId` thành `role = 'leader'` và `can_organize_meetings = false` (gán leader mới sau).<br>5. DELETE dòng `group_members` của Trưởng nhóm cũ.<br>6. Xử lý dọn dữ liệu liên module: quyền ủy quyền họp tự mất; chuyển các thẻ Kanban TV5 đang giao cho người này về trạng thái chưa giao (`assigned_to_user_id = NULL`); phản hồi lời mời họp của người rời nhóm (U033, U034) do TV4 xử lý lọc theo thành viên hiện tại trong cùng transaction. |
 | **Thành viên thường rời nhóm (US-07, U007)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác minh người thực hiện là `member`.<br>3. DELETE dòng `group_members` của thành viên.<br>4. Quyền ủy quyền họp `can_organize_meetings` tự mất; các thẻ Kanban TV5 được giao cho người này được chuyển về trạng thái chưa giao (`assigned_to_user_id = NULL`); phản hồi lời mời họp của người rời nhóm (U033, U034) do TV4 xử lý trong cùng transaction. |
 | **Thành viên cuối cùng rời nhóm (US-07, U007, mục 4.8)** | 1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.<br>2. Xác nhận số lượng thành viên nhóm bằng 1.<br>3. DELETE dòng `groups`. Khóa ngoại `ON DELETE CASCADE` tự động xóa dòng `group_members` cuối cùng, dòng `invitation_links` và toàn bộ dữ liệu riêng của nhóm (thẻ Kanban TV5, đề xuất họp TV4).<br>4. Toàn bộ lịch cá nhân (`fixed_events`), việc cần làm (`tasks`) và khung giờ học (`study_slots`) của người dùng được giữ nguyên hoàn toàn (mục 1.5, 4.8). |
 | **Tham gia nhóm bằng liên kết mời (US-05, U005)** | 1. Khóa chia sẻ dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR SHARE;` (kiểm tra nhóm còn tồn tại; nếu nhóm vừa bị xóa bởi thành viên cuối cùng rời nhóm thì trả 404 NOT_FOUND thay vì lỗi khóa ngoại 500).<br>2. INSERT vào `group_members` với `group_id`, `user_id`, `role = 'member'`, `can_organize_meetings = false` kèm `ON CONFLICT (group_id, user_id) DO NOTHING`. |
@@ -357,7 +338,7 @@ Quy trình lấy hoặc tạo liên kết mời (`POST /api/groups/{groupId}/inv
 
 <!-- TV2:BEGIN -->
 
-Trạng thái: Nháp · Người viết: Hưng · Người review: Thư H.A. · Cập nhật: 11/11/2026
+Trạng thái: Đã tích hợp (Chờ review) · Người viết: Hưng · Người review: Thư H.A. · Cập nhật: 13/11/2026
 
 Phạm vi: US-08 đến US-15 (Use Case U011 đến U015, mục 3.2.1 Bảng 3.2 yêu cầu 2.1 đến 2.12 của Báo cáo Yêu cầu M2). Module TV2 quản lý các thực thể: sự kiện cố định (`fixed_events`), việc cần làm (`tasks`, dùng chung với TV3 theo quy ước #57), quy tắc lặp (`recurring_rules`) và nhật ký tệp nạp (`imported_files`).
 
@@ -387,7 +368,7 @@ Ghi chú:
 - Chỉ mục (bắt buộc cho toàn bộ khóa ngoại và truy vấn thời gian; mọi tên định danh <= 63 byte):
   - `idx_fixed_events_user_id_starts_at` (34 byte) trên `(user_id, starts_at ASC)`: phục vụ truy vấn lịch cá nhân theo khoảng thời gian tuần, kiểm tra va chạm trùng lịch cố định (BR-01) và tìm kiếm giờ rảnh chung cho TV4.
   - `idx_fixed_events_recurring_rule_id` (34 byte) trên `(recurring_rule_id)`: lập chỉ mục cho khóa ngoại `recurring_rule_id` (`ON DELETE SET NULL`) phục vụ quản lý và cập nhật/xóa theo chuỗi sự kiện lặp.
-  - `idx_fixed_events_imported_file_id` (32 byte) trên `(imported_file_id)`: lập chỉ mục cho khóa ngoại `imported_file_id` (`ON DELETE SET NULL`) phục vụ tra cứu các sự kiện theo đợt nạp tệp.
+  - `idx_fixed_events_imported_file_id` (33 byte) trên `(imported_file_id)`: lập chỉ mục cho khóa ngoại `imported_file_id` (`ON DELETE SET NULL`) phục vụ tra cứu các sự kiện theo đợt nạp tệp.
 - Ràng buộc và Trigger: Ràng buộc `ck_fixed_events_ends_after_starts` bắt buộc thời gian kết thúc phải sau thời gian bắt đầu ($ends\_at > starts\_at$). Trigger `trg_fixed_events_set_updated_at` gọi hàm `set_updated_at()` cập nhật `updated_at` tự động.
 - Quy tắc xóa: Xóa thật khỏi CSDL khi sinh viên xóa sự kiện (US-12, mục 1.5).
 - Tiêu chuẩn sắp xếp tất định: Các truy vấn lấy sự kiện áp dụng `ORDER BY starts_at ASC, ends_at ASC, id ASC` để đảm bảo thứ tự dữ liệu hoàn toàn nhất quán.
@@ -414,10 +395,10 @@ Quyền riêng tư: Việc cần làm là dữ liệu cá nhân riêng tư tuy�
 Ghi chú:
 - Bảng `tasks` thuộc quyền quản lý trực tiếp của TV2 (nghiệp vụ U012), nhưng được TV3 đọc để thuật toán xếp lịch tự động phân bổ các khung giờ học (`study_slots`).
 - Chỉ mục (bắt buộc cho khóa ngoại và các trường lọc/sắp xếp; mọi tên định danh <= 63 byte):
-  - `idx_tasks_user_id_due_at` (25 byte) trên `(user_id, due_at ASC)`: lập chỉ mục cho khóa ngoại `user_id`, phục vụ truy vấn danh sách việc cần làm sắp xếp theo hạn chót và nạp dữ liệu đầu vào cho thuật toán xếp lịch TV3.
+  - `idx_tasks_user_id_due_at` (24 byte) trên `(user_id, due_at ASC)`: lập chỉ mục cho khóa ngoại `user_id`, phục vụ truy vấn danh sách việc cần làm sắp xếp theo hạn chót và nạp dữ liệu đầu vào cho thuật toán xếp lịch TV3.
   - `idx_tasks_user_id_is_done` (25 byte) trên `(user_id, is_done)`: hỗ trợ lọc nhanh các việc chưa hoàn thành (`is_done = false`).
 - Quy tắc sắp xếp tất định: Danh sách việc cần làm áp dụng `ORDER BY due_at ASC, created_at ASC, id ASC` để tránh hiện tượng hoán đổi thứ tự giữa các lần truy vấn.
-- Quy tắc xóa (mục 1.5, #56, #57): Xóa thật khỏi CSDL khi sinh viên xóa việc (US-12, mục 1.5). Khi việc bị xóa, các khung giờ học đề xuất (`study_slots`) liên kết với việc này sẽ được cập nhật trường `task_id = NULL` (ON DELETE SET NULL) và giữ nguyên khung học trên lịch với nhãn hiển thị "Việc đã xóa" (theo quy ước #56 và #57). Trigger `trg_tasks_set_updated_at` tự động cập nhật `updated_at`.
+- Quy tắc xóa (mục 1.5, #56, #57, TV2-TV3-TV4): Xóa thật khỏi CSDL khi sinh viên xóa việc (US-12, mục 1.5). Khi việc bị xóa, giao dịch xóa thực hiện đồng thời: (1) xóa các khung giờ học đề xuất (`study_slots`) đang chờ (`status = 'proposed'`) và các khung đã xếp (`status = 'scheduled'`) chưa bắt đầu; (2) các khung đã học (`studied`) và bỏ lỡ (`missed`) trong quá khứ được giữ lại với `task_id = NULL` (qua `ON DELETE SET NULL`) để phục vụ thống kê tuần của TV5 (US-33, yêu cầu 3.19, #56, #57) kèm nhãn hiển thị "Việc đã xóa"; (3) toàn bộ thông báo nhắc việc (`reminders`) gắn với việc này tự động bị xóa qua khóa ngoại `ON DELETE CASCADE` (U035: không gửi nhắc việc cho việc đã xóa). Trigger `trg_tasks_set_updated_at` tự động cập nhật `updated_at`.
 
 #### recurring_rules
 
@@ -456,11 +437,13 @@ Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở h�
 | total_events | integer | Không | CHECK `ck_imported_files_total_events`: `total_events >= 0` | `0` | Tổng số sự kiện cố định được phân tích và lưu thành công vào CSDL từ tệp này |
 | status | varchar(30) | Không | CHECK `ck_imported_files_status`: `status IN ('success', 'failed')` | `'success'` | Trạng thái xử lý tệp (`success`: thành công, `failed`: thất bại; dự phòng cho xử lý nền) |
 | created_at | timestamptz | Không | | now() | Thời điểm sinh viên nạp tệp vào hệ thống (UTC, BR-07) |
+| updated_at | timestamptz | Không | Trigger `trg_imported_files_set_updated_at` | now() | Thời điểm sửa bản ghi gần nhất (UTC, BR-07) |
 
 Quyền riêng tư: Dữ liệu nhật ký cá nhân của tài khoản sinh viên, không chia sẻ cho người khác trong nhóm (BR-02).  
 Ghi chú:
 - Ý nghĩa giá trị `'failed'` của cột `status`: Được thiết kế dự phòng cho kịch bản nạp tệp bất đồng bộ qua hàng đợi nền (background queue) trong tương lai. Ở luồng API đồng bộ hiện tại của TV2, theo nguyên tắc dừng ngắt BR-06 (Atomic Rejection), nếu tệp có bất kỳ lỗi định dạng hay dòng sai sót nào thì toàn bộ database transaction bị hủy bỏ (rollback) và không lưu bất kỳ bản ghi nào vào CSDL, do đó các bản ghi nhật ký nạp tệp được lưu thành công ở luồng đồng bộ hiện tại luôn mang trạng thái `'success'`.
-- Chỉ mục (mọi tên định danh <= 63 byte): `idx_imported_files_user_id_created_at` (38 byte) trên `(user_id, created_at DESC)` hỗ trợ truy vấn hiển thị lịch sử nạp tệp của người dùng theo thứ tự thời gian mới nhất.
+- Chỉ mục (mọi tên định danh <= 63 byte): `idx_imported_files_user_id_created_at` (37 byte) trên `(user_id, created_at DESC)` hỗ trợ truy vấn hiển thị lịch sử nạp tệp của người dùng theo thứ tự thời gian mới nhất.
+- Trigger: `trg_imported_files_set_updated_at` (33 byte) gọi hàm `set_updated_at()` cập nhật `updated_at` tự động tuân thủ chuẩn Cột chung của Template 8.
 - Khi người dùng xóa nhật ký nạp tệp, các sự kiện đã lưu trong `fixed_events` được giữ nguyên và `imported_file_id` được đặt `SET NULL`.
 
 #### Giao dịch TV2 nhiều bảng (Database Transactions)
@@ -470,7 +453,7 @@ Các thao tác sau tác động trên nhiều bảng hoặc đòi hỏi tính ng
 | Nghiệp vụ | Thao tác nguyên tử trong 1 Transaction |
 | --- | --- |
 | **Nạp tệp lịch nguyên tử (Atomic File Rejection - BR-06, US-11, US-15)** | 1. Đọc và kiểm tra toàn bộ tệp (kiểm tra dung lượng $\le 5\text{ MB}$ theo BR-05, kiểm tra cấu trúc RFC 5545 / RFC 4180, kiểm tra logic thời gian $ends\_at > starts\_at$, kiểm tra độ dài tên $\le 200$ ký tự theo BR-08).<br>2. Nếu phát hiện bất kỳ lỗi nào, **hủy bỏ toàn bộ**, không ghi bất kỳ dòng nào vào CSDL, phản hồi HTTP 422 kèm danh sách tối đa 20 dòng lỗi đầu tiên (BR-06).<br>3. Nếu tệp hoàn toàn hợp lệ: Mở Transaction $\rightarrow$ INSERT 1 dòng vào `imported_files` $\rightarrow$ INSERT các dòng vào `recurring_rules` (nếu có sự kiện lặp) $\rightarrow$ BATCH INSERT toàn bộ sự kiện vào `fixed_events` (gắn `imported_file_id` và `recurring_rule_id`) $\rightarrow$ Commit Transaction.<br>*(Bảo đảm nguyên tắc Atomic Rejection: hoặc toàn bộ sự kiện được lưu, hoặc không có bản ghi rác nào lọt vào CSDL).* |
-| **Xóa việc cần làm có khung giờ học liên kết (US-12, #56, #57)** | 1. Mở Transaction.<br>2. UPDATE các dòng `study_slots` có `task_id = $1` đặt thành `task_id = NULL`.<br>3. DELETE dòng `tasks` có `id = $1`.<br>4. Commit Transaction.<br>*(Bảo đảm các khung học đã xếp của TV3 không bị lỗi vi phạm khóa ngoại mà hiển thị nhãn "Việc đã xóa" theo quy ước #56 và #57).* |
+| **Xóa việc cần làm có khung giờ học liên kết (US-12, #56, #57, TV2-TV3-TV4)** | 1. Mở Transaction.<br>2. DELETE các dòng `study_slots` có `task_id = $1` và (`status = 'proposed'` HOẶC (`status = 'scheduled'` VÀ `starts_at > now()`)).<br>3. UPDATE các dòng `study_slots` còn lại (`status IN ('studied', 'missed')`) có `task_id = $1` đặt thành `task_id = NULL`.<br>4. DELETE dòng `tasks` có `id = $1`. Khóa ngoại `fk_reminders_task_id` (`ON DELETE CASCADE`) tự động xóa sạch các nhắc việc liên quan ở TV4.<br>5. Commit Transaction.<br>*(Bảo đảm dọn sạch khung học tương lai và nhắc việc, giữ nguyên khung đã học/bỏ lỡ cho thống kê và tránh vi phạm khóa ngoại).* |
 | **Xóa chuỗi sự kiện lặp (U011, US-12, DELETE /api/events/{eventId}?scope=all)** | Khi người dùng xác nhận xóa toàn bộ chuỗi lặp (`scope=all`): Mở Transaction $\rightarrow$ DELETE toàn bộ các dòng `fixed_events` có `recurring_rule_id = $1` $\rightarrow$ DELETE dòng `recurring_rules` có `id = $1` $\rightarrow$ Commit Transaction. |
 
 #### Dữ liệu mẫu TV2
@@ -499,9 +482,9 @@ Bảng 3.2: Dữ liệu mẫu minh họa các bảng Module TV2
 
 *Bảng `imported_files`:*
 
-| id | user_id | file_name | file_format | file_size_bytes | total_events | status | created_at |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `44444444-5555-4666-8777-888888888888` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `thoi_khoa_bieu_hoc_ky_1.ics` | `ics` | `24576` | `7` | `success` | `2026-11-11 03:30:00+00` |
+| id | user_id | file_name | file_format | file_size_bytes | total_events | status | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `44444444-5555-4666-8777-888888888888` | `0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10` | `thoi_khoa_bieu_hoc_ky_1.ics` | `ics` | `24576` | `7` | `success` | `2026-11-11 03:30:00+00` | `2026-11-11 03:30:00+00` |
 
 <!-- TV2:END -->
 
@@ -509,7 +492,7 @@ Bảng 3.2: Dữ liệu mẫu minh họa các bảng Module TV2
 
 ### TV3 – Đề xuất khung giờ học
 
-Trạng thái: Nháp · Người viết: Nhi · Người review: Hưng · Cập nhật: 12/11/2026
+Trạng thái: Đã tích hợp (Chờ review) · Người viết: Nhi · Người review: Thư H.A. · Cập nhật: 13/11/2026
 
 Phạm vi: US-17 đến US-22 (Use Case U021 đến U024, yêu cầu 3.1 đến 3.21 của báo cáo Yêu cầu M2). Module TV3 sở hữu hai bảng: lượt đề xuất đang chờ sinh viên xác nhận (`schedule_proposals`) và khung giờ học (`study_slots`). TV3 chỉ đọc `tasks` (bảng của TV2, xem vùng TV2) và `starts_at`, `ends_at` của `fixed_events` của chính sinh viên.
 
@@ -527,7 +510,7 @@ Phạm vi: US-17 đến US-22 (Use Case U021 đến U024, yêu cầu 3.1 đến 
 #### schedule_proposals
 
 Mô tả: Mỗi dòng là một lượt đề xuất của hệ thống: đề xuất xếp lịch (US-17), khung giờ bù (US-20) hoặc tái xếp lịch (US-21). Các khung trong lượt đề xuất là các dòng `study_slots` có `status = 'proposed'` trỏ về lượt này (thực thể: Lượt đề xuất xếp lịch).  
-Module: TV3 · Migration tạo bảng: `<sẽ điền khi làm migration>` · Người sở hữu: Nhi  
+Module: TV3 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Nhi  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -542,13 +525,14 @@ Module: TV3 · Migration tạo bảng: `<sẽ điền khi làm migration>` · Ng
 Quyền riêng tư: Dữ liệu cá nhân, chỉ chủ tài khoản (`user_id`) đọc được; không trả cho thành viên khác trong nhóm (BR-02, mục 1.7).  
 Ghi chú:
 - Chỉ mục: `uq_schedule_proposals_user_id_pending` (chỉ mục duy nhất một phần) trên `(user_id)` với điều kiện `WHERE status = 'pending'`: mỗi sinh viên chỉ có một lượt đề xuất đang chờ. Tạo lượt mới thì lượt đang chờ cũ chuyển `outdated` trong cùng transaction. Chỉ mục này cũng là chỉ mục cho khóa ngoại `user_id` khi tra lượt đang chờ; thêm `idx_schedule_proposals_user_id` trên `(user_id)` để tra lịch sử. `idx_schedule_proposals_missed_slot_id` trên `(missed_slot_id)`.
-- Lượt đề xuất đã xử lý (`accepted`, `rejected`, `outdated`) được giữ lại để chống lưu trùng khi bấm hai lần (yêu cầu 3.8, 3.13). Chưa có việc dọn dữ liệu cũ trong phạm vi hiện tại.
+- Lượt đề xuất đã xử lý (`accepted`, `rejected`, `outdated`) được giữ lại để chống lưu trùng khi bấm hai lần (yêu cầu 3.8, 3.13). Không có ràng buộc UNIQUE trên `missed_slot_id`, do đó một khung bỏ lỡ có thể có nhiều lượt đề xuất bù trong lịch sử nếu các lượt trước bị từ chối hoặc hết hạn (`1 - N`).
+- Lưu ý ràng buộc `ON DELETE CASCADE` của `missed_slot_id`: Khóa ngoại `fk_schedule_proposals_missed_slot_id` sử dụng `ON DELETE CASCADE`. Nếu một khung `study_slots` ở trạng thái `missed` bị xóa, đề xuất `makeup` tương ứng sẽ bị xóa theo CASCADE. Khi đó, các khung `study_slots` mang trạng thái `proposed` được liên kết với đề xuất bù đó (`proposal_id`) sẽ bị đặt `proposal_id = NULL` (do `fk_study_slots_proposal_id` dùng `ON DELETE SET NULL`), dẫn đến vi phạm ràng buộc CHECK `ck_study_slots_proposal_required` (khung `proposed` bắt buộc phải có `proposal_id`). Vì vậy, khi thực hiện xóa một khung `missed`, ứng dụng bắt buộc phải chủ động xóa toàn bộ các khung `proposed` của đề xuất bù trước trong cùng transaction.
 - Gắn trigger `trg_schedule_proposals_set_updated_at` gọi `set_updated_at()`.
 
 #### study_slots
 
 Mô tả: Mỗi dòng là một khung giờ học của một sinh viên cho một việc cần làm: khung đề xuất đang chờ, khung "Đã xếp", "Đã học" hoặc "Bỏ lỡ" (thực thể: Khung giờ học đề xuất).  
-Module: TV3 · Migration tạo bảng: `<sẽ điền khi làm migration>` · Người sở hữu: Nhi  
+Module: TV3 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Nhi  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -610,12 +594,14 @@ Bảng 3.3: Dữ liệu mẫu minh họa các bảng Module TV3 (dùng lại `us
 
 ### TV4 – Họp nhóm, lời mời và nhắc việc
 
+Trạng thái: Đã tích hợp (Chờ review) · Người viết: Thư Q.A. · Người review: Thư H.A. · Cập nhật: 13/11/2026
+
 <!-- Vùng của TV4: chỉ sửa trong vùng này để tránh xung đột khi merge. -->
 
 #### meeting_proposals
 
 Mô tả: Mỗi dòng là một đề xuất buổi họp nhóm do Người tổ chức họp tạo ra sau khi tìm giờ rảnh chung, ghi lại khung giờ được chọn để gửi lời mời đến các thành viên (US-23, U031, U032).  
-Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -629,13 +615,14 @@ Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · N
 | location | text | Có | | NULL | Địa điểm họp (tùy chọn; cho phép rỗng vì người tổ chức không bắt buộc nhập) |
 | notes | text | Có | | NULL | Ghi chú thêm cho buổi họp (tùy chọn; cho phép rỗng) |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo (UTC) |
-| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+| updated_at | timestamptz | Không | Trigger `trg_meeting_proposals_set_updated_at` | now() | Thời điểm sửa gần nhất (UTC) |
 
 Quyền riêng tư: Không có cột nào chứa dữ liệu lịch cá nhân của thành viên; bảng này chỉ lưu thông tin do Người tổ chức họp nhập vào và trả được cho mọi thành viên nhóm. Dữ liệu lịch cá nhân dùng để tìm giờ họp được truy vấn trực tiếp từ `fixed_events` và chỉ lấy `starts_at`, `ends_at` (BR-02, mục 1.7).  
 Ghi chú: 
-- Chỉ mục: `idx_meeting_proposals_group_id_starts_at` (38 byte) trên `(group_id, starts_at)` để tra danh sách đề xuất theo nhóm và sắp theo thời gian; `idx_meeting_proposals_organizer_user_id` (40 byte) trên `(organizer_user_id)` lập chỉ mục cho khóa ngoại `organizer_user_id` (ON DELETE RESTRICT, mục 1.3).
-- Trigger `trg_meeting_proposals_set_updated_at` gọi hàm `set_updated_at()`.
-- Xóa thật khi nhóm bị xóa (CASCADE từ `group_id`); trong phạm vi nhóm còn tồn tại, Người tổ chức họp có thể hủy đề xuất bằng cách đổi `status` thành `'cancelled'` thay vì xóa, để lưu vết lịch sử. Trạng thái `'confirmed'` được đặt khi Người tổ chức họp xác nhận buổi họp (U032). Lời mời cũ của đề xuất bị thay thế chuyển sang `'superseded'` tại bảng `meeting_invitations` (xem ghi chú bảng đó, U032).
+- Chỉ mục: `idx_meeting_proposals_group_id_starts_at` (40 byte) trên `(group_id, starts_at)` để tra danh sách đề xuất theo nhóm và sắp theo thời gian; `idx_meeting_proposals_organizer_user_id` (39 byte) trên `(organizer_user_id)` lập chỉ mục cho khóa ngoại `organizer_user_id` (ON DELETE RESTRICT, mục 1.3).
+- Trigger `trg_meeting_proposals_set_updated_at` (36 byte) gọi hàm `set_updated_at()`.
+- Xóa thật khi nhóm bị xóa (CASCADE từ `group_id`); trong phạm vi nhóm còn tồn tại, Người tổ chức họp có thể hủy đề xuất bằng cách đổi `status` thành `'cancelled'` thay vì xóa, để lưu vết lịch sử. Trạng thái `'confirmed'` được đặt khi Người tổ chức họp xác nhận buổi họp (U032).
+- Khả năng cùng tồn tại nhiều đề xuất: Trong một nhóm có thể tồn tại nhiều đề xuất mang trạng thái `open` độc lập cùng lúc (ví dụ một buổi họp đồ án định kỳ và một buổi họp khẩn cấp). Việc thay thế (`superseded`) chỉ xảy ra đối với các lời mời của một đề xuất cụ thể khi Người tổ chức họp chủ động phát hành đề xuất mới thay thế đề xuất đó (U032), hoặc khi đề xuất bị hủy (`cancelled`).
 
 Dữ liệu mẫu (cùng nhóm `7d2c9a51-...` và hai người dùng `0b8f6f5e-...`, `5c1e8d27-...` với dữ liệu mẫu TV5; nạp sau `users`, `groups`, `group_members`):
 
@@ -648,20 +635,24 @@ Dữ liệu mẫu (cùng nhóm `7d2c9a51-...` và hai người dùng `0b8f6f5e-.
 #### meeting_invitations
 
 Mô tả: Mỗi dòng là một lời mời gửi đến một thành viên nhóm cho một đề xuất buổi họp cụ thể, lưu trạng thái phản hồi của thành viên đó (U032, U033, U034, U036).  
-Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
 | id | uuid | Không | Khóa chính (`pk_meeting_invitations`) | gen_random_uuid() | Mã lời mời |
-| meeting_proposal_id | uuid | Không | Khóa ngoại `fk_meeting_invitations_meeting_proposal_id` → `meeting_proposals.id` (`ON DELETE CASCADE`); Duy nhất `uq_meeting_invitations_proposal_user`: `(meeting_proposal_id, user_id)` | | Đề xuất buổi họp liên kết; khi đề xuất bị xóa thì xóa toàn bộ lời mời |
+| meeting_proposal_id | uuid | Không | Khóa ngoại `fk_meeting_invitations_meeting_proposal_id` → `meeting_proposals.id` (`ON DELETE CASCADE`); Duy nhất `uq_meeting_invitations_meeting_proposal_id_user_id`: `(meeting_proposal_id, user_id)` | | Đề xuất buổi họp liên kết; khi đề xuất bị xóa thì xóa toàn bộ lời mời |
 | user_id | uuid | Không | Khóa ngoại `fk_meeting_invitations_user_id` → `users.id` (`ON DELETE RESTRICT`) | | Thành viên được mời; dùng RESTRICT vì tài khoản không bị xóa trong phạm vi hiện tại |
 | status | varchar(30) | Không | CHECK `ck_meeting_invitations_status`: `status IN ('pending', 'accepted', 'declined', 'superseded')` | `'pending'` | Trạng thái lời mời: `pending` – chờ phản hồi; `accepted` – đã chấp nhận; `declined` – đã từ chối; `superseded` – đã thay thế bởi đề xuất mới (U032) |
 | responded_at | timestamptz | Có | | NULL | Thời điểm thành viên phản hồi lần cuối (UTC); NULL khi chưa phản hồi |
 | created_at | timestamptz | Không | | now() | Thời điểm tạo lời mời (UTC) |
-| updated_at | timestamptz | Không | | now() | Thời điểm sửa gần nhất (UTC) |
+| updated_at | timestamptz | Không | Trigger `trg_meeting_invitations_set_updated_at` | now() | Thời điểm sửa gần nhất (UTC) |
 
 Quyền riêng tư: Không có cột dữ liệu lịch cá nhân; `status` phản hồi của từng thành viên là thông tin của buổi họp nhóm, trả được cho Người tổ chức họp. Danh sách thành viên đã chấp nhận/từ chối không trả tên sự kiện cá nhân (BR-02).  
-Ghi chú: Chỉ mục `idx_meeting_invitations_meeting_proposal_id` trên `(meeting_proposal_id)` để tra lời mời theo đề xuất; chỉ mục `idx_meeting_invitations_user_id` trên `(user_id)` để tra lời mời của một thành viên. Trigger `trg_meeting_invitations_set_updated_at` gọi hàm `set_updated_at()`. Ràng buộc duy nhất `uq_meeting_invitations_proposal_user` đảm bảo mỗi thành viên chỉ có một dòng lời mời cho mỗi đề xuất (U032: khi gửi đề xuất mới, lời mời cũ cùng thành viên chuyển sang `superseded`, tạo lời mời mới với `pending`). Khi thành viên rời nhóm, ứng dụng loại dòng `meeting_invitations` của người đó khỏi tổng lời mời đang mở của đề xuất (`status = 'pending'` hoặc `'accepted'` → không tính vào quorum), không xóa dòng vì khóa ngoại `user_id` dùng RESTRICT; ứng dụng thực hiện logic này cùng lúc xóa dòng `group_members` trong một transaction (U033, U034, U036, mục 1.5).
+Ghi chú:
+- Bản số: Mối quan hệ từ `meeting_proposals` đến `meeting_invitations` có bản số là `1 : 0..*` (Bảng 4.1 STT 18) vì Người tổ chức họp không tự gửi lời mời cho chính mình; nhóm 1 người mới lập có 0 lời mời.
+- Chỉ mục: `idx_meeting_invitations_meeting_proposal_id` (43 byte) trên `(meeting_proposal_id)` để tra lời mời theo đề xuất; `idx_meeting_invitations_user_id` (30 byte) trên `(user_id)` để tra lời mời của một thành viên. Trigger `trg_meeting_invitations_set_updated_at` (37 byte) gọi hàm `set_updated_at()`.
+- Ràng buộc duy nhất `uq_meeting_invitations_meeting_proposal_id_user_id` (50 byte <= 63 byte) đảm bảo mỗi thành viên chỉ có một dòng lời mời cho mỗi đề xuất (U032: khi gửi đề xuất mới thay thế, lời mời cũ cùng thành viên chuyển sang `superseded`, tạo lời mời mới với `pending`).
+- Xử lý khi thành viên rời nhóm (US-07, U033, U034, U036, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT`, do đó khi thành viên rời nhóm, các bản ghi `meeting_invitations` của người đó vẫn được giữ lại làm dữ liệu lịch sử kiểm toán. Khi tính toán tỷ lệ tham gia (quorum) để chốt buổi họp hoặc khi truy vấn danh sách lời mời của người dùng (`GET /api/users/me/meeting-invitations`), ứng dụng chỉ lọc trên các thành viên hiện tại của nhóm thông qua điều kiện `WHERE user_id IN (SELECT user_id FROM group_members WHERE group_id = $1)`. Các lời mời của thành viên đã rời nhóm tự động không được tính vào quorum và không hiển thị trong danh sách hoạt động.
 
 Dữ liệu mẫu (3 lời mời của đề xuất `e1a2b3c4-...0003` ở bảng `meeting_proposals`, mỗi người được mời một dòng; người tổ chức `0b8f6f5e-...` không tự mời; `9e4a7c13-...` và `3f6b9d20-...` là hai thành viên nhóm khác, cần có sẵn trong `users` và `group_members` khi nạp):
 
@@ -674,7 +665,7 @@ Dữ liệu mẫu (3 lời mời của đề xuất `e1a2b3c4-...0003` ở bản
 #### reminders
 
 Mô tả: Mỗi dòng là một lịch nhắc việc của người dùng gắn với một việc cần làm sắp đến hạn, lưu thời điểm sẽ gửi thông báo nhắc (U035).  
-Module: TV4 · Migration tạo bảng: `<sẽ điền khi tạo migration>` · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -705,14 +696,14 @@ Dữ liệu mẫu (`task_id` trỏ tới `tasks.id` của TV2, nên nạp sau `t
 
 <!-- TV5:BEGIN -->
 
-Trạng thái: Nháp · Người viết: Kiên · Người review: Hưng · Cập nhật: 10/11/2026
+Trạng thái: Đã tích hợp (Chờ review) · Người viết: Kiên · Người review: Thư H.A. · Cập nhật: 13/11/2026
 
 Phạm vi: US-29 đến US-34 (Use Case U041 đến U046, mục 3.2.1 Bảng 3.6 yêu cầu 5.1 đến 5.6 của Báo cáo Yêu cầu M2). Module TV5 sở hữu bảng `kanban_cards`; chức năng thống kê giờ học tuần (`US-33`, `U045`) đọc dữ liệu trực tiếp từ bảng `study_slots` của TV3 và không tạo bảng riêng.
 
 #### kanban_cards
 
 Mô tả: Mỗi dòng là một thẻ công việc trên bảng Kanban 3 cột cố định (`Cần làm`, `Đang làm`, `Đã xong`) của một nhóm đồ án (thực thể: Thẻ Kanban; `U041`–`U044`, `U046`). Thẻ Kanban lưu tên thẻ, hạn chót gồm ngày và giờ, người tạo và tối đa một người được giao; không có thời lượng ước tính (`BR-04`), không có mô tả riêng và không lưu thứ tự kéo thả thủ công (`position`).  
-Module: TV5 · Migration tạo bảng: Chưa tạo (sẽ tạo ở Sprint 1) · Người sở hữu: Kiên  
+Module: TV5 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Kiên  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -775,11 +766,11 @@ Bảng 4.1: Danh mục toàn bộ mối quan hệ giữa các bảng
 | 11 | `users` | `study_slots` | 1 - N | `study_slots.user_id` | 1 : 0..* | Một sinh viên sở hữu nhiều khung giờ học cá nhân trên lịch. |
 | 12 | `tasks` | `study_slots` | 1 - N | `study_slots.task_id` | 0..1 : 0..* | Một việc cần làm được chia thành nhiều khung giờ học; khi việc bị xóa, khung đã học/bỏ lỡ giữ `task_id = NULL`. |
 | 13 | `schedule_proposals` | `study_slots` | 1 - N | `study_slots.proposal_id` | 0..1 : 0..* | Một lượt đề xuất tạo ra một hoặc nhiều khung giờ học `proposed`. |
-| 14 | `study_slots` | `schedule_proposals` | 1 - 1 | `schedule_proposals.missed_slot_id` | 0..1 : 0..1 | Một khung học bị bỏ lỡ (`missed`) được bù bởi tối đa một lượt đề xuất loại `makeup` (khóa ngoại vòng). |
-| 15 | `study_slots` | `study_slots` | 1 - 1 | `study_slots.replaces_slot_id` | 0..1 : 0..1 | Tự tham chiếu nội bảng: Một khung giờ học mới thay thế một khung giờ học cũ trong lượt tái xếp lịch `replan`. |
+| 14 | `study_slots` | `schedule_proposals` | 1 - N | `schedule_proposals.missed_slot_id` | 0..1 : 0..* | Một khung học bị bỏ lỡ (`missed`) có thể có nhiều lượt đề xuất bù `makeup` trong lịch sử (khi các lượt trước bị `rejected` hoặc `outdated`), không có ràng buộc UNIQUE trên `missed_slot_id` (khóa ngoại vòng). |
+| 15 | `study_slots` | `study_slots` | 1 - N | `study_slots.replaces_slot_id` | 0..1 : 0..* | Tự tham chiếu nội bảng: Một khung giờ học cũ có thể được tham chiếu bởi nhiều khung giờ học đề xuất thay thế qua các lượt `replan` (không có ràng buộc UNIQUE trên `replaces_slot_id`). |
 | 16 | `groups` | `meeting_proposals` | 1 - N | `meeting_proposals.group_id` | 1 : 0..* | Một nhóm đồ án có thể tổ chức nhiều đề xuất buổi họp. |
 | 17 | `users` | `meeting_proposals` | 1 - N | `meeting_proposals.organizer_user_id` | 1 : 0..* | Một sinh viên với vai trò Người tổ chức họp tạo nhiều đề xuất buổi họp. |
-| 18 | `meeting_proposals` | `meeting_invitations` | 1 - N | `meeting_invitations.meeting_proposal_id` | 1 : 1..* | Một đề xuất buổi họp gửi lời mời đến nhiều thành viên trong nhóm.<br>*(Quan hệ giữa `meeting_proposals` và `users` là **N - N** thông qua bảng nối `meeting_invitations`).* |
+| 18 | `meeting_proposals` | `meeting_invitations` | 1 - N | `meeting_invitations.meeting_proposal_id` | 1 : 0..* | Một đề xuất buổi họp gửi lời mời đến các thành viên khác trong nhóm (Người tổ chức họp không tự mời; nhóm 1 người có 0 lời mời).<br>*(Quan hệ giữa `meeting_proposals` và `users` là **N - N** thông qua bảng nối `meeting_invitations`).* |
 | 19 | `users` | `meeting_invitations` | 1 - N | `meeting_invitations.user_id` | 1 : 0..* | Một sinh viên nhận và phản hồi nhiều lời mời họp từ các buổi họp nhóm. |
 | 20 | `tasks` | `reminders` | 1 - N | `reminders.task_id` | 1 : 0..* | Một việc cần làm có thể có nhiều mốc hẹn giờ nhắc việc trước hạn chót. |
 | 21 | `users` | `reminders` | 1 - N | `reminders.user_id` | 1 : 0..* | Một sinh viên nhận nhiều thông báo nhắc việc cá nhân. |
@@ -789,7 +780,7 @@ Bảng 4.1: Danh mục toàn bộ mối quan hệ giữa các bảng
 
 ### 4.2 Ma trận khóa ngoại và quy tắc toàn vẹn dữ liệu (ON DELETE)
 
-Toàn bộ **24 khóa ngoại** trong CSDL được đặt tên chuẩn xác theo mẫu `fk_<bảng_con>_<cột_fk>`, có độ dài từ 17 đến 43 byte (đảm bảo nghiêm ngặt giới hạn $\le 63\text{ byte}$ của PostgreSQL), và tuân thủ tuyệt đối quy tắc của Bảng 1.3:
+Toàn bộ **24 khóa ngoại** trong CSDL được đặt tên chuẩn xác theo mẫu `fk_<bảng_con>_<cột_fk>`, có độ dài từ 16 đến 42 byte (đảm bảo nghiêm ngặt giới hạn $\le 63\text{ byte}$ của PostgreSQL), và tuân thủ tuyệt đối quy tắc của Bảng 1.3:
 
 Bảng 4.2: Ma trận 24 khóa ngoại và quy tắc ON DELETE toàn hệ thống
 
@@ -798,21 +789,21 @@ Bảng 4.2: Ma trận 24 khóa ngoại và quy tắc ON DELETE toàn hệ thốn
 | 1 | `group_members` | `group_id` | `groups` | `id` | `fk_group_members_group_id` | **CASCADE** | `uq_group_members_group_id_user_id` (đứng đầu) | 25 |
 | 2 | `group_members` | `user_id` | `users` | `id` | `fk_group_members_user_id` | **RESTRICT** | `idx_group_members_user_id` | 24 |
 | 3 | `invitation_links` | `group_id` | `groups` | `id` | `fk_invitation_links_group_id` | **CASCADE** | `uq_invitation_links_group_id` | 28 |
-| 4 | `fixed_events` | `user_id` | `users` | `id` | `fk_fixed_events_user_id` | **RESTRICT** | `idx_fixed_events_user_id_starts_at` (đứng đầu) | 24 |
-| 5 | `fixed_events` | `recurring_rule_id` | `recurring_rules` | `id` | `fk_fixed_events_recurring_rule_id` | **SET NULL** | `idx_fixed_events_recurring_rule_id` | 34 |
+| 4 | `fixed_events` | `user_id` | `users` | `id` | `fk_fixed_events_user_id` | **RESTRICT** | `idx_fixed_events_user_id_starts_at` (đứng đầu) | 23 |
+| 5 | `fixed_events` | `recurring_rule_id` | `recurring_rules` | `id` | `fk_fixed_events_recurring_rule_id` | **SET NULL** | `idx_fixed_events_recurring_rule_id` | 33 |
 | 6 | `fixed_events` | `imported_file_id` | `imported_files` | `id` | `fk_fixed_events_imported_file_id` | **SET NULL** | `idx_fixed_events_imported_file_id` | 32 |
-| 7 | `tasks` | `user_id` | `users` | `id` | `fk_tasks_user_id` | **RESTRICT** | `idx_tasks_user_id_due_at` (đứng đầu) | 17 |
-| 8 | `recurring_rules` | `user_id` | `users` | `id` | `fk_recurring_rules_user_id` | **RESTRICT** | `idx_recurring_rules_user_id` | 27 |
-| 9 | `imported_files` | `user_id` | `users` | `id` | `fk_imported_files_user_id` | **RESTRICT** | `idx_imported_files_user_id_created_at` (đứng đầu) | 26 |
-| 10 | `schedule_proposals` | `user_id` | `users` | `id` | `fk_schedule_proposals_user_id` | **RESTRICT** | `idx_schedule_proposals_user_id`, `uq_..._pending` | 30 |
-| 11 | `schedule_proposals` | `missed_slot_id` | `study_slots` | `id` | `fk_schedule_proposals_missed_slot_id` | **CASCADE** | `idx_schedule_proposals_missed_slot_id` | 37 |
-| 12 | `study_slots` | `user_id` | `users` | `id` | `fk_study_slots_user_id` | **RESTRICT** | `idx_study_slots_user_id_starts_at` (đứng đầu) | 23 |
-| 13 | `study_slots` | `task_id` | `tasks` | `id` | `fk_study_slots_task_id` | **SET NULL** | `idx_study_slots_task_id` | 23 |
-| 14 | `study_slots` | `proposal_id` | `schedule_proposals` | `id` | `fk_study_slots_proposal_id` | **SET NULL** | `idx_study_slots_proposal_id` | 27 |
-| 15 | `study_slots` | `replaces_slot_id` | `study_slots` | `id` | `fk_study_slots_replaces_slot_id` | **SET NULL** | `idx_study_slots_replaces_slot_id` | 32 |
+| 7 | `tasks` | `user_id` | `users` | `id` | `fk_tasks_user_id` | **RESTRICT** | `idx_tasks_user_id_due_at` (đứng đầu) | 16 |
+| 8 | `recurring_rules` | `user_id` | `users` | `id` | `fk_recurring_rules_user_id` | **RESTRICT** | `idx_recurring_rules_user_id` | 26 |
+| 9 | `imported_files` | `user_id` | `users` | `id` | `fk_imported_files_user_id` | **RESTRICT** | `idx_imported_files_user_id_created_at` (đứng đầu) | 25 |
+| 10 | `schedule_proposals` | `user_id` | `users` | `id` | `fk_schedule_proposals_user_id` | **RESTRICT** | `idx_schedule_proposals_user_id`, `uq_..._pending` | 29 |
+| 11 | `schedule_proposals` | `missed_slot_id` | `study_slots` | `id` | `fk_schedule_proposals_missed_slot_id` | **CASCADE** | `idx_schedule_proposals_missed_slot_id` | 36 |
+| 12 | `study_slots` | `user_id` | `users` | `id` | `fk_study_slots_user_id` | **RESTRICT** | `idx_study_slots_user_id_starts_at` (đứng đầu) | 22 |
+| 13 | `study_slots` | `task_id` | `tasks` | `id` | `fk_study_slots_task_id` | **SET NULL** | `idx_study_slots_task_id` | 22 |
+| 14 | `study_slots` | `proposal_id` | `schedule_proposals` | `id` | `fk_study_slots_proposal_id` | **SET NULL** | `idx_study_slots_proposal_id` | 26 |
+| 15 | `study_slots` | `replaces_slot_id` | `study_slots` | `id` | `fk_study_slots_replaces_slot_id` | **SET NULL** | `idx_study_slots_replaces_slot_id` | 31 |
 | 16 | `meeting_proposals` | `group_id` | `groups` | `id` | `fk_meeting_proposals_group_id` | **CASCADE** | `idx_meeting_proposals_group_id_starts_at` (đứng đầu) | 29 |
 | 17 | `meeting_proposals` | `organizer_user_id` | `users` | `id` | `fk_meeting_proposals_organizer_user_id` | **RESTRICT** | `idx_meeting_proposals_organizer_user_id` | 38 |
-| 18 | `meeting_invitations` | `meeting_proposal_id` | `meeting_proposals` | `id` | `fk_meeting_invitations_meeting_proposal_id` | **CASCADE** | `idx_meeting_invitations_meeting_proposal_id` | 43 |
+| 18 | `meeting_invitations` | `meeting_proposal_id` | `meeting_proposals` | `id` | `fk_meeting_invitations_meeting_proposal_id` | **CASCADE** | `idx_meeting_invitations_meeting_proposal_id`, `uq_meeting_invitations_meeting_proposal_id_user_id` | 42 |
 | 19 | `meeting_invitations` | `user_id` | `users` | `id` | `fk_meeting_invitations_user_id` | **RESTRICT** | `idx_meeting_invitations_user_id` | 30 |
 | 20 | `reminders` | `task_id` | `tasks` | `id` | `fk_reminders_task_id` | **CASCADE** | `idx_reminders_task_id` | 20 |
 | 21 | `reminders` | `user_id` | `users` | `id` | `fk_reminders_user_id` | **RESTRICT** | `idx_reminders_user_id_remind_at` (đứng đầu) | 20 |
@@ -845,16 +836,24 @@ Bên cạnh các ràng buộc mức CSDL, các nghiệp vụ tác động xuyên
 
 1. **Rời nhóm và giải tán nhóm (US-07, U007 – TV1, TV4, TV5):**
    - **Thành viên thường rời nhóm:**
-     * TV1: Xóa bản ghi trong `group_members`. Quyền `can_organize_meetings` tự động mất.
+     * TV1: Khóa dòng nhóm `SELECT id FROM groups WHERE id = $1 FOR UPDATE`. Xóa bản ghi trong `group_members`. Quyền `can_organize_meetings` tự động mất.
      * TV5: Chạy `UPDATE kanban_cards SET assigned_to_user_id = NULL WHERE group_id = $1 AND assigned_to_user_id = $2` để trả các việc người này đang phụ trách về trạng thái chưa giao (`U043`). Thẻ do người này tạo (`created_by_user_id`) vẫn giữ nguyên trên bảng Kanban.
-     * TV4: Loại các lời mời họp đang mở của người này khỏi quorum tính toán (U033, U034); không xóa bản ghi `meeting_invitations` để giữ lịch sử.
-   - **Trưởng nhóm rời nhóm:** Bắt buộc chỉ định người kế nhiệm (`successorId`). Transaction thực hiện: Hạ vai trò leader cũ thành `member` trước $\rightarrow$ Nâng người kế nhiệm lên `leader` $\rightarrow$ Xóa dòng thành viên của Trưởng nhóm cũ $\rightarrow$ Thực hiện các bước dọn dữ liệu TV4, TV5 như thành viên thường. Trình tự này bảo đảm không bao giờ vi phạm chỉ mục duy nhất một phần `uq_group_members_one_leader_per_group`.
+     * TV4: Giữ lại bản ghi `meeting_invitations` làm dữ liệu lịch sử kiểm toán (`ON DELETE RESTRICT`). Khi tính toán tỷ lệ tham gia (quorum) để chốt buổi họp hoặc khi thành viên truy vấn danh sách lời mời của mình (`GET /api/users/me/meeting-invitations`), ứng dụng chỉ lọc trên các thành viên hiện tại của nhóm: `WHERE user_id IN (SELECT user_id FROM group_members WHERE group_id = $1)`.
+   - **Trưởng nhóm rời nhóm:** Bắt buộc chỉ định người kế nhiệm (`successorId`). Trình tự 6 bước trong transaction:
+     1. Khóa dòng nhóm: `SELECT id FROM groups WHERE id = $1 FOR UPDATE`.
+     2. Đếm số thành viên. Nếu còn thành viên khác, kiểm tra `successorId` hợp lệ.
+     3. Hạ Trưởng nhóm cũ thành thành viên thường: `UPDATE group_members SET role = 'member' WHERE group_id = $1 AND user_id = $currentLeaderId` (hạ leader cũ trước để không vi phạm partial unique index `uq_group_members_one_leader_per_group`).
+     4. Nâng người kế nhiệm lên Trưởng nhóm: `UPDATE group_members SET role = 'leader', can_organize_meetings = false WHERE group_id = $1 AND user_id = $successorId`.
+     5. Xóa dòng thành viên của Trưởng nhóm cũ: `DELETE FROM group_members WHERE group_id = $1 AND user_id = $currentLeaderId`.
+     6. Xử lý dữ liệu liên module: quyền ủy quyền họp tự mất; TV5 chuyển thẻ Kanban đang giao cho người rời về `assigned_to_user_id = NULL`; TV4 giữ lại các lời mời họp làm lịch sử và lọc quorum theo danh sách thành viên hiện tại.
    - **Thành viên cuối cùng rời nhóm:** Xóa bản ghi `groups`. Nhờ cơ chế `ON DELETE CASCADE`, CSDL tự động dọn sạch `group_members`, `invitation_links`, `kanban_cards`, `meeting_proposals`, `meeting_invitations`. Toàn bộ lịch cá nhân (`fixed_events`), việc cần làm (`tasks`) và khung giờ học (`study_slots`) của sinh viên được giữ nguyên hoàn toàn (mục 4.8).
 
 2. **Xóa hoặc hoàn thành việc cần làm (US-12, US-14 – TV2, TV3, TV4):**
-   - TV3: Xóa toàn bộ các khung giờ học đang chờ (`proposed`) và các khung đã xếp (`scheduled`) chưa bắt đầu gắn với `task_id` đó.
-   - TV3: Các khung đã học (`studied`) và bỏ lỡ (`missed`) được cập nhật `task_id = NULL` (thực hiện qua `ON DELETE SET NULL` hoặc update trước khi xóa task).
-   - TV4: Toàn bộ thông báo nhắc việc (`reminders`) gắn với `task_id` đó tự động bị xóa sạch qua `ON DELETE CASCADE` (U035).
+   - **Khi hoàn thành việc (`is_done = true`):** Các khung giờ học đã xếp được giữ nguyên. Nhắc việc (`reminders`) không bị xóa; các nhắc việc đã gửi (`is_sent = true`) lưu lịch sử, các nhắc việc chưa gửi sẽ không gửi thêm.
+   - **Khi xóa việc (`DELETE tasks`):**
+     * TV3: Xóa toàn bộ các khung giờ học đang chờ (`proposed`) và các khung đã xếp (`scheduled`) chưa bắt đầu (`starts_at > now()`) gắn với `task_id` đó trong cùng transaction.
+     * TV3: Các khung đã học (`studied`) và bỏ lỡ (`missed`) trong quá khứ được giữ lại với `task_id = NULL` (thực hiện qua `ON DELETE SET NULL`) để phục vụ thống kê tuần của TV5 (`US-33`, yêu cầu 3.19, #56, #57) kèm nhãn hiển thị "Việc đã xóa".
+     * TV4: Toàn bộ thông báo nhắc việc (`reminders`) gắn với `task_id` đó tự động bị xóa sạch qua `ON DELETE CASCADE` (U035: không gửi nhắc việc cho việc đã xóa).
 
 3. **Xử lý khóa ngoại vòng trong quy trình Migration (TV3):**
    - Giữa `schedule_proposals` và `study_slots` tồn tại cặp khóa ngoại chéo: `study_slots.proposal_id` $\rightarrow$ `schedule_proposals.id` và `schedule_proposals.missed_slot_id` $\rightarrow$ `study_slots.id`.
@@ -878,24 +877,24 @@ erDiagram
     groups ||--o| invitation_links : "sở hữu tối đa 1 (1:0..1)"
     
     users ||--o{ fixed_events : "sở hữu (1:N)"
-    recurring_rules ||--o{ fixed_events : "áp dụng (0..1:N)"
-    imported_files ||--o{ fixed_events : "nạp từ (0..1:N)"
+    recurring_rules |o--o{ fixed_events : "áp dụng (0..1:N)"
+    imported_files |o--o{ fixed_events : "nạp từ (0..1:N)"
     users ||--o{ recurring_rules : "tạo (1:N)"
     users ||--o{ imported_files : "nạp (1:N)"
     
     users ||--o{ tasks : "sở hữu (1:N)"
-    tasks ||--o{ study_slots : "phân bổ vào (0..1:N)"
+    tasks |o--o{ study_slots : "phân bổ vào (0..1:N)"
     tasks ||--o{ reminders : "hẹn nhắc (1:N)"
     
     users ||--o{ schedule_proposals : "nhận đề xuất (1:N)"
     users ||--o{ study_slots : "sở hữu (1:N)"
-    schedule_proposals ||--o{ study_slots : "đề xuất khung (0..1:N)"
-    study_slots |o--o| schedule_proposals : "bù cho khung lỡ (0..1:0..1)"
-    study_slots |o--o| study_slots : "thay thế slot cũ (0..1:0..1)"
+    schedule_proposals |o--o{ study_slots : "đề xuất khung (0..1:N)"
+    study_slots |o--o{ schedule_proposals : "bù cho khung lỡ (0..1:N)"
+    study_slots |o--o{ study_slots : "thay thế slot cũ (0..1:N)"
     
     groups ||--o{ meeting_proposals : "tổ chức (1:N)"
     users ||--o{ meeting_proposals : "chủ trì (organizer) (1:N)"
-    meeting_proposals ||--o{ meeting_invitations : "gửi lời mời (1:N)"
+    meeting_proposals ||--o{ meeting_invitations : "gửi lời mời (1:0..N)"
     users ||--o{ meeting_invitations : "nhận lời mời (1:N)"
     users ||--o{ reminders : "nhận nhắc việc (1:N)"
     
@@ -989,6 +988,7 @@ erDiagram
         integer total_events
         varchar status
         timestamptz created_at
+        timestamptz updated_at
     }
 
     schedule_proposals {
@@ -1075,7 +1075,7 @@ Bảng 4.3: Kiểm tra tuân thủ các quy tắc kỹ thuật và kiến trúc 
 | **BR-08 (Chuẩn hóa chuỗi tên)** | `NOT NULL`, dài $\ge 1$, cắt khoảng trắng hai đầu (`btrim`), lưu NFC | Đạt 100% | Các cột tên (`display_name`, `name`, `title`) đều có đủ hai CHECK `char_length >= 1` và `cột = btrim(cột)`. |
 | **Quy tắc khóa chính (1.3)** | Khóa chính là `id uuid DEFAULT gen_random_uuid()` | Đạt 100% | 14/14 bảng dùng UUID v4 làm khóa chính. Không dùng serial hay bigint. |
 | **Quy tắc chỉ mục khóa ngoại (1.3)** | Mọi cột khóa ngoại phải có chỉ mục hoặc đứng đầu chỉ mục duy nhất | Đạt 100% | Đã rà soát và có chỉ mục cho đầy đủ 24/24 khóa ngoại. |
-| **Giới hạn định danh PostgreSQL (1.6)** | Mọi tên PK, FK, UQ, CK, IDX, TRG phải $\le 63\text{ byte}$ | Đạt 100% | Tên định danh dài nhất là 43 byte (`idx_kanban_cards_group_id_due_at_created_at` và `fk_meeting_invitations_meeting_proposal_id`), hoàn toàn an toàn. |
+| **Giới hạn định danh PostgreSQL (1.6)** | Mọi tên PK, FK, UQ, CK, IDX, TRG phải $\le 63\text{ byte}$ | Đạt 100% | Toàn bộ 119 định danh đều $\le 63\text{ byte}$. Ràng buộc UNIQUE dài nhất là 50 byte (`uq_meeting_invitations_meeting_proposal_id_user_id`), chỉ mục dài nhất 43 byte (`idx_kanban_cards_group_id_due_at_created_at`, `idx_meeting_invitations_meeting_proposal_id`), khóa ngoại dài nhất 42 byte (`fk_meeting_invitations_meeting_proposal_id`), hoàn toàn an toàn. |
 | **Xóa sạch / Không xóa mềm (1.5)** | Không dùng `is_deleted` hay `deleted_at`; dọn sạch qua CASCADE | Đạt 100% | Không có cột xóa mềm trên bất kỳ bảng nào. Dọn dẹp hoàn toàn tự động qua CASCADE và transaction. |
 
 

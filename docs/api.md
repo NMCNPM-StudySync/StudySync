@@ -140,6 +140,7 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
 | TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
+| TV4 | `GET /api/users/me/meeting-invitations` | Lấy danh sách lời mời họp của sinh viên | Nháp |
 | TV4 | `GET /api/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn | Nháp |
 | TV5 | `GET /api/groups/{groupId}/cards` | Danh sách và lọc thẻ Kanban | Nháp |
 | TV5 | `POST /api/groups/{groupId}/cards` | Tạo thẻ Kanban mới | Nháp |
@@ -1814,7 +1815,7 @@ Phản hồi mã HTTP 204 No Content, body rỗng.
 | 404 | NOT_FOUND | Không tìm thấy việc cần làm, hoặc việc thuộc tài khoản khác |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
-Ghi chú: Khi việc cần làm bị xóa, các bản ghi khung giờ học đề xuất (`study_slots`) liên kết với việc này sẽ được cập nhật trường `task_id = NULL` (thực hiện trong cùng Database Transaction theo quy ước #56 và #57); giao diện hiển thị nhãn mặc định "Việc đã xóa".
+Ghi chú: Khi việc cần làm bị xóa, giao dịch xóa thực hiện đồng thời trong cùng Database Transaction: (1) xóa các khung giờ học đề xuất (`study_slots`) đang chờ (`status = 'proposed'`) và các khung đã xếp (`status = 'scheduled'`) chưa bắt đầu; (2) các khung đã học (`studied`) và bỏ lỡ (`missed`) trong quá khứ được giữ lại với `task_id = NULL` (thực hiện qua `ON DELETE SET NULL`) để phục vụ thống kê tuần của TV5 (US-33, yêu cầu 3.19, #56, #57) kèm nhãn hiển thị "Việc đã xóa"; (3) toàn bộ thông báo nhắc việc (`reminders`) gắn với việc này tự động bị xóa qua khóa ngoại `ON DELETE CASCADE` (U035: không gửi nhắc việc cho việc đã xóa).
 
 ---
 
@@ -1895,7 +1896,7 @@ Ghi chú: Lịch tuần được tính theo khoảng nửa mở 7 ngày `[weekSt
 
 1. **Xác nhận quyết định bảng `tasks` dùng chung với TV3 (quy ước #57 & PR #83):**
    - Bảng `tasks` thuộc quyền quản lý trực tiếp của TV2 (nghiệp vụ `U012`) nhưng đóng vai trò là dữ liệu đầu vào cốt lõi cho thuật toán xếp lịch tự động `study_slots` của TV3 (Nhi). Cột `duration_minutes` mặc định 60 phút (1 giờ) khi người dùng xóa trống hoặc không nhập (`BR-04`, quy ước `#57`).
-   - Khi sinh viên xóa một việc cần làm (`DELETE /api/tasks/{taskId}`), giao dịch xóa của TV2 tự động cập nhật các khung học liên kết trong CSDL thành `task_id = NULL` (mục 1.5, `#56`, `#57`), giữ nguyên các khung học đã xếp trên lịch với nhãn hiển thị mặc định "Việc đã xóa".
+   - Khi sinh viên xóa một việc cần làm (`DELETE /api/tasks/{taskId}`), giao dịch xóa thực hiện đồng thời: xóa các khung `proposed` và các khung `scheduled` chưa bắt đầu trong tương lai; giữ lại các khung `studied` và `missed` trong quá khứ với `task_id = NULL` (ON DELETE SET NULL) để bảo toàn dữ liệu thống kê tuần của TV5 (mục 1.5, #56, #57); đồng thời các nhắc việc (`reminders`) liên kết tự động bị xóa qua ON DELETE CASCADE (U035).
 2. **Tiêu chuẩn sắp xếp tất định (Sorting Determinism):**
    - Toàn bộ các endpoint trả về danh sách lịch và việc (`GET /api/events`, `GET /api/tasks`, `GET /api/schedule/week`) đều được gắn khóa chính `id ASC` làm tiêu chí tie-breaker phụ cuối cùng, đảm bảo dữ liệu hiển thị không bao giờ bị xáo trộn ngẫu nhiên giữa các lần truy vấn.
 3. **Cấu trúc cảnh báo khi import tệp có sự kiện trùng lịch (BR-01):**
@@ -2524,6 +2525,64 @@ Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); ch
 Ghi chú:
 - Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn đề xuất còn ở trạng thái `'open'`; mỗi lần phản hồi cập nhật `responded_at`.
 - Lời mời ở trạng thái `'superseded'` không được phản hồi (trả `409 CONFLICT`).
+
+---
+
+### `GET /api/users/me/meeting-invitations`
+
+Module: TV4 · Story: US-25 · Người viết: Thư Q.A. · Trạng thái: Nháp  
+Mô tả: Lấy danh sách các lời mời tham dự buổi họp nhóm gửi đến người dùng đang đăng nhập, kèm thông tin buổi họp và trạng thái phản hồi (U033).  
+Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chính `user_id` trong token; chỉ trả lời mời thuộc các nhóm mà người dùng hiện đang là thành viên hoạt động).
+
+**Tham số query**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+| --- | --- | --- | --- |
+| `status` | `string` | Không | Lọc theo trạng thái lời mời: `'pending'` (mặc định), `'accepted'`, `'declined'`, `'superseded'` hoặc `'all'` để lấy tất cả |
+| `groupId` | `uuid` | Không | Lọc lời mời theo nhóm cụ thể |
+| `limit` | `integer` | Không | Số lời mời tối đa trả về; mặc định `20`, tối đa `100` |
+
+**Nội dung gửi lên (body):** không có.
+
+**Kết quả thành công (200 OK)**
+
+```json
+{
+  "data": {
+    "invitations": [
+      {
+        "id": "883b1700-b52e-74g7-d049-779988773333",
+        "proposalId": "550e8400-e29b-41d4-a716-446655440000",
+        "groupId": "7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33",
+        "groupName": "Nhóm Đồ án CNPM",
+        "title": "Họp đồ án tuần 4",
+        "startsAt": "2026-11-10T01:00:00.000Z",
+        "endsAt": "2026-11-10T03:00:00.000Z",
+        "location": "Phòng họp B2",
+        "notes": "Chuẩn bị slide demo",
+        "proposalStatus": "open",
+        "organizerDisplayName": "Trần Thị B",
+        "status": "pending",
+        "respondedAt": null,
+        "createdAt": "2026-11-09T10:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Lỗi có thể gặp**
+
+| Mã HTTP | error.code | Điều kiện |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | `groupId` không đúng định dạng UUID, hoặc `status` không hợp lệ, hoặc `limit` vượt quá 100 |
+| `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
+
+Ghi chú:
+- Quy tắc bảo đảm toàn vẹn khi thành viên rời nhóm (US-07, U033, U034, U036, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT`, nên các bản ghi `meeting_invitations` vẫn được lưu trữ làm dữ liệu kiểm toán. Tuy nhiên, endpoint này **chỉ lọc và trả về các lời mời thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG**:
+  `WHERE user_id = $currentUserId AND group_id IN (SELECT group_id FROM group_members WHERE user_id = $currentUserId)`.
+  Nếu người dùng đã rời nhóm (hoặc bị mời ra khỏi nhóm), toàn bộ lời mời thuộc nhóm đó sẽ tự động bị ẩn khỏi danh sách này.
+- Tiêu chuẩn sắp xếp tất định: Sắp xếp theo `starts_at ASC, id ASC`.
 
 ---
 
