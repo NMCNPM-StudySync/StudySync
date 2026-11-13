@@ -2636,7 +2636,160 @@ Ghi chú:
 
 ---
 
-> **Sơ đồ tuần tự TV4** (nháp, bổ sung sau khi hoàn thiện task tài liệu)
+#### 1. Tìm giờ họp chung (U031, U036)
+
+Sơ đồ mô tả quy trình Người tổ chức họp (Trưởng nhóm hoặc Thành viên nhóm được Trưởng nhóm ủy quyền, U036) tìm khung giờ rảnh chung của nhóm: kiểm tra định dạng ở API, kiểm tra quyền theo CSDL nhóm ở Service, chỉ đọc `starts_at` và `ends_at` của `fixed_events` theo `BR-02`, gọi thư viện khoảng thời gian để hợp nhất khoảng bận và tìm giao khoảng rảnh trong khung `07:00–22:00` giờ Việt Nam (`BR-01`, `BR-07`), trả `allFreeSlots` hoặc tối đa 10 `partialSlots` kèm cảnh báo `MEMBER_NO_FIXED_EVENTS` nếu có.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor NTH as Người tổ chức họp
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service
+    participant DB as CSDL
+
+    NTH->>FE: Chọn tuần, thời lượng (mặc định 60 phút) và bấm Tìm giờ họp
+    FE->>API: POST /api/groups/{groupId}/meeting-slots/search (from, to, durationMinutes)
+    API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>NTH: Yêu cầu đăng nhập lại
+    else Sai định dạng ISO 8601 hậu tố Z, from không trước to, durationMinutes ngoài khoảng 1 đến 900, hoặc cả khoảng đã qua
+        Note over API: BR-07 - Thời gian ISO 8601 UTC hậu tố Z
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>NTH: Hiển thị lỗi, yêu cầu chọn lại tuần hoặc thời lượng
+    else Dữ liệu đầu vào hợp lệ
+        API->>SVC: Yêu cầu tìm giờ họp chung (userId, groupId, from, to, durationMinutes)
+        SVC->>DB: Truy vấn nhóm, group_members (role, can_organize_meetings) của userId và danh sách thành viên
+        DB-->>SVC: Thông tin nhóm, vai trò và cờ ủy quyền của userId, danh sách thành viên
+        alt Không tìm thấy nhóm
+            SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>NTH: Hiển thị thông báo không tìm thấy nhóm
+        else Không thuộc nhóm hoặc không phải Người tổ chức họp
+            Note over SVC,DB: U036 - Quyền kiểm tra động theo CSDL nhóm - Trưởng nhóm hoặc thành viên được ủy quyền
+            SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>NTH: Hiển thị thông báo không có quyền tìm giờ họp
+        else Nhóm có ít hơn 2 thành viên
+            SVC-->>API: Lỗi dữ liệu nghiệp vụ (VALIDATION_ERROR)
+            API-->>FE: 400 VALIDATION_ERROR
+            FE-->>NTH: Hiển thị thông báo nhóm cần tối thiểu 2 thành viên
+        else Đủ điều kiện tìm giờ họp
+            Note over SVC,DB: BR-02 - Chỉ đọc user_id, starts_at, ends_at của fixed_events, không đọc title, kind, location, notes, tasks, study_slots
+            SVC->>DB: Lấy user_id, starts_at, ends_at của fixed_events thuộc các thành viên, giao với khoảng from đến to
+            DB-->>SVC: Danh sách khoảng bận (UTC) của từng thành viên
+            Note over SVC: BR-01, BR-07 - Khoảng nửa mở [starts_at, ends_at), chỉ xét khung 07:00-22:00 giờ VN, bỏ mốc đã qua
+            SVC->>SVC: Gọi thư viện khoảng thời gian (interval-library, kiểu TimeSlot) để hợp nhất khoảng bận và tìm giao các khoảng rảnh chung dài tối thiểu durationMinutes
+            SVC->>SVC: Lập allFreeSlots, hoặc tối đa 10 partialSlots kèm busyMembers chỉ gồm displayName, và warnings MEMBER_NO_FIXED_EVENTS nếu có
+            SVC-->>API: Danh sách khung giờ đề xuất kèm warnings nếu có
+            API-->>FE: 200 OK { data, warnings } - chỉ có khoảng thời gian và trạng thái bận hoặc rảnh, không có tên sự kiện
+            FE-->>NTH: Hiển thị khung giờ gợi ý theo giờ Việt Nam và cảnh báo nếu có
+        end
+    end
+```
+
+#### 2. Gửi lời mời họp và phản hồi xác nhận (U032, U033, U036)
+
+Sơ đồ gồm hai giai đoạn: (1) Người tổ chức họp chốt khung giờ và gửi lời mời, trong một transaction hệ thống chuyển lời mời `pending` cũ của nhóm thành `superseded` rồi tạo `meeting_proposals` và `meeting_invitations` cho các thành viên còn lại (`U032`); (2) Thành viên nhóm mở ứng dụng xem lời mời và phản hồi chấp nhận hoặc từ chối, hệ thống cập nhật `status` và `responded_at` (`U033`). Thông báo trong ứng dụng không có bảng riêng, chính là các lời mời `pending` và `superseded` đã lưu; việc từ chối được báo cho người tổ chức qua trạng thái `declined` khi xem phản hồi (`U034`).
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor NTH as Người tổ chức họp
+    actor TVN as Thành viên nhóm
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service
+    participant DB as CSDL
+
+    Note over NTH,DB: Giai đoạn 1 - Người tổ chức họp chốt giờ và gửi lời mời (U032)
+    NTH->>FE: Chọn khung giờ từ kết quả tìm giờ họp và bấm Gửi lời mời
+    FE->>API: POST /api/groups/{groupId}/meeting-proposals (title, startsAt, endsAt, location, notes)
+    API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>NTH: Yêu cầu đăng nhập lại
+    else title rỗng hoặc quá 200 ký tự, endsAt không sau startsAt, sai định dạng ISO 8601 hậu tố Z
+        Note over API: BR-07, BR-08
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>NTH: Hiển thị thông báo lỗi dữ liệu
+    else Dữ liệu hợp lệ
+        API->>SVC: Yêu cầu tạo đề xuất buổi họp (userId, groupId, dữ liệu buổi họp)
+        SVC->>DB: Truy vấn nhóm, group_members (role, can_organize_meetings) của userId và danh sách thành viên
+        DB-->>SVC: Thông tin nhóm, quyền của userId, danh sách thành viên
+        alt Không tìm thấy nhóm
+            SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>NTH: Hiển thị thông báo không tìm thấy nhóm
+        else Không thuộc nhóm hoặc không phải Người tổ chức họp
+            Note over SVC,DB: U036 - Quyền kiểm tra động theo CSDL nhóm
+            SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>NTH: Hiển thị thông báo không có quyền gửi lời mời
+        else Đủ điều kiện tạo đề xuất
+            Note over SVC,DB: Toàn bộ các thao tác ghi dưới đây chạy trong một transaction
+            Note over SVC,DB: U032 - Lời mời pending của đề xuất open cũ cùng nhóm chuyển thành superseded, lời mời accepted hoặc declined giữ nguyên
+            SVC->>DB: UPDATE meeting_invitations SET status = superseded WHERE status = pending và meeting_proposal_id thuộc meeting_proposals open của nhóm
+            SVC->>DB: INSERT meeting_proposals (status = open, organizer_user_id = userId)
+            SVC->>DB: INSERT meeting_invitations (status = pending) cho từng thành viên còn lại, trừ Người tổ chức họp
+            DB-->>SVC: Đã tạo đề xuất và lời mời
+            Note over SVC,DB: Thông báo trong ứng dụng chính là các lời mời pending và superseded vừa ghi, hệ thống không tạo bảng thông báo riêng
+            SVC-->>API: Thông tin đề xuất và invitationsSent
+            API-->>FE: 201 Created
+            FE-->>NTH: Hiển thị xác nhận đã gửi lời mời cho invitationsSent thành viên
+        end
+    end
+
+    Note over NTH,DB: Giai đoạn 2 - Thành viên nhận thông báo và phản hồi lời mời (U033)
+    TVN->>FE: Mở ứng dụng, xem thông báo lời mời
+    FE->>API: GET /api/users/me/meeting-invitations (endpoint đề xuất bổ sung, chưa có trong API TV4)
+    API->>SVC: Lấy lời mời của userId
+    SVC->>DB: Truy vấn meeting_invitations pending của userId kèm tên nhóm, giờ họp, tên người gửi
+    DB-->>SVC: Danh sách lời mời
+    Note over SVC,DB: BR-02 - Lời mời chỉ có tên nhóm, thời gian buổi họp, tên người gửi, không có tên sự kiện riêng tư
+    SVC-->>API: Danh sách lời mời
+    API-->>FE: 200 OK
+    FE-->>TVN: Hiển thị lời mời theo giờ Việt Nam (BR-07)
+    TVN->>FE: Bấm Chấp nhận hoặc Từ chối
+    FE->>API: POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond (response)
+    API->>API: Xác thực JWT và kiểm tra giá trị response
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>TVN: Yêu cầu đăng nhập lại
+    else response không phải accepted hoặc declined
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>TVN: Hiển thị thông báo phản hồi không hợp lệ
+    else Phản hồi đúng định dạng
+        API->>SVC: Yêu cầu cập nhật phản hồi (userId, groupId, proposalId, invitationId, response)
+        SVC->>DB: Truy vấn meeting_invitations theo invitationId, proposalId, groupId và trạng thái của meeting_proposals
+        DB-->>SVC: Lời mời, user_id chủ lời mời, status, trạng thái đề xuất
+        alt Không tìm thấy nhóm, đề xuất hoặc lời mời
+            SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>TVN: Hiển thị thông báo không tìm thấy lời mời
+        else Người gọi không phải chủ lời mời hoặc không thuộc nhóm
+            SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>TVN: Hiển thị thông báo không có quyền phản hồi
+        else Lời mời đã ở trạng thái superseded
+            SVC-->>API: Lỗi xung đột (CONFLICT)
+            API-->>FE: 409 CONFLICT
+            FE-->>TVN: Hiển thị thông báo lời mời không còn hiệu lực
+        else Phản hồi hợp lệ
+            Note over SVC,DB: Cho phép đổi phản hồi nhiều lần khi đề xuất còn open, mỗi lần cập nhật responded_at
+            SVC->>DB: UPDATE meeting_invitations SET status = accepted hoặc declined, responded_at = now() WHERE id = invitationId
+            DB-->>SVC: Đã cập nhật
+            SVC-->>API: Thông tin lời mời đã cập nhật
+            API-->>FE: 200 OK
+            FE-->>TVN: Hiển thị xác nhận phản hồi đã được ghi nhận
+            Note over NTH,DB: U034 - Người tổ chức họp và Trưởng nhóm xem phản hồi từ status của meeting_invitations, từ chối được báo qua trạng thái declined
+        end
+    end
+```
 
 ---
 
