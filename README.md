@@ -46,7 +46,8 @@ studysync/
 │   │   ├── app.ts       # Tạo app Express, gắn các route
 │   │   ├── server.ts    # Điểm chạy: đọc cấu hình, mở cổng
 │   │   ├── config/      # Đọc biến môi trường
-│   │   └── routes/      # Các route API (vd. health.ts)
+│   │   ├── routes/      # Các route API (vd. health.ts)
+│   │   └── utils/       # Hàm thuần dùng chung (vd. interval.ts, thư viện khoảng thời gian)
 │   ├── tests/           # Test (Vitest + Supertest)
 │   ├── .env.example     # Danh sách biến môi trường cần có
 │   └── package.json
@@ -84,6 +85,7 @@ Mở http://localhost:3000/health, thấy `{"status":"ok",...}` là chạy đư�
 | `npm run lint`               | Kiểm tra lỗi code (ESLint) và định dạng (Prettier) |
 | `npm run format`             | Tự định dạng lại code                              |
 | `npm test`                   | Chạy test                                          |
+| `npm run test:coverage`      | Chạy test kèm báo cáo độ phủ (ngưỡng nhánh 95%)    |
 
 ### Biến môi trường
 
