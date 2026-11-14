@@ -8,7 +8,7 @@ Tài liệu hướng dẫn thiết lập môi trường, kết nối cơ sở d�
 
 - **Node.js:** Phiên bản `>= 22.12` (dự án chuẩn hóa Node 24 theo tệp `.nvmrc` và cấu hình CI).
 - **Trình quản lý gói:** `npm` (đi kèm Node.js).
-- **Hệ quản trị CSDL:** `PostgreSQL >= 14` (khuyến nghị phiên bản `15`, `16` hoặc `17+` để sử dụng hàm sinh UUID `gen_random_uuid()` mặc định không cần cài thêm extension, CSDL mã hóa `UTF8`).
+- **Hệ quản trị CSDL:** `PostgreSQL >= 14` (hàm sinh UUID `gen_random_uuid()` đã có sẵn từ PostgreSQL 13 nên bản 14 trở lên không cần cài thêm extension, CSDL mã hóa `UTF8`).
 
 ---
 
@@ -16,11 +16,11 @@ Tài liệu hướng dẫn thiết lập môi trường, kết nối cơ sở d�
 
 ### 2.1. Cài đặt các gói phụ thuộc
 
-Tại thư mục gốc của dự án hoặc thư mục `backend`:
+Tại thư mục `backend`:
 
 ```bash
 cd backend
-npm install
+npm ci
 ```
 
 ### 2.2. Cấu hình biến môi trường
@@ -31,25 +31,25 @@ Sao chép tệp mẫu `.env.example` thành `.env`:
 cp .env.example .env
 ```
 
-Cập nhật các giá trị cấu hình cần thiết trong `.env`:
-
-```env
-# Cổng máy chủ backend
-PORT=3000
-NODE_ENV=development
-
-# Chuỗi kết nối PostgreSQL
-DATABASE_URL=postgresql://<user>:<password>@localhost:5432/studysync
-
-# Khóa bí mật JWT (tối thiểu 32 ký tự ngẫu nhiên)
-JWT_SECRET=your_super_secret_jwt_key_at_least_32_chars
-JWT_EXPIRES_IN=7d
-
-# Địa chỉ Frontend được phép gọi API (CORS)
-CORS_ORIGIN=http://localhost:5173
-```
+Mở tệp `.env` vừa tạo và điền các giá trị thực tế theo hướng dẫn chi tiết trong tệp `.env.example`:
+- `PORT`: Cổng máy chủ backend (mặc định `3000`).
+- `NODE_ENV`: Môi trường thực thi (`development` | `production` | `test`).
+- `DATABASE_URL`: Chuỗi kết nối PostgreSQL (ví dụ `postgresql://<user>:<password>@localhost:5432/studysync`).
+- `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN`, `VITE_API_URL`, `APP_TIMEZONE`, `MAX_IMPORT_FILE_MB`.
 
 > **Lưu ý bảo mật:** Tuyệt đối không commit tệp `.env` cá nhân hoặc chuỗi kết nối chứa mật khẩu thật lên hệ thống quản lý mã nguồn Git.
+
+### 2.3. Khởi tạo Cơ sở dữ liệu
+
+Trước khi chạy migration hoặc khởi động backend, cần đảm bảo cơ sở dữ liệu PostgreSQL đã được tạo sẵn trên máy chủ database cục bộ:
+
+```bash
+# Tạo qua công cụ dòng lệnh PostgreSQL:
+createdb -U postgres -E UTF8 studysync
+
+# Hoặc thực thi câu lệnh SQL trong psql:
+CREATE DATABASE studysync ENCODING 'UTF8';
+```
 
 ---
 
@@ -94,7 +94,7 @@ backend/
 ├── src/
 │   ├── config/            # Cấu hình hệ thống (env.ts, db.ts quản lý pool pg)
 │   ├── routes/            # Khai báo các router API (health.ts, ...)
-│   ├── utils/             # Các hàm tiện ích dùng chung (interval.ts, ...)
+│   ├── utils/             # Các hàm tiện ích dùng chung (interval.ts, validation.ts, ...)
 │   ├── app.ts             # Khởi tạo Express Application và middleware
 │   └── server.ts          # Điểm khởi động máy chủ HTTP và xử lý shutdown
 ├── tests/                 # Bộ unit test và integration test (Vitest)

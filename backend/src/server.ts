@@ -8,7 +8,14 @@ const server = app.listen(env.port, () => {
   console.log(`Backend chạy tại http://localhost:${env.port} (${env.nodeEnv})`);
 });
 
+let isShuttingDown = false;
+
 async function handleShutdown(): Promise<void> {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
   server.close(async () => {
     await closePool();
     process.exit(0);

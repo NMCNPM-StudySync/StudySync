@@ -107,20 +107,20 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
 export async function down(pgm: MigrationBuilder): Promise<void> {
   // Đảo ngược các thao tác theo thứ tự phụ thuộc
   pgm.sql(`
-    DROP TRIGGER IF EXISTS trg_invitation_links_set_updated_at ON invitation_links;
-    DROP TABLE IF EXISTS invitation_links;
+    DROP TRIGGER trg_invitation_links_set_updated_at ON invitation_links;
+    DROP TABLE invitation_links;
 
-    DROP TRIGGER IF EXISTS trg_group_members_set_updated_at ON group_members;
-    DROP INDEX IF EXISTS uq_group_members_one_leader_per_group;
-    DROP INDEX IF EXISTS idx_group_members_user_id;
-    DROP TABLE IF EXISTS group_members;
+    DROP TRIGGER trg_group_members_set_updated_at ON group_members;
+    DROP INDEX uq_group_members_one_leader_per_group;
+    DROP INDEX idx_group_members_user_id;
+    DROP TABLE group_members;
 
-    DROP TRIGGER IF EXISTS trg_groups_set_updated_at ON groups;
-    DROP TABLE IF EXISTS groups;
+    DROP TRIGGER trg_groups_set_updated_at ON groups;
+    DROP TABLE groups;
 
-    DROP TRIGGER IF EXISTS trg_users_set_updated_at ON users;
-    DROP TABLE IF EXISTS users;
+    DROP TRIGGER trg_users_set_updated_at ON users;
+    DROP TABLE users;
 
-    DROP FUNCTION IF EXISTS set_updated_at();
+    DROP FUNCTION set_updated_at();
   `);
 }

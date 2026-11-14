@@ -17,7 +17,7 @@ function readDatabaseUrl(): string {
     if (process.env.NODE_ENV === 'test') {
       return 'postgresql://postgres:postgres@localhost:5432/studysync_test';
     }
-    return 'postgresql://postgres:postgres@localhost:5432/studysync';
+    throw new Error('DATABASE_URL không được để trống');
   }
   return url;
 }
