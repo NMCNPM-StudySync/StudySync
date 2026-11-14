@@ -1048,25 +1048,30 @@ sequenceDiagram
     TVN->>FE: Nhập tên thẻ, chọn hạn chót và bấm Tạo thẻ
     FE->>API: POST /api/groups/{groupId}/cards (title, dueAt)
     API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
-    API->>SVC: Yêu cầu tạo thẻ mới (userId, groupId, title, dueAt)
-    SVC->>DB: Kiểm tra tư cách thành viên nhóm của userId
-    DB-->>SVC: Kết quả kiểm tra thành viên
-    alt Người dùng không thuộc nhóm
-        SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
-        API-->>FE: 403 FORBIDDEN
-        FE-->>TVN: Hiển thị thông báo không có quyền tạo thẻ trong nhóm
-    else Tên thẻ hoặc hạn chót không hợp lệ
-        Note over SVC: BR-08 - Chuẩn hóa NFC, cắt khoảng trắng, đếm 1 đến 200 code point. BR-07 - Hạn chót định dạng UTC
-        SVC-->>API: Lỗi dữ liệu không hợp lệ (VALIDATION_ERROR)
-        API-->>FE: 400 VALIDATION_ERROR
-        FE-->>TVN: Báo lỗi tại trường nhập (tên rỗng hoặc quá 200 ký tự / thiếu ngày giờ)
-    else Dữ liệu hợp lệ
-        Note over SVC: BR-04 - Hạn chót đã qua vẫn cho lưu nhưng thêm cảnh báo DEADLINE_PASSED
-        SVC->>DB: INSERT INTO kanban_cards (group_id, title, status='todo', due_at, created_by_user_id)
-        DB-->>SVC: Bản ghi thẻ mới đã lưu (id, status='todo', assigned_to_user_id=NULL)
-        SVC-->>API: Dữ liệu thẻ KanbanCard kèm warnings nếu quá hạn
-        API-->>FE: 201 CREATED { data, warnings }
-        FE-->>TVN: Hiển thị thẻ mới ở cột Cần làm, tự sắp xếp theo dueAt tăng dần
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>TVN: Yêu cầu đăng nhập lại
+    else Token hợp lệ
+        API->>SVC: Yêu cầu tạo thẻ mới (userId, groupId, title, dueAt)
+        SVC->>DB: Kiểm tra tư cách thành viên nhóm của userId
+        DB-->>SVC: Kết quả kiểm tra thành viên
+        alt Người dùng không thuộc nhóm
+            SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>TVN: Hiển thị thông báo không có quyền tạo thẻ trong nhóm
+        else Tên thẻ hoặc hạn chót không hợp lệ
+            Note over SVC: BR-08 - Chuẩn hóa NFC, cắt khoảng trắng, đếm 1 đến 200 code point. BR-07 - Hạn chót định dạng UTC
+            SVC-->>API: Lỗi dữ liệu không hợp lệ (VALIDATION_ERROR)
+            API-->>FE: 400 VALIDATION_ERROR
+            FE-->>TVN: Báo lỗi tại trường nhập (tên rỗng hoặc quá 200 ký tự / thiếu ngày giờ)
+        else Dữ liệu hợp lệ
+            Note over SVC: BR-04 - Hạn chót đã qua vẫn cho lưu nhưng thêm cảnh báo DEADLINE_PASSED
+            SVC->>DB: INSERT INTO kanban_cards (group_id, title, status='todo', due_at, created_by_user_id)
+            DB-->>SVC: Bản ghi thẻ mới đã lưu (id, status='todo', assigned_to_user_id=NULL)
+            SVC-->>API: Dữ liệu thẻ KanbanCard kèm warnings nếu quá hạn
+            API-->>FE: 201 CREATED { data, warnings }
+            FE-->>TVN: Hiển thị thẻ mới ở cột Cần làm, tự sắp xếp theo dueAt tăng dần
+        end
     end
 ```
 
@@ -1074,7 +1079,7 @@ sequenceDiagram
 
 Sơ đồ thể hiện 2 thao tác nghiệp vụ cốt lõi trên bảng Kanban 3 cột:
 - **Chuyển cột (`U042`):** Mọi thành viên nhóm có thể chuyển thẻ qua lại giữa 3 cột cố định (`todo`, `in_progress`, `done`). CSDL cập nhật `status`, không lưu vị trí `position`, frontend tự động sắp xếp lại danh sách thẻ theo `dueAt` tăng dần.
-- **Giao / Bỏ giao thẻ (`U043`):** Phân quyền nghiêm ngặt theo vai trò — **chỉ Trưởng nhóm** mới có quyền giao hoặc bỏ giao thẻ (`assigned_to_user_id`), thành viên thường gọi sẽ bị từ chối với lỗi `403 FORBIDDEN`. Xử lý rẽ nhánh người nhận không còn trong nhóm với lỗi `404 NOT_FOUND`.
+- **Giao / Bỏ giao thẻ (`U043`):** Phân quyền nghiêm ngặt theo vai trò — **chỉ Trưởng nhóm** mới có quyền giao hoặc bỏ giao thẻ (`assigned_to_user_id`), thành viên thường gọi sẽ bị từ chối với lỗi `403 FORBIDDEN`. Xử lý rẽ nhánh người nhận không còn trong nhóm với lỗi `404 NOT_FOUND` (chỉ kiểm tra thành viên khi giao việc cho người khác, bỏ giao thẻ `assignedToUserId = null` không cần kiểm tra).
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -1091,24 +1096,30 @@ sequenceDiagram
     Note over TVN,DB: Thao tác 1 - Chuyển cột trạng thái (U042)
     TVN->>FE: Kéo hoặc chọn chuyển cột đích (todo, in_progress, done)
     FE->>API: PATCH /api/groups/{groupId}/cards/{cardId}/status (status)
-    API->>SVC: Yêu cầu chuyển trạng thái thẻ (userId, groupId, cardId, status)
-    SVC->>DB: Kiểm tra quyền thành viên và kiểm tra thẻ tồn tại trong group
-    DB-->>SVC: Thông tin thẻ và quyền thành viên
-    alt Người dùng không thuộc nhóm
-        SVC-->>API: Lỗi từ chối quyền (FORBIDDEN)
-        API-->>FE: 403 FORBIDDEN
-        FE-->>TVN: Báo lỗi không có quyền và trả thẻ về vị trí cũ
-    else Thẻ không tồn tại hoặc đã bị xóa
-        SVC-->>API: Thẻ không tồn tại (NOT_FOUND)
-        API-->>FE: 404 NOT_FOUND
-        FE-->>TVN: Thông báo thẻ không còn tồn tại và làm mới bảng
-    else Chuyển cột hợp lệ
-        Note over SVC,DB: Bản 3 cột cố định không cập nhật position. Cho phép chuyển mọi hướng giữa 3 cột
-        SVC->>DB: UPDATE kanban_cards SET status = newStatus, updated_at = now()
-        DB-->>SVC: Cập nhật thành công
-        SVC-->>API: Trả về thẻ sau cập nhật
-        API-->>FE: 200 OK { data }
-        FE-->>TVN: Hiển thị thẻ tại cột đích, tự sắp xếp theo dueAt tăng dần
+    API->>API: Xác thực JWT và kiểm tra dữ liệu đầu vào
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>TVN: Yêu cầu đăng nhập lại
+    else Token hợp lệ
+        API->>SVC: Yêu cầu chuyển trạng thái thẻ (userId, groupId, cardId, status)
+        SVC->>DB: Kiểm tra quyền thành viên và kiểm tra thẻ tồn tại trong group
+        DB-->>SVC: Thông tin thẻ và quyền thành viên
+        alt Người dùng không thuộc nhóm
+            SVC-->>API: Lỗi từ chối quyền (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>TVN: Báo lỗi không có quyền và trả thẻ về vị trí cũ
+        else Thẻ không tồn tại hoặc đã bị xóa
+            SVC-->>API: Thẻ không tồn tại (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>TVN: Thông báo thẻ không còn tồn tại và làm mới bảng
+        else Chuyển cột hợp lệ
+            Note over SVC,DB: Bản 3 cột cố định không cập nhật position. Cho phép chuyển mọi hướng giữa 3 cột
+            SVC->>DB: UPDATE kanban_cards SET status = newStatus, updated_at = now()
+            DB-->>SVC: Cập nhật thành công
+            SVC-->>API: Trả về thẻ sau cập nhật
+            API-->>FE: 200 OK { data }
+            FE-->>TVN: Hiển thị thẻ tại cột đích, tự sắp xếp theo dueAt tăng dần
+        end
     end
     end
 
@@ -1116,30 +1127,36 @@ sequenceDiagram
     Note over TN,DB: Thao tác 2 - Giao hoặc bỏ giao thẻ (U043)
     TN->>FE: Chọn thành viên được giao (hoặc chọn Bỏ giao)
     FE->>API: PATCH /api/groups/{groupId}/cards/{cardId}/assignee (assignedToUserId)
-    API->>SVC: Yêu cầu giao thẻ (userId, groupId, cardId, assignedToUserId)
-    SVC->>DB: Kiểm tra vai trò của người gọi và tư cách thành viên của người nhận
-    DB-->>SVC: Vai trò của người gọi và danh sách thành viên nhóm
-    alt Người gọi không phải Trưởng nhóm
-        SVC-->>API: Lỗi quyền trưởng nhóm (FORBIDDEN)
-        API-->>FE: 403 FORBIDDEN
-        FE-->>TN: Hiển thị thông báo chỉ Trưởng nhóm mới có quyền giao việc
-    else Người nhận không còn thuộc nhóm
-        SVC-->>API: Thành viên không tồn tại trong nhóm (NOT_FOUND)
-        API-->>FE: 404 NOT_FOUND
-        FE-->>TN: Báo lỗi thành viên đã rời nhóm và cập nhật danh sách chọn
-    else Hợp lệ
-        SVC->>DB: UPDATE kanban_cards SET assigned_to_user_id = assignedToUserId, updated_at = now()
-        DB-->>SVC: Lưu người được giao thành công
-        SVC-->>API: Trả về thẻ đã cập nhật người nhận
-        API-->>FE: 200 OK { data }
-        FE-->>TN: Cập nhật tên người được giao trên thẻ
+    API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>TN: Yêu cầu đăng nhập lại
+    else Token hợp lệ
+        API->>SVC: Yêu cầu giao hoặc bỏ giao thẻ (userId, groupId, cardId, assignedToUserId)
+        SVC->>DB: Kiểm tra vai trò người gọi (và tư cách thành viên người nhận nếu assignedToUserId != null)
+        DB-->>SVC: Vai trò của người gọi và danh sách thành viên nhóm
+        alt Người gọi không phải Trưởng nhóm
+            SVC-->>API: Lỗi quyền trưởng nhóm (FORBIDDEN)
+            API-->>FE: 403 FORBIDDEN
+            FE-->>TN: Hiển thị thông báo chỉ Trưởng nhóm mới có quyền giao việc
+        else Người nhận không còn thuộc nhóm (khi assignedToUserId != null)
+            SVC-->>API: Thành viên không tồn tại trong nhóm (NOT_FOUND)
+            API-->>FE: 404 NOT_FOUND
+            FE-->>TN: Báo lỗi thành viên đã rời nhóm và cập nhật danh sách chọn
+        else Hợp lệ (giao thẻ hoặc bỏ giao thẻ với assignedToUserId = null)
+            SVC->>DB: UPDATE kanban_cards SET assigned_to_user_id = assignedToUserId, updated_at = now()
+            DB-->>SVC: Lưu người được giao thành công
+            SVC-->>API: Trả về thẻ đã cập nhật người nhận
+            API-->>FE: 200 OK { data }
+            FE-->>TN: Cập nhật tên người được giao trên thẻ (hoặc chuyển về Chưa giao)
+        end
     end
     end
 ```
 
 #### 3. Xem thống kê giờ học theo tuần (`U045`)
 
-Sơ đồ thể hiện luồng truy vấn số giờ học cá nhân theo tuần từ bảng `study_slots` (TV3): chỉ cộng các khung giờ có trạng thái `"Đã học"`, quy đổi `starts_at` sang múi giờ Việt Nam (`Asia/Ho_Chi_Minh`, `UTC+7`), tính cả các khung giờ học có `task_id = NULL` (việc gốc đã bị xóa theo `#57` và PR #83) và không chia theo môn học.
+Sơ đồ thể hiện luồng truy vấn số giờ học cá nhân theo tuần từ bảng `study_slots` (TV3): chỉ cộng các khung giờ có trạng thái `studied` (nhãn giao diện "Đã học"), quy đổi `starts_at` sang múi giờ Việt Nam (`Asia/Ho_Chi_Minh`, `UTC+7`), tính cả các khung giờ học có `task_id = NULL` (việc gốc đã bị xóa theo `#57` và PR #83) và không chia theo môn học.
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -1154,14 +1171,17 @@ sequenceDiagram
     ND->>FE: Mở trang Thống kê hoặc bấm chuyển tuần xem
     FE->>API: GET /api/statistics/weekly?from=...&to=...
     API->>API: Xác thực JWT của sinh viên
-    alt Tuần không hợp lệ hoặc xem tuần tương lai
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>ND: Yêu cầu đăng nhập lại
+    else Tuần không hợp lệ hoặc xem tuần tương lai
         API-->>FE: 400 VALIDATION_ERROR
         FE-->>ND: Hiển thị thông báo khoảng thời gian không hợp lệ hoặc tuần tương lai
     else Khoảng thời gian hợp lệ
         API->>SVC: Yêu cầu lấy thống kê tuần (userId, from, to)
         SVC->>SVC: Xác định tuần [from, to) theo múi giờ Asia/Ho_Chi_Minh (UTC+7, từ Thứ Hai đến Chủ Nhật)
-        Note over SVC,DB: BR-02, BR-07 - Chỉ đọc study_slots của chính userId. Lọc trạng thái Đã học, tính cả task_id là NULL
-        SVC->>DB: SELECT starts_at, ends_at FROM study_slots WHERE user_id = userId AND status = 'Đã học' AND starts_at >= from AND starts_at < to
+        Note over SVC,DB: BR-02, BR-07 - Chỉ đọc study_slots của chính userId. Lọc trạng thái studied (nhãn Đã học), tính cả task_id là NULL
+        SVC->>DB: SELECT starts_at, ends_at FROM study_slots WHERE user_id = userId AND status = 'studied' AND starts_at >= from AND starts_at < to
         DB-->>SVC: Danh sách các khung giờ học hoàn thành
         Note over SVC: Quy đổi starts_at sang ngày VN, tính trọn thời lượng vào ngày bắt đầu và tổng hợp 7 ngày
         SVC-->>API: Trả về WeeklyStatistics (totalMinutes, danh sách 7 ngày Thứ Hai đến Chủ Nhật)
