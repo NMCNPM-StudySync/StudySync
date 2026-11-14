@@ -1,7 +1,7 @@
 # Thiết kế sơ bộ thư viện khoảng thời gian
 
 > Issue: #5, #56 · Module: Chung (TV3, TV4) · Người làm: Nhi · Người review: Thư H.A. (#5), Thư Q.A. (#56)
-> Trạng thái: bản thiết kế giao diện (interface), chưa có code. Code và unit test làm ở Issue #71.
+> Trạng thái: bản đầu đã có code và unit test (Issue #71): `backend/src/utils/interval.ts`, test ở `backend/tests/interval.test.ts`, hướng dẫn dùng ở `backend/src/utils/README.md`.
 > Căn cứ: mục 3.6, 4.8, 4.9 tài liệu dự án; BR-07 (giờ Việt Nam, lưu UTC, API ISO 8601 hậu tố Z); rủi ro mục 5.4.
 > Cập nhật theo Issue #56: thêm kiểu `TimeSlot` và hai hàm chuyển đổi, hàm `hasOverlap`, hàm `countCoveringLists`, bảng nhu cầu TV3 và TV4.
 
@@ -61,8 +61,7 @@ Quy ước:
 | Nửa mở `[start, end)` | `09:00–10:00` và `10:00–11:00` **không chồng nhau**: một buổi kết thúc lúc 10:00 không đụng buổi bắt đầu lúc 10:00. |
 | Hợp lệ | `start < end`. Khoảng có độ dài 0 (`start == end`) là hợp lệ, không ném lỗi, và bị bỏ khỏi kết quả. `start > end` hoặc `Date` không hợp lệ (`NaN`) thì ném `RangeError`. |
 | Độ chính xác | So sánh bằng `getTime()` (mili giây). Thư viện không làm tròn theo bước 15 hay 30 phút; nếu cần, TV3/TV4 làm tròn trước khi gọi. |
-| Kết quả | Mọi hàm trả về danh sách **đã sắp xếp theo `start`, không chồng nhau, không chạm nhau** (gọi là "danh sách chuẩn"). |
-| Bất biến | `Date` trong JavaScript sửa được (ví dụ `setHours`), nên thư viện **không bao giờ trả lại chính đối tượng `Date` của đầu vào**. Mỗi khoảng trong kết quả là đối tượng mới, với `start`/`end` tạo bằng `new Date(t.getTime())`. Nhờ vậy sửa kết quả không ảnh hưởng đầu vào và ngược lại. Thư viện cũng không gọi hàm `set...` nào trên `Date` đầu vào. |
+| Kết quả | Các hàm trả về danh sách (`mergeIntervals`, `subtractIntervals`, `intersectIntervalLists`, `filterByMinDuration`) luôn trả danh sách **đã sắp xếp theo `start`, không chồng nhau, không chạm nhau** (gọi là "danh sách chuẩn"). || Bất biến | `Date` trong JavaScript sửa được (ví dụ `setHours`), nên thư viện **không bao giờ trả lại chính đối tượng `Date` của đầu vào**. Mỗi khoảng trong kết quả là đối tượng mới, với `start`/`end` tạo bằng `new Date(t.getTime())`. Nhờ vậy sửa kết quả không ảnh hưởng đầu vào và ngược lại. Thư viện cũng không gọi hàm `set...` nào trên `Date` đầu vào. |
 | Dạng chuỗi (BR-07) | `toInterval` nhận chuỗi ISO 8601 hậu tố Z, có hoặc không có mili giây (`2026-11-05T13:00:00Z` và `2026-11-05T13:00:00.000Z` đều được nhận, cho cùng một kết quả). Chuỗi có offset (ví dụ `+07:00`), chuỗi không có hậu tố Z hoặc chuỗi không đọc được thì ném `RangeError`. `toSlot` luôn trả chuỗi có mili giây (khớp `toISOString()`). **Lưu ý khi cài đặt:** không được chỉ gọi `new Date(chuỗi)` rồi kiểm tra `NaN`, vì `new Date("2026-11-05T20:00:00+07:00")` và `new Date("2026-11-05T13:00:00")` vẫn đọc được mà không báo lỗi, và `new Date("2026-02-30T00:00:00Z")` bị tự đổi thành 02/03/2026. Cách làm: (1) kiểm tra chuỗi khớp `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/` (đúng chữ Z hoa); (2) `new Date(chuỗi)`, `getTime()` là `NaN` thì ném `RangeError`; (3) so `date.toISOString().slice(0, 19)` với `chuỗi.slice(0, 19)`, khác nhau (ngày không tồn tại bị tự đổi) thì ném `RangeError`. |
 | Kiểm tra tham số | Mỗi hàm **kiểm tra toàn bộ tham số trước**, rồi mới xử lý. Không trả sớm mảng rỗng khi còn tham số chưa kiểm tra. Ví dụ `subtractIntervals([], [10–09])` vẫn ném `RangeError` dù `free` rỗng. Thứ tự: (1) kiểm tra kiểu và từng `Date`, (2) kiểm tra `start <= end`, (3) kiểm tra tham số số (`minMinutes`), (4) mới xử lý và trả kết quả. |
 
@@ -312,7 +311,7 @@ Bốn nhóm bắt buộc theo mục 4.9 được đánh dấu **(4.9)**. Danh s�
 
 - **Trong phạm vi:** 2 kiểu dữ liệu (`TimeInterval`, `TimeSlot`), 3 hàm chính, `hasOverlap`, `countCoveringLists`, 2 hàm chuyển đổi, 2 hàm phụ, trường hợp biên ở trên.
 - **Ngoài phạm vi:** đọc lịch từ CSDL, đổi múi giờ, làm tròn theo bước phút, chấm điểm khung giờ (TV3, TV4 tự làm).
-- **Vị trí code dự kiến:** `backend/src/lib/interval/` (chốt khi dựng khung backend).
+- **Vị trí code:** `backend/src/utils/interval.ts` (chốt ở Issue #71).
 - **Issue #56 (Task Tuần 4, việc 3):** chốt interface trong tài liệu này, hạn 12:00 Thứ 3 10/11/2026.
 - **Issue #71 (Task Tuần 4, việc 19):** cài các hàm, viết unit test theo bảng ở mục 4, PR xong Thứ 6 13/11/2026.
 - **Tuần 6:** hàm khoảng thời gian hoàn chỉnh. Mọi thay đổi chữ ký hàm phải báo Thư Q.A. (TV4) trước.
