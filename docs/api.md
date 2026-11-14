@@ -1020,14 +1020,14 @@ Phạm vi: US-08 đến US-15. Use case: U011 đến U015. Mọi endpoint tuân 
 | GET /api/events | Lấy danh sách sự kiện cố định theo khoảng thời gian | US-10, US-13 | Chủ tài khoản | Nháp |
 | POST /api/events | Tạo mới sự kiện cố định thủ công | US-08 | Chủ tài khoản | Nháp |
 | GET /api/events/{eventId} | Lấy chi tiết một sự kiện cố định | US-08 | Chủ tài khoản | Nháp |
-| PATCH /api/events/{eventId} | Cập nhật thông tin sự kiện cố định | US-12 | Chủ tài khoản | Nháp |
+| PATCH /api/events/{eventId} | Cập nhật thông tin sự kiện cố định | US-13 | Chủ tài khoản | Nháp |
 | DELETE /api/events/{eventId} | Xóa sự kiện cố định | US-12 | Chủ tài khoản | Nháp |
 | POST /api/events/import/ics | Nạp lịch từ tệp iCalendar (.ics) | US-11 | Chủ tài khoản | Nháp |
 | POST /api/events/import/csv | Nạp lịch từ tệp bảng tính (.csv) | US-11, US-15 | Chủ tài khoản | Nháp |
 | GET /api/tasks | Danh sách việc cần làm cá nhân | US-09, US-13 | Chủ tài khoản | Nháp |
 | POST /api/tasks | Tạo việc cần làm mới | US-09 | Chủ tài khoản | Nháp |
 | GET /api/tasks/{taskId} | Lấy chi tiết một việc cần làm | US-09 | Chủ tài khoản | Nháp |
-| PATCH /api/tasks/{taskId} | Cập nhật việc cần làm hoặc đánh dấu hoàn thành | US-12, US-14 | Chủ tài khoản | Nháp |
+| PATCH /api/tasks/{taskId} | Cập nhật việc cần làm hoặc đánh dấu hoàn thành | US-13, US-14 | Chủ tài khoản | Nháp |
 | DELETE /api/tasks/{taskId} | Xóa việc cần làm | US-12 | Chủ tài khoản | Nháp |
 | GET /api/schedule/week | Xem lịch tuần tổng hợp | US-10, US-15 | Chủ tài khoản | Nháp |
 
@@ -1243,7 +1243,7 @@ Không có.
 
 ### PATCH /api/events/{eventId}
 
-Module: TV2 · Story: US-12 · Người viết: Hưng · Trạng thái: Nháp  
+Module: TV2 · Story: US-13 · Người viết: Hưng · Trạng thái: Nháp  
 Mô tả: Cập nhật thông tin sự kiện cố định (chỉ sửa đổi các trường được gửi lên trong body).  
 Quyền: Chủ tài khoản sở hữu sự kiện.
 
@@ -1415,7 +1415,7 @@ Không có.
 | 400 | VALIDATION_ERROR | Không đính kèm tệp, tệp không có đuôi mở rộng `.ics`, hoặc phần mở rộng tệp bị cấm |
 | 401 | UNAUTHORIZED | Chưa đăng nhập hoặc token hết hạn |
 | 413 | FILE_TOO_LARGE | Dung lượng tệp vượt quá ngưỡng tối đa 5 MB ($5 \times 1024 \times 1024 = 5.242.880\text{ byte}$ theo BR-05) |
-| 422 | FILE_INVALID | Tệp rỗng (0 bytes); tệp sai định dạng RFC 5545 (thiếu `BEGIN:VCALENDAR`, khối lồng mồ côi, thẻ con `VALARM` chưa đóng); thiếu thuộc tính bắt buộc `DTSTART`, `SUMMARY`, `UID`; sự kiện cả ngày thiếu mốc giờ cụ thể; thời gian kết thúc không sau thời gian bắt đầu ($DTEND \le DTSTART$); tên sự kiện vượt quá 200 ký tự NFC (BR-08). Toàn bộ tệp bị từ chối và trả tối đa 20 dòng lỗi đầu tiên (BR-06) |
+| 422 | FILE_INVALID | Tệp rỗng (0 bytes); tệp sai định dạng RFC 5545 (thiếu `BEGIN:VCALENDAR`, khối lồng mồ côi, thẻ con `VALARM` chưa đóng); thiếu thuộc tính bắt buộc `DTSTART`, `SUMMARY`, `UID`; thiếu cả DTEND lẫn DURATION; thời gian kết thúc không sau thời gian bắt đầu ($DTEND \le DTSTART$); tên sự kiện vượt quá 200 ký tự NFC (BR-08). Toàn bộ tệp bị từ chối và trả tối đa 20 dòng lỗi đầu tiên (BR-06) |
 | 500 | INTERNAL_ERROR | Lỗi máy chủ |
 
 Ví dụ phản hồi lỗi 413 (BR-05):
@@ -1724,7 +1724,7 @@ Không có.
 
 ### PATCH /api/tasks/{taskId}
 
-Module: TV2 · Story: US-12, US-14 · Người viết: Hưng · Trạng thái: Nháp  
+Module: TV2 · Story: US-13, US-14 · Người viết: Hưng · Trạng thái: Nháp  
 Mô tả: Cập nhật thông tin việc cần làm hoặc đánh dấu hoàn thành/chưa hoàn thành (`isDone`).  
 Quyền: Chủ tài khoản.
 
@@ -1901,10 +1901,174 @@ Ghi chú: Lịch tuần được tính theo khoảng nửa mở 7 ngày `[weekSt
    - Toàn bộ các endpoint trả về danh sách lịch và việc (`GET /api/events`, `GET /api/tasks`, `GET /api/schedule/week`) đều được gắn khóa chính `id ASC` làm tiêu chí tie-breaker phụ cuối cùng, đảm bảo dữ liệu hiển thị không bao giờ bị xáo trộn ngẫu nhiên giữa các lần truy vấn.
 3. **Cấu trúc cảnh báo khi import tệp có sự kiện trùng lịch (BR-01):**
    - Khi nạp tệp `.ics` hoặc `.csv` chứa nhiều sự kiện mà có các sự kiện bị trùng với lịch cá nhân đã tồn tại, hệ thống vẫn lưu toàn bộ tệp thành công và trả về mã cảnh báo `FIXED_EVENT_OVERLAP` kèm danh sách chi tiết các sự kiện trùng trong mảng `warnings[0].details`.
-4. **Chính sách từ chối sự kiện cả ngày trong RFC 5545 (`VALUE=DATE`):**
-   - Theo yêu cầu TV3 và bộ kiểm thử mẫu `err_D7_allday_missing_time.ics`, hệ thống hiện từ chối các sự kiện thiếu mốc giờ cụ thể (HTTP 422) vì không thể đưa vào thuật toán tính khoảng rảnh chung. Đề xuất giữ nguyên chính sách từ chối này ở phiên bản v0.1.
+4. **Chính sách xử lý sự kiện cả ngày trong RFC 5545 (`VALUE=DATE`):**
+   - Thực hiện theo Phương án A đã được phê duyệt tại Issue #41 và #66: Hệ thống tiếp nhận sự kiện cả ngày (`VALUE=DATE`), tự động quy đổi thành khoảng thời gian `[00:00:00.000, 23:59:59.999]` theo giờ địa phương Việt Nam (`Asia/Ho_Chi_Minh`), chuyển đổi sang UTC dạng `timestamptz`, gán phân loại `kind = 'other'` và cho phép người dùng chủ động bỏ chọn tại màn hình xem trước trước khi lưu.
 5. **Kế hoạch mở rộng nạp nhiều tệp đồng thời:**
    - Hiện tại hai endpoint `/api/events/import/ics` và `/api/events/import/csv` chỉ tiếp nhận 1 tệp duy nhất cho mỗi lượt gọi (`file`). Nếu người dùng có nhu cầu kéo thả hàng loạt nhiều tệp cùng lúc tại giao diện, đề xuất bổ sung endpoint batch ở giai đoạn Sprint 2.
+
+---
+
+### Sơ đồ tuần tự TV2
+
+> Các sơ đồ tuần tự dưới đây được xây dựng theo đúng quy ước chung (5 cột cố định `Sinh viên → Frontend → API → Service → CSDL`, header `%%{init: {'theme': 'neutral'}}%%`, `autonumber` tự động, mã HTTP rõ ràng, rẽ nhánh `alt`/`else`, thanh thực thi Activation Bar và gắn nhãn quy tắc `Note BR-xx`), phản ánh đầy đủ quy trình kiểm tra dung lượng `BR-05`, tính nguyên tử dừng ngắt toàn khối `BR-06`, chính sách Phương án A cho sự kiện cả ngày và cảnh báo trùng lịch `BR-01`.
+
+#### 1. Nạp thời khóa biểu từ tệp iCalendar .ics (`U014`, `US-11`)
+
+Sơ đồ mô tả quy trình nạp lịch tự động từ tệp `.ics`: kiểm tra sơ bộ dung lượng trên máy khách và kiểm tra header `Content-Length` tại API Gateway (`BR-05`), dừng ngắt toàn khối trên bộ nhớ theo nguyên tắc dừng ngắt nguyên tử (`BR-06`), xử lý `DTEND` theo chuẩn RFC 5545, áp trần an toàn `RRULE` tối đa 150 buổi / 24 tuần bóc tách `EXDATE`, mở Database Transaction nạp dữ liệu và phản hồi mã `200 OK` kèm cảnh báo trùng lịch nếu có (`BR-01`).
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Sinh viên
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service
+    participant DB as CSDL
+
+    ND->>FE: Chọn tệp .ics thời khóa biểu và bấm Tải lên
+    Note over FE: Kiểm tra sơ bộ dung lượng (BR-05)
+
+    alt Dung lượng tệp vượt quá 5 MB
+        FE-->>ND: Báo lỗi tệp vượt quá 5 MB (BR-05)
+    else Dung lượng hợp lệ (<= 5 MB)
+        FE->>API: POST /api/events/import/ics (multipart/form-data)
+        activate API
+        API->>API: Xác thực JWT và kiểm tra tệp đầu vào
+        alt Chưa đăng nhập hoặc token hết hạn
+            API-->>FE: 401 UNAUTHORIZED
+            FE-->>ND: Yêu cầu đăng nhập lại
+        else Không đính kèm tệp hoặc sai phần mở rộng tệp
+            API-->>FE: 400 VALIDATION_ERROR
+            FE-->>ND: Yêu cầu chọn đúng tệp có định dạng .ics
+        else Content-Length vượt quá 5.242.880 byte (BR-05)
+            API-->>FE: 413 FILE_TOO_LARGE
+            FE-->>ND: Hiển thị thông báo tệp vượt quá 5 MB
+        else Kích thước và định dạng tệp hợp lệ
+            API->>SVC: Phân tích tệp và nạp lịch (userId, fileBuffer)
+            activate SVC
+            SVC->>SVC: Tạo Source Map và khử nếp gấp dòng (unfold) trên bộ nhớ
+
+            alt Tệp sai định dạng RFC 5545 hoặc tệp rỗng
+                Note over SVC: Thiếu BEGIN:VCALENDAR hoặc không có VEVENT
+                SVC-->>API: Lỗi cấu trúc tệp (FILE_INVALID)
+                API-->>FE: 422 FILE_INVALID { totalErrors, details }
+                FE-->>ND: Báo lỗi tệp không đúng định dạng
+            else Thiếu SUMMARY/DTSTART hoặc tiêu đề vượt quá 200 ký tự NFC (BR-08)
+                SVC-->>API: Lỗi thuộc tính sự kiện (FILE_INVALID)
+                API-->>FE: 422 FILE_INVALID (tối đa 20 dòng lỗi đầu tiên)
+                FE-->>ND: Hiển thị danh sách dòng lỗi chi tiết
+            else Thiếu cả DTEND lẫn DURATION, hoặc DTEND <= DTSTART (BR-01, BR-06)
+                Note over SVC: Không tự gán 1 giờ theo BR-04
+                SVC-->>API: Lỗi thời gian sự kiện (FILE_INVALID)
+                API-->>FE: 422 FILE_INVALID
+                FE-->>ND: Báo lỗi thời gian sự kiện không hợp lệ
+            else Múi giờ TZID không nhận diện được sau khi tra WINDOWS_TIMEZONE_MAP (BR-06, BR-07)
+                SVC-->>API: Lỗi múi giờ tệp (FILE_INVALID)
+                API-->>FE: 422 FILE_INVALID
+                FE-->>ND: Báo lỗi múi giờ tệp không được hỗ trợ
+            else Dữ liệu tệp hợp lệ
+                Note over SVC,DB: Bắt đầu Database Transaction (BR-06)
+                Note over SVC: Chuẩn hóa thời gian UTC và bung lặp RRULE (tối đa 150 buổi / 24 tuần, BR-01, BR-07)
+                SVC->>DB: Truy vấn kiểm tra trùng lịch của userId
+                activate DB
+                DB-->>SVC: Danh sách sự kiện trùng lịch (nếu có)
+                deactivate DB
+                Note over SVC,DB: BR-01: Cho phép lưu trùng lịch kèm cảnh báo
+                SVC->>DB: INSERT INTO imported_files (user_id, file_name, ...) RETURNING id
+                activate DB
+                DB-->>SVC: imported_file_id
+                deactivate DB
+                Note over SVC,DB: Bung phẳng RRULE thành các bản ghi độc lập với recurring_rule_id = NULL
+                SVC->>DB: BATCH INSERT INTO fixed_events (user_id, imported_file_id, ...)
+                activate DB
+                DB-->>SVC: Xác nhận lưu toàn bộ các bản ghi sự kiện thành công
+                deactivate DB
+                Note over SVC,DB: Commit Database Transaction (Bảo toàn dữ liệu trọn vẹn)
+
+                alt Phát hiện có sự kiện trùng lịch (BR-01)
+                    SVC-->>API: Nạp thành công kèm cảnh báo
+                    API-->>FE: 200 OK { data, warnings: [FIXED_EVENT_OVERLAP] }
+                    FE-->>ND: Thông báo thành công kèm cảnh báo trùng lịch trên giao diện
+                else Không có sự kiện trùng lịch
+                    SVC-->>API: Nạp thành công toàn bộ sự kiện
+                    API-->>FE: 200 OK { data }
+                    FE-->>ND: Thông báo nạp thành công và cập nhật hiển thị lịch tuần
+                end
+            end
+            deactivate SVC
+        end
+        deactivate API
+    end
+```
+
+##### Bảng đặc tả kỹ thuật xử lý dữ liệu tệp iCalendar (U014)
+
+| Điểm kiểm tra / Quy tắc | Quy định kỹ thuật áp dụng | Xử lý trên hệ thống |
+| :--- | :--- | :--- |
+| **Giới hạn dung lượng (BR-05)** | Tối đa 5 MB ($5.242.880\text{ byte}$). | Chặn tại Frontend; API Gateway kiểm tra header `Content-Length` trả `413 FILE_TOO_LARGE`. |
+| **Tính nguyên tử (BR-06)** | Dừng ngắt toàn khối (Atomic Rejection). | Đọc và kiểm tra toàn bộ tệp trên bộ nhớ trước; nếu có bất kỳ lỗi nào sẽ dừng ngắt và trả `422 FILE_INVALID` kèm tối đa 20 dòng lỗi đầu tiên mà không mở Database Transaction. Chỉ mở Transaction khi toàn bộ tệp hợp lệ. |
+| **Xử lý thiếu `DTEND`** | Chuẩn RFC 5545. | Có `DURATION`: tính $DTEND = DTSTART + DURATION$. Thiếu cả hai hoặc $DTEND \le DTSTART$: trả `422 FILE_INVALID`, tuyệt đối không tự ý gán 1 giờ theo BR-04. |
+| **Sự kiện cả ngày (`VALUE=DATE`)** | Quyết định Phương án A (#41, #66). | Tự động mở rộng thành khoảng `[00:00:00.000, 23:59:59.999]` giờ Việt Nam rồi chuyển UTC (`timestamptz`), gán `kind = 'other'`, cho phép bỏ chọn ở bước xem trước. |
+| **Bung lặp quy tắc `RRULE`** | Chống DoS / tràn bộ nhớ. | Áp trần an toàn tối đa 150 buổi / 24 tuần, bóc tách `EXDATE` loại trừ ngày nghỉ, bung phẳng (flatten) thành các bản ghi `fixed_events` độc lập (`source = 'ics'`, `recurring_rule_id = NULL`). |
+| **Cảnh báo trùng lịch (BR-01)** | Cho phép lưu sự kiện cố định trùng nhau. | Vẫn lưu thành công vào CSDL trong cùng transaction, phản hồi `200 OK` kèm mảng `warnings` (`FIXED_EVENT_OVERLAP`). |
+
+*Ghi chú về quan hệ bảng:* Khi nạp tệp `.ics` chứa quy tắc lặp `RRULE`, hệ thống bung phẳng trực tiếp thành các bản ghi `fixed_events` độc lập (gắn `source = 'ics'`, `imported_file_id` tham chiếu `imported_files.id`, và `recurring_rule_id = NULL`). Bảng `recurring_rules` chỉ lưu cho sự kiện lặp tạo thủ công từ giao diện hoặc mở rộng sau này, đảm bảo khớp hoàn toàn với Bảng 9.1 Truy vết (`US-11` chỉ liên kết 2 bảng `imported_files` và `fixed_events`).
+
+#### 2. Nhập sự kiện cố định thủ công (`U011`, `US-08`)
+
+Sơ đồ mô tả quy trình sinh viên tự tạo sự kiện cố định trên lịch cá nhân: xác thực phiên đăng nhập qua JWT, kiểm tra ràng buộc độ dài tên sự kiện theo `BR-08` (1..200 ký tự NFC), kiểm tra tính hợp lệ thời gian kết thúc phải sau thời gian bắt đầu (`BR-01`), chuẩn hóa thời gian UTC theo `BR-07`, truy vấn phát hiện trùng lịch và phản hồi mã `201 CREATED`.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Sinh viên
+    participant FE as Frontend
+    participant API as API
+    participant SVC as Service
+    participant DB as CSDL
+
+    ND->>FE: Nhập tiêu đề, chọn loại sự kiện, thời gian bắt đầu, kết thúc và bấm Lưu sự kiện
+    FE->>API: POST /api/events (title, kind, startsAt, endsAt, location, notes)
+    activate API
+    API->>API: Xác thực JWT của sinh viên
+    alt Chưa đăng nhập hoặc token hết hạn
+        API-->>FE: 401 UNAUTHORIZED
+        FE-->>ND: Yêu cầu đăng nhập lại
+    else Tiêu đề rỗng hoặc quá 200 ký tự NFC (BR-08)
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>ND: Báo lỗi tiêu đề phải từ 1 đến 200 ký tự
+    else kind không hợp lệ, startsAt/endsAt thiếu hậu tố Z, hoặc endsAt <= startsAt (BR-01, BR-07)
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>ND: Báo lỗi thời gian kết thúc phải sau bắt đầu và đúng định dạng UTC
+    else Dữ liệu đầu vào hợp lệ
+        API->>SVC: Yêu cầu tạo sự kiện cố định mới (userId, eventData)
+        activate SVC
+        Note over SVC: BR-07: Xác thực chuỗi ISO-8601 có hậu tố Z và chuyển đổi Date UTC
+        SVC->>DB: Truy vấn kiểm tra giao nhau với các sự kiện cố định hiện có của userId
+        activate DB
+        DB-->>SVC: Danh sách các sự kiện cố định bị chồng lấn thời gian (nếu có)
+        deactivate DB
+        Note over SVC,DB: BR-01: Cho phép lưu trùng lịch, giờ tiếp giáp không tính là trùng
+        SVC->>DB: INSERT INTO fixed_events (user_id, title, kind, starts_at, ends_at, location, notes, source='manual')
+        activate DB
+        DB-->>SVC: Bản ghi sự kiện cố định mới đã lưu thành công
+        deactivate DB
+
+        alt Phát hiện có sự kiện trùng lịch (BR-01)
+            SVC-->>API: Dữ liệu sự kiện kèm cảnh báo FIXED_EVENT_OVERLAP
+            API-->>FE: 201 CREATED { data, warnings }
+            FE-->>ND: Hiển thị sự kiện trên lưới lịch kèm biểu tượng cảnh báo trùng lịch
+        else Không có sự kiện trùng lịch
+            SVC-->>API: Dữ liệu sự kiện cố định mới
+            API-->>FE: 201 CREATED { data }
+            FE-->>ND: Hiển thị sự kiện mới trên lưới lịch tuần theo giờ Việt Nam
+        end
+        deactivate SVC
+    end
+    deactivate API
+```
 
 <!-- TV2:END -->
 
