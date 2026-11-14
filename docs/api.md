@@ -942,6 +942,139 @@ Ví dụ lỗi 400:
 3. **Cơ chế đăng xuất:** Đồng ý xử lý hoàn toàn ở frontend (xóa token khỏi storage của trình duyệt) cho phiên bản v0.1; không tạo bảng blacklist token ở backend để giữ phạm vi gọn và không phát sinh bảng mới cho migration #69.
 4. **Endpoint `GET /api/invitations/{token}`:** Đồng ý giữ công khai (public) để hiển thị tên nhóm và hạn dùng trên màn hình lời mời trước khi yêu cầu sinh viên đăng nhập, khớp luồng use case U005 (bước 2 kiểm tra mã, bước 3 kiểm tra đăng nhập) và yêu cầu 1.8.
 
+---
+
+### Sơ đồ tuần tự TV1
+
+> Các sơ đồ tuần tự dưới đây được xây dựng theo đúng quy ước chung (5 cột cố định `Sinh viên → Frontend → API → Service → CSDL`, header `%%{init: {'theme': 'neutral'}}%%`, `autonumber` tự động, mã HTTP rõ ràng, rẽ nhánh `alt`/`else`, thanh thực thi Activation Bar và gắn nhãn quy tắc `Note BR-xx`), phản ánh đầy đủ quy trình xác thực JWT (BR-07), bảo mật liên kết mời công khai, và cơ chế tiếp nhận thành viên nguyên tử.
+
+#### Sơ đồ 1. Đăng nhập hệ thống (U002, US-02)
+
+Sơ đồ mô tả quy trình đăng nhập bằng email và mật khẩu: kiểm tra tính hợp lệ dữ liệu đầu vào tại API, truy vấn người dùng theo email chuẩn hóa (lower/btrim), so khớp mật khẩu bằng `bcrypt.compare()`, từ chối với lỗi `401 UNAUTHORIZED` nếu thông tin sai, và cấp phát JWT token có thời hạn 7 ngày (`BR-07 UTC`) khi thông tin chính xác.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Sinh viên
+    participant FE as Frontend
+    participant API as API
+    participant SVC as AuthService
+    participant DB as CSDL
+
+    ND->>FE: Nhập email, mật khẩu và bấm Đăng nhập
+    FE->>FE: Kiểm tra sơ bộ email hợp lệ và mật khẩu không rỗng
+    FE->>API: POST /api/auth/login (email, password)
+    activate API
+    API->>API: Kiểm tra định dạng chuỗi của email và password
+    alt Thiếu email hoặc mật khẩu, hoặc email sai định dạng
+        API-->>FE: 400 VALIDATION_ERROR
+        FE-->>ND: Báo lỗi yêu cầu nhập đầy đủ email và mật khẩu hợp lệ
+    else Dữ liệu đầu vào hợp lệ
+        API->>SVC: Yêu cầu đăng nhập (email, password)
+        activate SVC
+        Note over SVC: Chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
+        SVC->>DB: SELECT id, email, password_hash, full_name, created_at FROM users WHERE email = lower(btrim($1))
+        activate DB
+        DB-->>SVC: Bản ghi người dùng (hoặc null nếu không tìm thấy)
+        deactivate DB
+
+        alt Email không tồn tại hoặc mật khẩu sai
+            Note over SVC: So khớp mật khẩu với bcrypt.compare() thất bại
+            SVC-->>API: Lỗi xác thực người dùng (UNAUTHORIZED)
+            API-->>FE: 401 UNAUTHORIZED { message: "Email hoặc mật khẩu không chính xác" }
+            FE-->>ND: Hiển thị thông báo Email hoặc mật khẩu không chính xác
+        else Thông tin đăng nhập chính xác
+            Note over SVC: bcrypt.compare() khớp, tạo JWT token hiệu lực 7 ngày (BR-07 UTC)
+            SVC->>SVC: Ký JWT chứa userId, email bằng JWT_SECRET
+            SVC-->>API: Dữ liệu token, expiresAt và thông tin user
+            deactivate SVC
+            API-->>FE: 200 OK { data: { token, expiresAt, user } }
+            FE->>FE: Lưu token vào storage trình duyệt và cập nhật trạng thái đăng nhập
+            FE-->>ND: Chuyển hướng người dùng vào màn hình chính
+        end
+    end
+    deactivate API
+```
+
+#### Sơ đồ 2. Tham gia nhóm bằng liên kết mời (U005, US-05)
+
+Sơ đồ mô tả quy trình 2 giai đoạn của tính năng tham gia nhóm bằng liên kết mời:
+- **Giai đoạn 1 (Công khai):** Người dùng mở liên kết mời chứa mã token, gọi `GET /api/invitations/{token}` để kiểm tra hiệu lực liên kết và lấy tên nhóm hiển thị màn hình xác nhận (chỉ trả về `groupName` và `expiresAt`, không để lộ thông tin thành viên nội bộ; trả về `404 NOT_FOUND` nếu token hết hạn > 7 ngày hoặc không tồn tại).
+- **Giai đoạn 2 (Đã đăng nhập):** Người dùng bấm xác nhận tham gia nhóm, gọi `POST /api/invitations/{token}/join` kèm Bearer JWT token. Hệ thống kiểm tra tư cách thành viên: nếu đã là thành viên thì trả về `200 OK` kèm `alreadyMember: true` và chuyển hướng vào nhóm; nếu chưa thì thêm bản ghi vào `group_members` (`role = 'member'`) và phản hồi `201 CREATED` kèm `alreadyMember: false`. Dữ liệu cá nhân được bảo vệ theo `BR-02` (nhóm chỉ thấy trạng thái bận/rảnh).
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+    autonumber
+    actor ND as Sinh viên
+    participant FE as Frontend
+    participant API as API
+    participant SVC as GroupService
+    participant DB as CSDL
+
+    Note over ND,DB: Giai đoạn 1 - Xem thông tin nhóm trước khi tham gia (Công khai)
+    ND->>FE: Mở liên kết mời chứa mã token trên trình duyệt
+    FE->>API: GET /api/invitations/{token} (Công khai)
+    activate API
+    API->>SVC: Yêu cầu kiểm tra liên kết mời (token)
+    activate SVC
+    SVC->>DB: SELECT g.name AS group_name, i.expires_at FROM invitation_links i JOIN groups g ON i.group_id = g.id WHERE i.token = $1 AND i.is_active = true AND i.expires_at > now()
+    activate DB
+    DB-->>SVC: Thông tin nhóm và hạn dùng (hoặc null)
+    deactivate DB
+
+    alt Mã token không tồn tại, hết hạn (> 7 ngày) hoặc bị thay thế
+        SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
+        API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+        FE-->>ND: Báo lỗi liên kết mời không hợp lệ hoặc đã hết hạn
+    else Liên kết còn hiệu lực
+        Note over SVC,API: Chỉ trả về tên nhóm và hạn dùng để bảo mật (không lộ danh sách thành viên)
+        SVC-->>API: Dữ liệu groupName và expiresAt
+        deactivate SVC
+        API-->>FE: 200 OK { data: { groupName, expiresAt } }
+        FE-->>ND: Hiển thị màn hình xác nhận tham gia nhóm kèm tên nhóm
+
+        Note over ND,DB: Giai đoạn 2 - Xác nhận tham gia nhóm đồ án (Yêu cầu đăng nhập)
+        ND->>FE: Bấm nút Tham gia nhóm
+        FE->>API: POST /api/invitations/{token}/join (Bearer JWT token)
+        API->>API: Xác thực JWT của sinh viên
+        alt Chưa đăng nhập hoặc token hết hạn
+            API-->>FE: 401 UNAUTHORIZED
+            FE-->>ND: Yêu cầu sinh viên đăng nhập trước khi vào nhóm
+        else Token JWT hợp lệ
+            API->>SVC: Yêu cầu gia nhập nhóm (userId, token)
+            activate SVC
+            SVC->>DB: Kiểm tra lại liên kết mời còn hiệu lực
+            activate DB
+            DB-->>SVC: group_id của liên kết
+            deactivate DB
+            SVC->>DB: SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2
+            activate DB
+            DB-->>SVC: Bản ghi thành viên (hoặc null)
+            deactivate DB
+
+            alt Sinh viên đã là thành viên của nhóm từ trước
+                Note over SVC,API: Không tạo dòng mới, giữ nguyên vai trò và báo thành công kèm cờ alreadyMember
+                SVC-->>API: Thông tin nhóm và alreadyMember = true
+                API-->>FE: 200 OK { data: { group, alreadyMember: true } }
+                FE-->>ND: Hiển thị Bạn đã là thành viên của nhóm này và mở nhóm
+            else Sinh viên mới gia nhập nhóm lần đầu
+                Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
+                SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now())
+                activate DB
+                DB-->>SVC: Bản ghi thành viên mới đã lưu
+                deactivate DB
+                SVC-->>API: Thông tin nhóm và alreadyMember = false
+                deactivate SVC
+                API-->>FE: 201 CREATED { data: { group, alreadyMember: false } }
+                FE-->>ND: Thông báo tham gia thành công và mở không gian làm việc của nhóm
+            end
+        end
+    end
+    deactivate API
+```
+
 <!-- TV1:END -->
 
 ---
