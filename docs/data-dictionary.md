@@ -233,7 +233,7 @@ Bảng sau tổng hợp 14 bảng CSDL của 5 module, kèm đối chiếu số 
 #### users
 
 Mô tả: Mỗi dòng là một tài khoản StudySync của sinh viên (thực thể: Người dùng).  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -254,7 +254,7 @@ Ghi chú:
 #### groups
 
 Mô tả: Mỗi dòng là một nhóm đồ án hoặc nhóm học tập của sinh viên (thực thể: Nhóm); Trưởng nhóm được biểu diễn qua vai trò `leader` trong bảng `group_members`.  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -272,7 +272,7 @@ Ghi chú:
 #### group_members
 
 Mô tả: Mỗi dòng ghi nhận tư cách thành viên, vai trò và quyền hạn của một người dùng trong một nhóm cụ thể (thực thể: Thành viên nhóm; bảng nối giữa `users` và `groups`).  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -297,7 +297,7 @@ Ghi chú:
 #### invitation_links
 
 Mô tả: Mỗi dòng lưu thông tin liên kết mời hiện hành của một nhóm đồ án (thực thể: Liên kết mời); mỗi nhóm duy trì tối đa một liên kết mời còn hiệu lực.  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -452,7 +452,7 @@ Các thao tác sau tác động trên nhiều bảng hoặc đòi hỏi tính ng
 
 | Nghiệp vụ | Thao tác nguyên tử trong 1 Transaction |
 | --- | --- |
-| **Nạp tệp lịch nguyên tử (Atomic File Rejection - BR-06, US-11, US-15)** | 1. Đọc và kiểm tra toàn bộ tệp (kiểm tra dung lượng $\le 5\text{ MB}$ theo BR-05, kiểm tra cấu trúc RFC 5545 / RFC 4180, kiểm tra logic thời gian $ends\_at > starts\_at$, kiểm tra độ dài tên $\le 200$ ký tự theo BR-08).<br>2. Nếu phát hiện bất kỳ lỗi nào, **hủy bỏ toàn bộ**, không ghi bất kỳ dòng nào vào CSDL, phản hồi HTTP 422 kèm danh sách tối đa 20 dòng lỗi đầu tiên (BR-06).<br>3. Nếu tệp hoàn toàn hợp lệ: Mở Transaction $\rightarrow$ INSERT 1 dòng vào `imported_files` $\rightarrow$ INSERT các dòng vào `recurring_rules` (nếu có sự kiện lặp) $\rightarrow$ BATCH INSERT toàn bộ sự kiện vào `fixed_events` (gắn `imported_file_id` và `recurring_rule_id`) $\rightarrow$ Commit Transaction.<br>*(Bảo đảm nguyên tắc Atomic Rejection: hoặc toàn bộ sự kiện được lưu, hoặc không có bản ghi rác nào lọt vào CSDL).* |
+| **Nạp tệp lịch nguyên tử (Atomic File Rejection - BR-06, US-11, US-15)** | 1. Đọc và kiểm tra toàn bộ tệp trên bộ nhớ (kiểm tra dung lượng $\le 5\text{ MB}$ theo BR-05, kiểm tra cấu trúc RFC 5545 / RFC 4180, kiểm tra logic thời gian $ends\_at > starts\_at$, kiểm tra độ dài tên $\le 200$ ký tự NFC theo BR-08, kiểm tra múi giờ TZID hỗ trợ theo BR-07).<br>2. Nếu phát hiện bất kỳ lỗi nào, **dừng ngắt toàn khối**, không mở transaction và không ghi bất kỳ dòng nào vào CSDL, phản hồi HTTP 422 kèm danh sách tối đa 20 dòng lỗi đầu tiên (BR-06).<br>3. Nếu tệp hoàn toàn hợp lệ: Mở Transaction $\rightarrow$ INSERT 1 dòng vào `imported_files` $\rightarrow$ BATCH INSERT toàn bộ sự kiện vào `fixed_events` (gắn `imported_file_id`; với quy tắc lặp `RRULE`, hệ thống bung phẳng trực tiếp thành các bản ghi độc lập với `recurring_rule_id = NULL`, bảng `recurring_rules` chỉ dành cho sự kiện lặp tạo thủ công từ giao diện) $\rightarrow$ Commit Transaction.<br>*(Bảo đảm nguyên tắc Atomic Rejection: hoặc toàn bộ sự kiện được lưu, hoặc không có bản ghi rác nào lọt vào CSDL, khớp với Bảng 9.1 Truy vết US-11).* |
 | **Xóa việc cần làm có khung giờ học liên kết (US-12, #56, #57, TV2-TV3-TV4)** | 1. Mở Transaction.<br>2. DELETE các dòng `study_slots` có `task_id = $1` và (`status = 'proposed'` HOẶC (`status = 'scheduled'` VÀ `starts_at > now()`)).<br>3. UPDATE các dòng `study_slots` còn lại (`status IN ('studied', 'missed')`) có `task_id = $1` đặt thành `task_id = NULL`.<br>4. DELETE dòng `tasks` có `id = $1`. Khóa ngoại `fk_reminders_task_id` (`ON DELETE CASCADE`) tự động xóa sạch các nhắc việc liên quan ở TV4.<br>5. Commit Transaction.<br>*(Bảo đảm dọn sạch khung học tương lai và nhắc việc, giữ nguyên khung đã học/bỏ lỡ cho thống kê và tránh vi phạm khóa ngoại).* |
 | **Xóa chuỗi sự kiện lặp (U011, US-12, DELETE /api/events/{eventId}?scope=all)** | Khi người dùng xác nhận xóa toàn bộ chuỗi lặp (`scope=all`): Mở Transaction $\rightarrow$ DELETE toàn bộ các dòng `fixed_events` có `recurring_rule_id = $1` $\rightarrow$ DELETE dòng `recurring_rules` có `id = $1` $\rightarrow$ Commit Transaction. |
 
