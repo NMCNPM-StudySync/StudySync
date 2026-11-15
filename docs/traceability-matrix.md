@@ -60,5 +60,5 @@ Bảng dưới đây ánh xạ toàn bộ 34 user story (`US-01` đến `US-34`)
 
 ### 2.2 Các điểm phụ thuộc và giao thoa liên module (Cross-Module Dependencies)
 1. **Bảng `tasks` dùng chung TV2 & TV3:** Thuộc quyền quản trị trực tiếp của TV2 nhưng là nguồn dữ liệu đầu vào cốt lõi để TV3 xếp lịch học tự động. Khi xóa task (`US-12`), các khung học liên quan trong tương lai bị xóa, các khung quá khứ chuyển `task_id = NULL` (bảo toàn dữ liệu thống kê cho TV5) và `reminders` bị xóa CASCADE (TV4).
-2. **Bảng `study_slots` phục vụ thống kê tuần TV5 (`US-33`):** TV5 không tạo bảng riêng mà truy vấn trực tiếp từ `study_slots` của TV3 đối với các bản ghi có trạng thái `"Đã học"` của người dùng đang đăng nhập (tính cả bản ghi `task_id = NULL` theo quyết định PR #83).
+2. **Bảng `study_slots` phục vụ thống kê tuần TV5 (`US-33`):** TV5 không tạo bảng riêng mà truy vấn trực tiếp từ `study_slots` của TV3 đối với các bản ghi có trạng thái `status = 'studied'` (nhãn hiển thị "Đã học") của người dùng đang đăng nhập (tính cả bản ghi `task_id = NULL` theo quyết định PR #83).
 3. **Quyền riêng tư lịch cá nhân BR-02 (TV2 → TV4):** API tìm giờ họp (`US-23`) chỉ đọc `starts_at`, `ends_at` từ bảng `fixed_events` của các thành viên nhóm; tuyệt đối không đọc `title`, `location`, `notes` hay nội dung riêng tư.
