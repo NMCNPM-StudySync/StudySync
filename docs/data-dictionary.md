@@ -233,7 +233,7 @@ Bảng sau tổng hợp 14 bảng CSDL của 5 module, kèm đối chiếu số 
 #### users
 
 Mô tả: Mỗi dòng là một tài khoản StudySync của sinh viên (thực thể: Người dùng).  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -254,7 +254,7 @@ Ghi chú:
 #### groups
 
 Mô tả: Mỗi dòng là một nhóm đồ án hoặc nhóm học tập của sinh viên (thực thể: Nhóm); Trưởng nhóm được biểu diễn qua vai trò `leader` trong bảng `group_members`.  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -272,7 +272,7 @@ Ghi chú:
 #### group_members
 
 Mô tả: Mỗi dòng ghi nhận tư cách thành viên, vai trò và quyền hạn của một người dùng trong một nhóm cụ thể (thực thể: Thành viên nhóm; bảng nối giữa `users` và `groups`).  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -297,7 +297,7 @@ Ghi chú:
 #### invitation_links
 
 Mô tả: Mỗi dòng lưu thông tin liên kết mời hiện hành của một nhóm đồ án (thực thể: Liên kết mời); mỗi nhóm duy trì tối đa một liên kết mời còn hiệu lực.  
-Module: TV1 · Migration tạo bảng: Issue #69 (việc 16) · Người sở hữu: Thư H.A.  
+Module: TV1 · Migration tạo bảng: 1794574466995_init-tv1-tables.ts · Người sở hữu: Thư H.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
