@@ -1,9 +1,24 @@
 import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { env } from './env';
 
-export const pool = new Pool({
-  connectionString: env.databaseUrl,
-});
+function createPoolConfig(databaseUrl: string) {
+  const isLocal = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+
+  if (isLocal) {
+    return { connectionString: databaseUrl };
+  }
+
+  const cleanUrl = databaseUrl
+    .replace(/[?&]sslmode=[^&]+/g, (match) => (match.startsWith('?') ? '?' : ''))
+    .replace(/\?$/, '');
+
+  return {
+    connectionString: cleanUrl,
+    ssl: { rejectUnauthorized: false },
+  };
+}
+
+export const pool = new Pool(createPoolConfig(env.databaseUrl));
 
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,

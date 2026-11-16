@@ -9,6 +9,12 @@ describe('Database Configuration & Pool', () => {
     expect(env.databaseUrl).toContain('postgresql://');
   });
 
+  it('đọc cấu hình directUrl từ env hoặc fallback sang databaseUrl', () => {
+    expect(env.directUrl).toBeDefined();
+    expect(typeof env.directUrl).toBe('string');
+    expect(env.directUrl).toContain('postgresql://');
+  });
+
   it('khởi tạo pool với các phương thức cốt lõi', () => {
     expect(pool).toBeDefined();
     expect(typeof pool.query).toBe('function');
