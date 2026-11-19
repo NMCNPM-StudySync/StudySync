@@ -1,6 +1,6 @@
 # Thiết kế chi tiết phân hệ TV2 và giải thuật bóc tách thời khóa biểu, kiểm tra trùng lịch
 
-> Trạng thái: Chờ review (#111) · Người soạn: Đào Ngọc Hưng · Người review: Đỗ Thư Q.A. · Ngày cập nhật: 19/11/2026  
+> Trạng thái: Đã cập nhật theo review (#111) · Người soạn: Đào Ngọc Hưng · Người review: Đỗ Thư Q.A. · Ngày cập nhật: 20/11/2026  
 > Căn cứ: Mục 4.2 và Mục 5 Báo cáo M3; `docs/architecture.md` (Issue #106); `docs/m2-tv2-requirements.md` (Issue #41); `docs/data-dictionary.md`; `backend/src/utils/interval.ts`; các quy định nghiệp vụ BR-01 đến BR-08.
 
 Tài liệu này đặc tả chi tiết kiến trúc phân tầng, giao diện dịch vụ, giải thuật bóc tách thời khóa biểu từ tệp iCalendar (`.ics`) và bảng tính (`.csv`), thuật toán kiểm tra xung đột trùng lịch giữa các sự kiện cố định theo BR-01, và cơ chế phát sinh cảnh báo nghiệp vụ cho Module TV2 (Lịch cá nhân và nạp lịch).
@@ -20,7 +20,7 @@ Phân hệ TV2 được tổ chức chặt chẽ theo mô hình kiến trúc b�
    - Chuyển đổi các ngoại lệ nghiệp vụ thành mã trạng thái HTTP chuẩn mực: trả về HTTP `413 FILE_TOO_LARGE` khi tệp vượt quá 5 MB (BR-05), trả về HTTP `422 FILE_INVALID` khi tệp có dòng không hợp lệ (BR-06).
 
 2. **Tầng Dịch vụ nghiệp vụ (Service và Engine):**
-   - `FixedEventService`: Kiểm tra tính hợp lệ logic của khoảng thời gian ($DTEND \ge DTSTART$), phát hiện va chạm thời gian giữa các sự kiện và đính kèm cảnh báo mềm `FIXED_EVENT_OVERLAP` theo quy định BR-01. Trả về cấu trúc kết quả bọc `Result<FixedEvent>`.
+   - `FixedEventService`: Kiểm tra tính hợp lệ logic của khoảng thời gian ($DTEND > DTSTART$, từ chối sự kiện có thời lượng bằng 0 hoặc kết thúc trước thời điểm bắt đầu theo BR-06), phát hiện va chạm thời gian giữa các sự kiện và đính kèm cảnh báo mềm `FIXED_EVENT_OVERLAP` theo quy định BR-01. Trả về cấu trúc kết quả bọc `Result<FixedEvent>`.
    - `CalendarImportService`: Điều phối quy trình nạp tệp nguyên tử (Atomic File Processing). Phối hợp với các bộ phân tích cú pháp `IcsParser` và `CsvParser`. Quản lý giao dịch ghi CSDL: chỉ ghi nhận dữ liệu khi toàn bộ tệp hợp lệ và người dùng xác nhận nạp tại màn hình xem trước.
    - `TaskService`: Hiện thực hóa quy định BR-04: Tự động gán thời lượng mặc định là 1 giờ khi người dùng xóa trống; kiểm tra hạn chót trong quá khứ để phát sinh cảnh báo `DEADLINE_PASSED`. Đồng bộ mốc nhắc việc sang phân hệ thông báo và dọn dẹp các khung đề xuất liên quan khi việc bị xóa hoặc hoàn thành.
    - `WeekScheduleService`: Tổng hợp dữ liệu hiển thị lịch tuần gồm: sự kiện cố định, khung giờ học đề xuất đã xác nhận và danh sách việc cần làm có hạn chót trong tuần.
@@ -97,14 +97,18 @@ sequenceDiagram
     participant IS as CalendarImportService
     participant IP as IcsParser
     participant FR as FixedEventRepository
+    participant IR as ImportedFileRepository
     participant DB as CSDL PostgreSQL
 
+    %% Giai đoạn 1: Tải lên và xem trước
+    rect rgb(240, 248, 255)
+    Note over SV, DB: Giai đoạn 1: Tải lên và xem trước (previewIcs)
     SV->>EC: POST /api/events/import/ics (kèm tệp .ics)
     EC->>EC: Kiểm tra dung lượng tệp <= 5 MB (BR-05)
     alt Dung lượng vượt quá 5 MB
         EC-->>SV: HTTP 413 FILE_TOO_LARGE
     end
-    EC->>IS: previewIcs(userId, fileBuffer)
+    EC->>IS: previewIcs(userId, fileBuffer, fileName)
     IS->>IP: parse(rawContent)
     Note over IP: Thiết lập bảng ánh xạ dòng nguồn sourceLineMap[]<br/>Khử nếp gấp dòng và trích xuất VEVENT<br/>Chuẩn hóa mốc thời gian UTC và kiểm tra BR-06
     alt Tệp có dòng không hợp lệ
@@ -114,17 +118,38 @@ sequenceDiagram
     else Tệp hoàn toàn hợp lệ
         IP-->>IS: Danh sách sự kiện trích xuất
         IS->>FR: findBusyIntervals(userId, minStart, maxEnd)
-        FR->>DB: Truy vấn mốc thời gian sự kiện hiện có
-        DB-->>FR: Dữ liệu khoảng bận
+        FR->>DB: Truy vấn mốc thời gian sự kiện hiện có (BR-02)
+        DB-->>FR: Dữ liệu khoảng bận (user_id, starts_at, ends_at)
         FR-->>IS: Danh sách khoảng bận
-        IS->>IS: Quét kiểm tra trùng lịch (hasOverlap)
+        IS->>IS: Quét kiểm tra trùng lịch (BatchConflictDetection)
         Note over IS: Gắn cảnh báo FIXED_EVENT_OVERLAP (BR-01) nếu trùng
-        IS-->>EC: Dữ liệu xem trước và cảnh báo
+        IS-->>EC: Dữ liệu xem trước, cảnh báo và previewToken
         EC-->>SV: HTTP 200 OK (Hiển thị màn hình xem trước)
+    end
+    end
+
+    %% Giai đoạn 2: Xác nhận hoặc hủy nạp lịch
+    rect rgb(245, 255, 250)
+    Note over SV, DB: Giai đoạn 2: Xác nhận hoặc hủy nạp lịch (confirmIcsImport)
+    alt Sinh viên hủy nạp lịch
+        SV->>EC: Đóng hộp thoại xem trước (Hủy thao tác)
+        Note over SV, EC: previewToken hết hiệu lực sau thời gian chờ (15 phút), không ghi dữ liệu vào CSDL
+    else Sinh viên xác nhận nạp lịch
+        SV->>EC: POST /api/events/import/confirm { previewToken, selectedEventIds }
+        EC->>IS: confirmIcsImport(userId, previewToken, selectedEventIds)
+        IS->>DB: Bắt đầu giao dịch (BEGIN TRANSACTION)
+        IS->>IR: insert(importedFileRecord)
+        IR->>DB: Ghi nhận nhật ký tệp nạp vào imported_files
+        IS->>FR: insertMany(events)
+        FR->>DB: Ghi danh sách sự kiện cố định vào fixed_events
+        IS->>DB: Hoàn tất giao dịch (COMMIT TRANSACTION)
+        IS-->>EC: Kết quả nạp thành công (số lượng sự kiện đã lưu)
+        EC-->>SV: HTTP 201 CREATED (Cập nhật giao diện lịch tuần)
+    end
     end
 ```
 
-*Hình 4.2: Sơ đồ tuần tự xử lý nạp tệp thời khóa biểu iCalendar (.ics)*
+*Hình 4.2: Sơ đồ tuần tự xử lý nạp tệp thời khóa biểu iCalendar (.ics) qua hai giai đoạn Xem trước và Xác nhận nạp*
 
 ---
 
@@ -217,9 +242,13 @@ Bước 5: Quyết định nạp tệp nguyên tử (Atomic File Rejection)
 3. **Bung lặp buổi học theo tuần:**
    Với mỗi dòng dữ liệu thứ $k$ (tương ứng dòng vật lý $k + 1$ trong tệp):
    - Chuyển đổi giá trị cột `Ngày bắt đầu` và `Ngày kết thúc` (định dạng `DD/MM/YYYY`).
-   - Kiểm tra ràng buộc: Ngày kết thúc không sớm hơn ngày bắt đầu; giờ kết thúc phải sau giờ bắt đầu.
+   - Kiểm tra ràng buộc: Ngày kết thúc không sớm hơn ngày bắt đầu; giờ kết thúc phải sau giờ bắt đầu ($DTEND > DTSTART$).
    - Quét qua từng tuần từ ngày bắt đầu đến ngày kết thúc, tính toán ngày chính xác khớp với giá trị cột `Thứ trong tuần` (từ Thứ Hai đến Chủ Nhật).
    - Ghép giờ bắt đầu, giờ kết thúc và chuyển đổi sang thời điểm tuyệt đối UTC theo giờ Việt Nam.
+4. **Quyết định từ chối nguyên khối (Atomic File Rejection - BR-06):**
+   Trong suốt quá trình duyệt các dòng dữ liệu, nếu phát hiện bất kỳ dòng nào vi phạm quy tắc (thiếu trường bắt buộc, sai định dạng ngày giờ, ngày kết thúc trước ngày bắt đầu, hoặc giờ kết thúc không sau giờ bắt đầu), hệ thống lập tức ghi nhận lỗi vào danh sách `errors`. Nếu danh sách `errors` không rỗng, hệ thống **từ chối toàn bộ tệp, tuyệt đối không lưu bất kỳ bản ghi nào vào CSDL**, trả về mã lỗi HTTP `422 FILE_INVALID` kèm danh sách tối đa 20 dòng lỗi đầu tiên theo mẫu quy định:
+   `Tệp không hợp lệ. Lỗi tại dòng N: <lý do>`.
+   Chỉ khi 100% các dòng đều hợp lệ, danh sách sự kiện trích xuất mới được chuyển tiếp sang giải thuật kiểm tra trùng lịch và trả về màn hình xem trước.
 
 ---
 
@@ -264,6 +293,9 @@ export function hasOverlap(a: TimeInterval, b: TimeInterval): boolean {
 }
 ```
 
+> **Lưu ý về khoảng thời gian suy biến ($S = E$):**
+> Hàm `hasOverlap` xử lý an toàn bằng cách trả về `false` khi gặp khoảng thời gian có độ dài bằng 0 ($S = E$) nhằm phòng vệ ngoại lệ toán học trong các thuật toán so khớp tổng quát. Tuy nhiên, ở tầng dịch vụ nghiệp vụ (`FixedEventService`, `IcsParser`, `CsvParser`), hệ thống áp dụng điều kiện hợp lệ nghiêm ngặt $DTEND > DTSTART$. Mọi sự kiện có thời lượng bằng 0 hoặc kết thúc trước thời điểm bắt đầu đều bị từ chối ngay tại tầng kiểm thực dữ liệu (trả về mã lỗi HTTP 422) theo quy định BR-06, không được phép lưu trữ vào CSDL.
+
 ---
 
 ### 5.2.3. Bảng ma trận phân tích các trường hợp biên của khoảng thời gian
@@ -281,7 +313,7 @@ export function hasOverlap(a: TimeInterval, b: TimeInterval): boolean {
 | 7 | **Giao nhau mút sau** | $[09:30, 10:30)$ | $09:00 < 10:30 \ (\text{Đúng}) \land 09:30 < 10:00 \ (\text{Đúng})$ | `true` | **Trùng lịch một phần**, phát sinh cảnh báo |
 | 8 | **Tiếp xúc mút sau** | $[10:00, 11:00)$ | $10:00 < 10:00 \ (\text{Sai})$ | `false` | Giờ nối tiếp, không tính là trùng (BR-01) |
 | 9 | **Tách rời phía sau** | $[10:30, 11:30)$ | $10:30 < 10:00 \ (\text{Sai})$ | `false` | Hoàn toàn không trùng |
-| 10 | **Khoảng suy biến 0 phút**| $[09:00, 09:00)$ | $s_B == e_B$ | `false` | Khoảng rỗng, không gây xung đột |
+| 10 | **Khoảng suy biến 0 phút**| $[09:00, 09:00)$ | $s_B == e_B$ | `false` | Khoảng rỗng; tầng Service từ chối bằng HTTP 422 (BR-06) |
 
 ---
 
@@ -292,27 +324,50 @@ Khi người dùng nạp một tệp chứa $M$ sự kiện mới vào lịch c�
 ```text
 Thuật toán: BatchConflictDetection
 Đầu vào:
-  - newEvents: Danh sách M sự kiện mới trích xuất từ tệp
+  - newEvents: Danh sách M sự kiện mới trích xuất từ tệp (mỗi sự kiện có tempId tạm thời)
   - existingEvents: Danh sách N sự kiện đã có trong CSDL của người dùng
 Đầu ra:
   - newEvents kèm mảng warnings đối với các sự kiện bị trùng
 
-Bước 1: Sắp xếp existingEvents tăng dần theo thời gian bắt đầu startsAt: Độ phức tạp O(N log N).
-Bước 2: Với mỗi sự kiện E trong newEvents:
-  2.1. Sử dụng tìm kiếm nhị phân trên existingEvents để tìm các sự kiện có startsAt < E.endsAt và endsAt > E.startsAt.
-  2.2. Nếu phát hiện ít nhất một sự kiện giao nhau:
-         Gắn nhãn cảnh báo:
-         E.warnings.push({
-           code: 'FIXED_EVENT_OVERLAP',
-           message: 'Sự kiện bị trùng thời gian với sự kiện khác'
-         });
-  2.3. Kiểm tra tự xung đột trong newEvents:
-         So khớp E với các sự kiện còn lại trong newEvents.
-Bước 3: Trả về danh sách sự kiện kèm các cờ cảnh báo để hiển thị trên màn hình xem trước.
+Bước 1: Sắp xếp danh sách sự kiện theo mốc thời gian bắt đầu startsAt
+  1.1. Sắp xếp existingEvents tăng dần theo startsAt: Độ phức tạp O(N log N).
+  1.2. Sắp xếp newEvents tăng dần theo startsAt: Độ phức tạp O(M log M).
+
+Bước 2: Phát hiện xung đột chéo với sự kiện đã có trong CSDL (Cross-Check against DB)
+  Với mỗi sự kiện E trong newEvents (tổng số M sự kiện):
+    2.1. Áp dụng tìm kiếm nhị phân trên existingEvents để xác định vị trí sự kiện đầu tiên thỏa mãn endsAt > E.startsAt: O(log N).
+    2.2. Quét tuyến tính từ vị trí đó sang phải chừng nào startsAt < E.endsAt:
+         Nếu hasOverlap(E, X) == true (với X là sự kiện trong existingEvents):
+           E.warnings.push({
+             code: 'FIXED_EVENT_OVERLAP',
+             message: 'Sự kiện bị trùng thời gian với sự kiện khác',
+             conflictingEventId: X.id
+           });
+
+Bước 3: Phát hiện tự xung đột nội bộ trong tệp nạp (Self-Conflict Sweep-Line)
+  Duyệt danh sách newEvents đã sắp xếp từ chỉ số i = 0 đến M - 1:
+    Duyệt j = i + 1, i + 2, ... chừng nào newEvents[j].startsAt < newEvents[i].endsAt:
+      Nếu hasOverlap(newEvents[i], newEvents[j]) == true:
+        newEvents[i].warnings.push({
+          code: 'FIXED_EVENT_OVERLAP',
+          message: 'Sự kiện bị trùng thời gian với sự kiện khác trong cùng tệp nạp',
+          conflictingEventId: newEvents[j].tempId
+        });
+        newEvents[j].warnings.push({
+          code: 'FIXED_EVENT_OVERLAP',
+          message: 'Sự kiện bị trùng thời gian với sự kiện khác trong cùng tệp nạp',
+          conflictingEventId: newEvents[i].tempId
+        });
+
+Bước 4: Trả về danh sách newEvents kèm đầy đủ cờ cảnh báo để hiển thị trên màn hình xem trước.
 ```
 
-- **Độ phức tạp thời gian:** $\mathcal{O}((N + M) \log N)$.
-- **Độ phức tạp không gian:** $\mathcal{O}(M)$ để lưu trữ danh sách cảnh báo.
+- **Độ phức tạp thời gian:**
+  - Sắp xếp hai danh sách: $\mathcal{O}(N \log N + M \log M)$.
+  - So khớp chéo CSDL: $\mathcal{O}(M \log N + k)$ với $k$ là số cặp sự kiện thực tế giao nhau ($k \ll N \cdot M$).
+  - Quét tự xung đột nội bộ (Sweep-Line): Vì danh sách đã được sắp xếp theo thời gian, mỗi sự kiện chỉ cần so khớp với các sự kiện bắt đầu trước khi nó kết thúc. Đối với lịch sinh viên thực tế, số sự kiện chồng lấn đồng thời tại một thời điểm được chặn bởi hằng số nhỏ $c \le 3$, do đó số phép kiểm tra tại Bước 3 là $\mathcal{O}(c \cdot M) = \mathcal{O}(M)$.
+  - **Tổng độ phức tạp thời gian:** $\mathcal{O}((N + M) \log(N + M))$. Thuật toán tối ưu triệt để, loại bỏ hoàn toàn nguy cơ suy biến thành $\mathcal{O}(M^2)$ so với duyệt vét cạn hai vòng lặp lồng nhau.
+- **Độ phức tạp không gian:** $\mathcal{O}(M)$ để lưu trữ danh sách cảnh báo `warnings` và định danh xung đột.
 
 ---
 
@@ -342,5 +397,16 @@ Bước 3: Trả về danh sách sự kiện kèm các cờ cảnh báo để hi
 
 ### 5.3.2. Cảnh báo việc cần làm quá hạn `DEADLINE_PASSED` (BR-04)
 - Khi tạo hoặc cập nhật việc cần làm có thời hạn nằm trong quá khứ so với thời điểm hiện tại (`dueAt < now`), hệ thống vẫn lưu vào CSDL và trả về cảnh báo `DEADLINE_PASSED`.
-- **Hành vi liên module:** Tầng Service của phân hệ Lịch cá nhân tự động đánh dấu cờ dữ liệu, ngăn không đưa việc quá hạn này vào thuật toán đề xuất khung giờ học của phân hệ Xếp lịch tự động (tránh việc thuật toán cố gắng xếp lịch cho một công việc đã hết hạn).
+- **Cơ chế liên module giữa TV2 và TV3:**
+  - Phân hệ TV2 lưu trữ thuộc tính thời hạn `due_at` thực tế vào bảng `tasks`, tuyệt đối không sinh thêm cột cờ dư thừa `is_past_due` trong CSDL nhằm tuân thủ chuẩn hóa dữ liệu tại `docs/data-dictionary.md`.
+  - Khi phân hệ TV3 (Xếp lịch tự động) thu thập danh sách việc cần làm để tính toán đề xuất khung giờ học, lớp `SchedulerService` truy vấn dữ liệu thông qua phương thức `TaskRepository.listOpenByUser(userId)`.
+  - Phương thức này thực thi câu truy vấn SQL có điều kiện loại trừ động:
+    ```sql
+    SELECT * FROM tasks
+    WHERE user_id = $1
+      AND is_done = false
+      AND due_at > now()
+    ORDER BY due_at ASC;
+    ```
+  - Cơ chế này loại trừ động toàn bộ việc cần làm đã quá hạn (`due_at <= now()`) khỏi tập dữ liệu đầu vào của thuật toán đề xuất TV3 một cách triệt để, ngăn chặn thuật toán cố gắng xếp lịch cho các mục tiêu đã hết hạn.
 - **Thời lượng mặc định:** Nếu trường thời lượng ước tính bị xóa trống, hệ thống tự động gán giá trị mặc định là 1 giờ (hiển thị chuỗi chuẩn "1 giờ") trước khi ghi nhận vào CSDL.
