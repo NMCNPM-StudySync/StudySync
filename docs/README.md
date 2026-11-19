@@ -9,4 +9,5 @@
 - [Ma trận truy vết yêu cầu (Requirement Traceability Matrix - M3 Mục 9)](./traceability-matrix.md)
 - [Thiết kế thư viện khoảng thời gian (Interval Library)](./interval-library.md)
 - [Thẩm định hạ tầng và CI/CD](./infrastructure-evaluation-and-cicd.md)
+- [Kiến trúc backend và thiết kế lớp (Class Diagram)](./architecture.md)
 
