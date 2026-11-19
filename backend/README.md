@@ -39,10 +39,11 @@ Toàn bộ nhóm StudySync sử dụng chung một cơ sở dữ liệu PostgreS
    - Điền các giá trị vào tệp `.env` vừa tạo:
      - `PORT`: Cổng máy chủ backend (mặc định `3000`).
      - `NODE_ENV`: Môi trường thực thi (`development` | `production` | `test`).
-     - `DATABASE_URL`: Chuỗi kết nối **Session Pooler (Cổng 6543)** dành cho ứng dụng Express backend runtime:
+     - `DATABASE_URL`: Chuỗi kết nối **Connection Pooler (Cổng 6543 - Transaction Mode)** dành cho ứng dụng Express backend runtime:
        ```env
-       DATABASE_URL=postgresql://postgres:[mật_khẩu]@db.[project-ref].supabase.co:6543/postgres?uselibpqcompat=true&sslmode=require
+       DATABASE_URL=postgresql://postgres.[project-ref]:[mật_khẩu]@aws-0-[region].pooler.supabase.com:6543/postgres?uselibpqcompat=true&sslmode=require
        ```
+       *(Lưu ý: Khu vực Singapore dùng host `aws-1-ap-southeast-1.pooler.supabase.com`, user bắt buộc có dạng `postgres.[project-ref]` để pooler định tuyến đúng project; cổng 6543 là Transaction Mode, cổng 5432 là Session Mode).*
      - `DIRECT_URL`: Chuỗi kết nối **Direct Connection (Cổng 5432)** dành riêng cho công cụ di trú CSDL `node-pg-migrate`:
        ```env
        DIRECT_URL=postgresql://postgres:[mật_khẩu]@db.[project-ref].supabase.co:5432/postgres?uselibpqcompat=true&sslmode=require
@@ -57,12 +58,14 @@ Toàn bộ nhóm StudySync sử dụng chung một cơ sở dữ liệu PostgreS
 ### 2.3. Quản lý Cơ sở dữ liệu Đám mây Supabase
 
 - **Độ trễ và khu vực:** Dự án CSDL đặt tại Singapore (`ap-southeast-1`), độ trễ kết nối từ Việt Nam `< 50ms`.
-- **Cơ chế chống tạm dừng (Pause) sau 7 ngày:** Gói miễn phí của Supabase tự động pause nếu không có truy vấn trong 7 ngày. Hệ thống đã thiết lập cron-job tự động ping endpoint `GET /health` định kỳ 10 phút một lần (thực thi truy vấn nhẹ `SELECT 1`) để giữ CSDL luôn hoạt động liên tục.
+- **Cơ chế chống tạm dừng (Pause) sau 7 ngày:** Gói miễn phí của Supabase tự động pause nếu không có truy vấn trong 7 ngày. Dự án đã thiết lập 2 lớp bảo vệ:
+  1. *Lớp ứng dụng:* Endpoint `GET /health` thực thi trực tiếp truy vấn nhẹ `SELECT 1` lên CSDL để kiểm tra trạng thái kết nối và tạo hoạt động.
+  2. *Lớp tự động hóa:* Workflow GitHub Actions [.github/workflows/db-keepalive.yml](../.github/workflows/db-keepalive.yml) được cấu hình chạy định kỳ 2 ngày một lần (vào 04:00 UTC các ngày Thứ Hai, Thứ Tư, Thứ Sáu, Chủ Nhật) tự động ping CSDL để duy trì trạng thái hoạt động liên tục.
 - **Phương án dự phòng cục bộ (Local Fallback):** Nếu làm việc trong điều kiện không có mạng internet, thành viên có thể tạo CSDL cục bộ `studysync` qua lệnh:
   ```bash
   createdb -U postgres -E UTF8 studysync
   ```
-  Và tạm thời trỏ `DATABASE_URL` về `postgresql://postgres:postgres@localhost:5432/studysync`.
+  Và tạm thời trỏ `DATABASE_URL` và `DIRECT_URL` về `postgresql://postgres:postgres@localhost:5432/studysync`.
 
 ---
 
@@ -72,31 +75,34 @@ Hệ thống sử dụng công cụ **`node-pg-migrate@9.0.0`** để quản lý
 
 ### 3.1. Các lệnh thao tác Migration
 
-| Lệnh npm | Chức năng | Cơ chế kết nối |
+| Lệnh npm | Chức năng | Cơ chế kết nối & Bảo vệ |
 | :--- | :--- | :--- |
 | `npm run migrate:create -- <tên>` | Tạo tệp migration TypeScript mới kèm dấu thời gian | Không kết nối CSDL |
-| `npm run migrate:up` | Áp dụng toàn bộ migration chưa chạy lên CSDL | Tự động đọc `DIRECT_URL` (hoặc `DATABASE_URL`) |
-| `npm run migrate:down` | Lùi (rollback) 1 bước migration gần nhất | Tự động đọc `DIRECT_URL` (hoặc `DATABASE_URL`) |
-| `npm run migrate:redo` | Rollback và chạy lại ngay migration gần nhất | Tự động đọc `DIRECT_URL` (hoặc `DATABASE_URL`) |
+| `npm run migrate:up` | Áp dụng toàn bộ migration chưa chạy lên CSDL | Đọc `DIRECT_URL` (kết nối trực tiếp cổng 5432) |
+| `npm run migrate:down` | Lùi (rollback) 1 bước migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối cloud, chỉ cho phép trên `localhost` |
+| `npm run migrate:redo` | Rollback và chạy lại ngay migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối cloud, chỉ cho phép trên `localhost` |
 
-### 3.2. Quy trình kiểm thử bắt buộc và Quy tắc an toàn
+### 3.2. Quy trình kiểm thử bắt buộc và Cơ chế Khóa An toàn (Safety Guard)
 
-1. **Kiểm thử chu trình 3 bước (Chỉ khi khởi tạo hoặc trên nhánh tính năng cá nhân):**
-   Trước khi mở Pull Request có migration mới, thành viên bắt buộc kiểm tra cả hai chiều nâng cấp và phục hồi trên CSDL kiểm thử:
-   ```bash
-   # Bước 1: Áp dụng migration chiều thuận
-   npm run migrate:up
+1. **Cơ chế Khóa An toàn Tự động (Safety Guard):**
+   - Để bảo vệ CSDL Supabase dùng chung của nhóm, các lệnh `npm run migrate:down` và `npm run migrate:redo` được bảo vệ bởi tập lệnh [scripts/safe-migrate.mjs](scripts/safe-migrate.mjs).
+   - Nếu phát hiện chuỗi kết nối là CSDL đám mây (`supabase.co` hoặc `pooler.supabase.com`), lệnh sẽ **lập tức bị chặn đứng** và xuất thông báo cảnh báo rõ ràng trên terminal để ngăn ngừa nguy cơ xóa mất dữ liệu của nhóm.
 
-   # Bước 2: Kiểm tra chiều lùi (rollback) xem hàm down có hoạt động sạch sẽ không
-   npm run migrate:down
+2. **Kiểm thử trên CSDL máy cá nhân (Localhost):**
+   - Khi phát triển tính năng mới có migration, thành viên chỉ kiểm thử hàm `down` trên môi trường CSDL cá nhân cục bộ (`localhost`):
+     ```bash
+     # Áp dụng migration
+     npm run migrate:up
 
-   # Bước 3: Áp dụng lại chiều thuận
-   npm run migrate:up
-   ```
+     # Kiểm tra rollback trên local
+     npm run migrate:down
 
-2. **Cảnh báo vận hành trên CSDL dùng chung:**
-   - **TUYỆT ĐỐI KHÔNG chạy `npm run migrate:down`** khi CSDL Supabase đã có dữ liệu của nhóm hoặc trên môi trường Staging/Production, vì lệnh này sẽ xóa bảng và làm mất dữ liệu của các thành viên khác.
-   - Mọi thay đổi cấu trúc sau này bắt buộc phải tạo tệp migration mới (`migrate:create`), không sửa đè lên migration đã merge vào `main`.
+     # Áp dụng lại
+     npm run migrate:up
+     ```
+
+3. **Quy tắc thay đổi cấu trúc CSDL dùng chung:**
+   - Mọi thay đổi cấu trúc sau này bắt buộc phải tạo tệp migration mới theo chiều thuận (`npm run migrate:create -- <tên>`), tuyệt đối không sửa đè lên migration đã merge vào `main`.
 
 ---
 
@@ -106,6 +112,7 @@ Hệ thống sử dụng công cụ **`node-pg-migrate@9.0.0`** để quản lý
 backend/
 ├── dist/                  # Mã nguồn JavaScript sau khi biên dịch (tsc)
 ├── migrations/            # Các tệp migration CSDL bằng TypeScript (.ts)
+├── scripts/               # Tập lệnh vận hành (safe-migrate.cjs bảo vệ rollback)
 ├── src/
 │   ├── config/            # Cấu hình hệ thống (env.ts, db.ts quản lý pool pg và SSL)
 │   ├── routes/            # Khai báo các router API (health.ts, ...)

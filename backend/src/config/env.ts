@@ -22,12 +22,14 @@ function readDatabaseUrl(): string {
   return url;
 }
 
-function readDirectUrl(): string {
-  const directUrl = process.env.DIRECT_URL;
+export function readDirectUrl(
+  envSource: { DIRECT_URL?: string; DATABASE_URL?: string } = process.env,
+): string {
+  const directUrl = envSource.DIRECT_URL;
   if (directUrl && directUrl.trim().length > 0) {
     return directUrl.trim();
   }
-  return readDatabaseUrl();
+  return envSource.DATABASE_URL?.trim() || readDatabaseUrl();
 }
 
 export const env = {
