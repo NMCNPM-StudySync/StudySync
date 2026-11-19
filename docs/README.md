@@ -10,4 +10,4 @@
 - [Thiết kế thư viện khoảng thời gian (Interval Library)](./interval-library.md)
 - [Thẩm định hạ tầng và CI/CD](./infrastructure-evaluation-and-cicd.md)
 - [Kiến trúc backend và thiết kế lớp (Class Diagram)](./architecture.md)
-
+ [Thiết kế giải thuật xếp lịch TV3 (Scheduler Engine)](./scheduler-algorithm.md)
