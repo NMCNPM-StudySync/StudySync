@@ -1,9 +1,29 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from '../src/App';
+import { tokenStorage } from '../src/services/tokenStorage';
 
 describe('App navigation and layout', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    // Giả lập trạng thái đã đăng nhập để kiểm thử điều hướng và bố cục của ứng dụng chính
+    const futureExpiry = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    tokenStorage.setAuth(
+      'mock-test-jwt-token',
+      {
+        id: 'user-001',
+        email: 'kien.nguyen@example.com',
+        displayName: 'Trung Kiên',
+      },
+      futureExpiry,
+    );
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
   it('hiển thị đầy đủ thương hiệu StudySync và các mục điều hướng module', () => {
     render(
       <MemoryRouter initialEntries={['/groups']}>
@@ -36,7 +56,7 @@ describe('App navigation and layout', () => {
     ).toBeInTheDocument();
   });
 
-  it('hiển thị đúng tiêu đề các trang module', () => {
+  it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
       { route: '/groups', title: 'Nhóm (TV1)' },
@@ -111,5 +131,55 @@ describe('App navigation and layout', () => {
     ).toBeInTheDocument();
     // Đảm bảo không chứa MSSV của thành viên theo Mục 4.15
     expect(within(footer).queryByText(/2412\d{4}/)).not.toBeInTheDocument();
+  });
+
+  describe('Định tuyến xác thực (Auth Routing)', () => {
+    it('chuyển hướng người dùng chưa đăng nhập về /login khi truy cập route riêng tư', () => {
+      localStorage.clear();
+
+      render(
+        <MemoryRouter initialEntries={['/calendar']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      expect(
+        screen.getByText('Đăng nhập để quản lý lịch học và công việc nhóm'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument();
+    });
+
+    it('hiển thị trang đăng nhập /login với đầy đủ trường nhập liệu', () => {
+      localStorage.clear();
+
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByLabelText(/Địa chỉ email/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Mật khẩu/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Đăng ký ngay' })).toBeInTheDocument();
+    });
+
+    it('hiển thị trang đăng ký /register với đầy đủ trường nhập liệu', () => {
+      localStorage.clear();
+
+      render(
+        <MemoryRouter initialEntries={['/register']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Đăng ký tài khoản mới để bắt đầu sử dụng')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Họ và tên/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Địa chỉ email/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Mật khẩu/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Xác nhận mật khẩu/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tạo tài khoản' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Đăng nhập' })).toBeInTheDocument();
+    });
   });
 });
