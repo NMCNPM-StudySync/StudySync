@@ -10,4 +10,5 @@
 - [Thiết kế thư viện khoảng thời gian (Interval Library)](./interval-library.md)
 - [Thẩm định hạ tầng và CI/CD](./infrastructure-evaluation-and-cicd.md)
 - [Kiến trúc backend và thiết kế lớp (Class Diagram)](./architecture.md)
+- [Thiết kế giải thuật và chi tiết module TV2 (M3 Mục 4.2 và Mục 5)](./tv2-algorithm-design.md)
 
