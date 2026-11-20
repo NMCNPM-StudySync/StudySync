@@ -1,7 +1,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from '../../src/contexts';
-import { apiClient } from '../../src/services/apiClient';
+import { ApiError, apiClient } from '../../src/services/apiClient';
 import { tokenStorage } from '../../src/services/tokenStorage';
 import type { AuthResponseData, User } from '../../src/types/auth';
 
@@ -138,6 +138,26 @@ describe('AuthContext & useAuth', () => {
 
     expect(tokenStorage.getToken()).toBeNull();
     expect(tokenStorage.getUser()).toBeNull();
+  });
+
+  it('login() thất bại không làm thay đổi trạng thái xác thực', async () => {
+    vi.spyOn(apiClient, 'post').mockRejectedValue(
+      new ApiError('Email hoặc mật khẩu không đúng', 401, 'UNAUTHORIZED'),
+    );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await expect(
+      act(async () => {
+        await result.current.login({ email: 'wrong@example.com', password: 'wrongpass' });
+      }),
+    ).rejects.toThrow(ApiError);
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.token).toBeNull();
+    expect(result.current.user).toBeNull();
   });
 
   it('AuthProvider render nội dung con một cách bình thường', () => {

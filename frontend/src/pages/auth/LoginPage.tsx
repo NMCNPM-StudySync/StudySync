@@ -44,7 +44,6 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       await login({ email: normalizedEmail, password });
-      navigate(returnTo, { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.details && err.details.length > 0) {

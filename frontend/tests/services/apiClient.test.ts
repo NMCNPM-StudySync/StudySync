@@ -131,28 +131,28 @@ describe('apiClient', () => {
       },
     };
 
-    const createMockResponse = () =>
+    global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(errorPayload), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
-      });
+      }),
+    );
 
-    global.fetch = vi.fn().mockImplementation(() => Promise.resolve(createMockResponse()));
-
-    await expect(apiClient.post('/auth/register', {})).rejects.toThrow(ApiError);
-
+    let caught: unknown;
     try {
       await apiClient.post('/auth/register', {});
     } catch (err: unknown) {
-      expect(err).toBeInstanceOf(ApiError);
-      const apiErr = err as ApiError;
-      expect(apiErr.status).toBe(400);
-      expect(apiErr.code).toBe('VALIDATION_ERROR');
-      expect(apiErr.message).toBe('Dữ liệu không hợp lệ');
-      expect(apiErr.details).toHaveLength(1);
-      expect(apiErr.isValidationError).toBe(true);
-      expect(apiErr.isUnauthorized).toBe(false);
+      caught = err;
     }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as ApiError;
+    expect(apiErr.status).toBe(400);
+    expect(apiErr.code).toBe('VALIDATION_ERROR');
+    expect(apiErr.message).toBe('Dữ liệu không hợp lệ');
+    expect(apiErr.details).toHaveLength(1);
+    expect(apiErr.isValidationError).toBe(true);
+    expect(apiErr.isUnauthorized).toBe(false);
   });
 
   it('xử lý đúng lỗi 401 UNAUTHORIZED và các thuộc tính getter', async () => {

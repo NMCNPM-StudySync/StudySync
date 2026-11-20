@@ -51,6 +51,7 @@ VITE_API_URL=http://localhost:3000/api
 - **Tự động kiểm tra hết hạn:** Mỗi khi lấy token qua `tokenStorage.getToken()`, hàm tự động đối soát `expiresAt` với thời gian hiện tại. Nếu token đã hết hạn, hệ thống sẽ tự động dọn sạch storage (`clearAuth()`) và trả về `null`.
 - **Đăng xuất an toàn:** Khi người dùng bấm Đăng xuất, toàn bộ token và thông tin người dùng được xóa khỏi `localStorage` và bộ nhớ React Context.
 - **Không lưu dữ liệu nhạy cảm:** Frontend tuyệt đối không lưu mật khẩu, secret key hay dữ liệu mã hóa nhạy cảm.
+- **Đánh đổi bảo mật (Security Trade-off):** Trong phạm vi đồ án học thuật môn học, việc lưu JWT trong `localStorage` giúp hiện thực hóa đơn giản và nhất quán với kiến trúc Single Page Application không trạng thái. Tuy nhiên, `localStorage` có rủi ro bị đọc nếu trang có lỗ hổng XSS. Nhóm đã áp dụng các biện pháp phòng ngừa nghiêm ngặt (không sử dụng `dangerouslySetInnerHTML`, validate dữ liệu đầu vào) và ghi nhận đề xuất nâng cấp lên HttpOnly Cookie kèm Refresh Token cho các sprint phát triển tiếp theo.
 
 ### 4.2. Module API Client tập trung (`apiClient`)
 

@@ -39,7 +39,7 @@ export function RegisterPage() {
     if (!trimmedName) {
       errors.displayName = 'Vui lòng nhập họ và tên';
     } else if (trimmedName.length > 100) {
-      errors.displayName = 'Họ tên không được vượt quá 100 ký tự (BR-08)';
+      errors.displayName = 'Họ và tên không được vượt quá 100 ký tự';
     }
 
     if (!trimmedEmail) {
@@ -48,8 +48,13 @@ export function RegisterPage() {
 
     if (!password) {
       errors.password = 'Vui lòng nhập mật khẩu';
-    } else if (password.length < 8 || password.length > 72) {
-      errors.password = 'Mật khẩu phải từ 8 đến 72 ký tự';
+    } else if (
+      password.length < 8 ||
+      password.length > 72 ||
+      !/[a-zA-Z]/.test(password) ||
+      !/[0-9]/.test(password)
+    ) {
+      errors.password = 'Mật khẩu từ 8 đến 72 ký tự, gồm cả chữ cái và chữ số';
     }
 
     if (password !== confirmPassword) {
@@ -68,7 +73,6 @@ export function RegisterPage() {
         email: trimmedEmail,
         password,
       });
-      navigate('/calendar', { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.details && err.details.length > 0) {

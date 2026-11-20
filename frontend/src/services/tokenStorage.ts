@@ -67,7 +67,7 @@ export const tokenStorage = {
       localStorage.setItem(EXPIRY_KEY, expiresAt);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
     } catch {
-      // In case localStorage is blocked or quota exceeded
+      // Bỏ qua nếu localStorage bị chặn hoặc hết dung lượng
     }
   },
 
@@ -77,7 +77,7 @@ export const tokenStorage = {
       localStorage.removeItem(EXPIRY_KEY);
       localStorage.removeItem(USER_KEY);
     } catch {
-      // Ignore storage errors on cleanup
+      // Bỏ qua lỗi storage khi dọn dẹp
     }
   },
 };
