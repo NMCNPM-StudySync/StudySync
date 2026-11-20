@@ -1,27 +1,39 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
-import { GroupsPage } from './pages/groups/GroupsPage';
+import { AuthProvider } from './contexts/AuthContext';
+import { LoginPage } from './pages/auth/LoginPage';
+import { RegisterPage } from './pages/auth/RegisterPage';
 import { CalendarPage } from './pages/calendar/CalendarPage';
-import { SchedulerPage } from './pages/scheduler/SchedulerPage';
-import { MeetingsPage } from './pages/meetings/MeetingsPage';
+import { GroupsPage } from './pages/groups/GroupsPage';
 import { KanbanPage } from './pages/kanban/KanbanPage';
-import { StatsPage } from './pages/stats/StatsPage';
+import { MeetingsPage } from './pages/meetings/MeetingsPage';
 import { NotFoundPage } from './pages/not-found/NotFoundPage';
+import { SchedulerPage } from './pages/scheduler/SchedulerPage';
+import { StatsPage } from './pages/stats/StatsPage';
 
 export function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Navigate to="/calendar" replace />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/groups" element={<GroupsPage />} />
-        <Route path="/scheduler" element={<SchedulerPage />} />
-        <Route path="/meetings" element={<MeetingsPage />} />
-        <Route path="/kanban" element={<KanbanPage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Navigate to="/calendar" replace />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/scheduler" element={<SchedulerPage />} />
+            <Route path="/meetings" element={<MeetingsPage />} />
+            <Route path="/kanban" element={<KanbanPage />} />
+            <Route path="/stats" element={<StatsPage />} />
+          </Route>
+        </Route>
+        <Route element={<Layout />}>
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 }
 
