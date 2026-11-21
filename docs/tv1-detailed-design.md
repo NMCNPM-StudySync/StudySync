@@ -1,7 +1,7 @@
 # Thiết kế chi tiết luồng xử lý nghiệp vụ Module TV1: Tài khoản và Nhóm
 
 > Trạng thái: Nháp chờ review · Người soạn: Lê Huỳnh Anh Thư · Người review: Kiên · Ngày soạn: 20/11/2026  
-> Căn cứ: Mục 4.1 Báo cáo M3; `docs/tv1-requirements.md` (US-01 đến US-07, UC-01 đến UC-04); `docs/api.md` (vùng TV1); `docs/data-dictionary.md` (bảng `users`, `groups`, `group_members`, `invitation_links`); `docs/architecture.md` (mục 1, 2.4); các quy định BR-02, BR-07, BR-08.  
+> Căn cứ: Mục 4.1 Báo cáo M3; Báo cáo Yêu cầu M2 (Google Docs, tab Backlog Story: US-01 đến US-07, U001 đến U007); `docs/api.md` (vùng TV1); `docs/data-dictionary.md` (bảng `users`, `groups`, `group_members`, `invitation_links`); `docs/architecture.md` (mục 1, 2.4); các quy định BR-02, BR-07, BR-08.  
 > Phục vụ: Issue #117 (code API TV1).
 
 Tài liệu đặc tả thuật toán và luồng xử lý của Module TV1: đăng ký (chuẩn hóa email, kiểm tra trùng), đăng nhập (so khớp bcrypt, cấp JWT), xác thực phiên (middleware `authenticate`), quản lý nhóm (tạo nhóm, mời thành viên bằng liên kết, phân quyền Trưởng nhóm/Thành viên) và các điều kiện biên.
@@ -15,7 +15,7 @@ Tài liệu đặc tả thuật toán và luồng xử lý của Module TV1: đ�
 | # | Nội dung | Quyết định trong tài liệu | Lý do |
 | :--- | :--- | :--- | :--- |
 | 1 | **Refresh Token**: mô tả task có nhắc "Access Token và Refresh Token", nhưng `api.md` (đã review, mục "Quy định áp dụng cho TV1") ghi rõ *không có cơ chế làm mới token* và đăng xuất chỉ xóa token ở frontend. | **v0.1 chỉ dùng một JWT Access Token, hiệu lực 7 ngày.** Refresh Token được mô tả ở 4.1.4.5 như phương án mở rộng, không đưa vào #117. | Thêm Refresh Token kéo theo bảng lưu token (migration mới), endpoint `/auth/refresh`, `/auth/logout`. Lệch phạm vi đã chốt ở #69. Nếu nhóm muốn có, cần Kiên duyệt và cập nhật `api.md`, từ điển dữ liệu. |
-| 2 | Quy tắc họ tên và mật khẩu: `tv1-requirements.md` ghi họ tên 2 đến 50 ký tự, mật khẩu tối thiểu 8; `api.md` (mới hơn, sau review của Nhi) ghi họ tên 1 đến 100 ký tự (BR-08), mật khẩu 8 đến 72. | Dùng số liệu của `api.md` và `backend/src/utils/validation.ts` (`BR08_LIMITS`). | `api.md` khớp ràng buộc CSDL và mã đã có. Cần cập nhật lại `tv1-requirements.md` cho nhất quán. |
+| 2 | Quy tắc họ tên và mật khẩu: Báo cáo Yêu cầu M2 (Google Docs) ghi họ tên 2 đến 50 ký tự, mật khẩu tối thiểu 8; `api.md` (mới hơn, sau review của Nhi) ghi họ tên 1 đến 100 ký tự (BR-08), mật khẩu 8 đến 72. | Dùng số liệu của `api.md` và `backend/src/utils/validation.ts` (`BR08_LIMITS`). | `api.md` khớp ràng buộc CSDL và mã đã có. Cần đồng bộ lại quy định độ dài họ tên và mật khẩu trong Báo cáo Yêu cầu M2 trên Google Docs. |
 | 3 | Claim JWT: bảng quy định ghi `sub`, `iat`, `exp`; sơ đồ đăng nhập trong `api.md` ghi thêm `email`. | Chỉ dùng `sub`, `iat`, `exp`. | Email có thể bị chuẩn hóa/đổi, và payload JWT chỉ được mã hóa base64 chứ không được che giấu. Giữ payload tối thiểu. |
 
 ---
@@ -27,7 +27,7 @@ Tài liệu đặc tả thuật toán và luồng xử lý của Module TV1: đ�
 | Route | `authRoutes`, `userRoutes`, `groupRoutes`, `invitationRoutes` | Khai báo đường dẫn; gắn `authenticate` cho mọi route "Đã đăng nhập"; riêng `POST /api/auth/*` và `GET /api/invitations/{token}` là công khai |
 | Middleware | `authenticate`, `errorHandler` | `authenticate` xác thực JWT, gắn `req.userId`; `errorHandler` đổi `AppError` thành `{ error: { code, message, details } }` |
 | Controller | `AuthController`, `UserController`, `GroupController`, `InvitationController` | Kiểm tra kiểu, trường bắt buộc, UUID của `groupId`; gọi đúng một phương thức Service; chọn mã HTTP |
-| Service | `AuthService`, `GroupService`, `MembershipService` | Chuẩn hóa dữ liệu, áp dụng BR-08, băm/so khớp mật khẩu, ký JWT, kiểm tra quyền theo nhóm, mở transaction và khóa dòng |
+| Service | `AuthService`, `UserService`, `GroupService`, `MembershipService` | Chuẩn hóa dữ liệu, áp dụng BR-08, băm/so khớp mật khẩu, ký JWT, kiểm tra quyền theo nhóm, mở transaction và khóa dòng |
 | Repository | `UserRepository`, `GroupRepository`, `GroupMemberRepository`, `InvitationLinkRepository` | SQL có tham số; không kiểm tra quyền |
 | Entity | `User`, `Group`, `GroupMember`, `InvitationLink` | `normalizeEmail`, `isLeader`, `isValidAt`... như Bảng 4 trong `architecture.md` |
 
@@ -39,19 +39,18 @@ Quy tắc xuyên suốt: **quyền được kiểm tra ở Service, không chỉ
 
 #### 4.1.2.1. Lưu đồ hoạt động
 
+Lưu ý: ba kiểm tra họ tên, email, mật khẩu **không dừng ở lỗi đầu tiên** (không fail-fast). Service chạy cả ba rồi mới quyết định ném `400 VALIDATION_ERROR` với `details[]` chứa mọi lỗi, đúng ví dụ lỗi 400 trong `api.md`.
+
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
 flowchart TD
     A([Bắt đầu: POST /api/auth/register]) --> B[Controller: kiểm tra body có đủ displayName, email, password và đều là chuỗi]
     B -->|Thiếu hoặc sai kiểu| E400[400 VALIDATION_ERROR]
     B -->|Đủ| C[Service: displayName = NFC + trim<br/>email = trim + toLowerCase]
-    C --> D{Họ tên 1 đến 100 ký tự Unicode<br/>BR-08?}
-    D -->|Không| E400
-    D -->|Có| F{Email khớp định dạng<br/>và dài tối đa 254 ký tự?}
-    F -->|Không| E400
-    F -->|Có| G{Mật khẩu 8 đến 72 ký tự,<br/>byte UTF-8 ≤ 72,<br/>có cả chữ cái và chữ số?}
-    G -->|Không| E400
-    G -->|Có| H[hash = bcrypt.hash password, cost 10]
+    C --> V[Service kiểm tra ĐỦ 3 trường và gom MỌI lỗi vào details:<br/>1. Họ tên 1 đến 100 ký tự Unicode BR-08<br/>2. Email đúng định dạng, tối đa 254 ký tự<br/>3. Mật khẩu 8 đến 72 ký tự, tối đa 72 byte UTF-8, có cả chữ cái và chữ số]
+    V --> D{details có lỗi nào?}
+    D -->|Có: ném ValidationError kèm toàn bộ details| E400
+    D -->|Không| H[hash = bcrypt.hash password, cost 10]
     H --> I[INSERT INTO users email, password_hash, display_name]
     I --> J{Vi phạm uq_users_email<br/>mã lỗi PG 23505?}
     J -->|Có| E409[409 CONFLICT<br/>Email này đã được sử dụng...]
@@ -133,7 +132,7 @@ Hai điểm bảo mật bắt buộc theo `api.md`:
 1. **Thông báo lỗi giống hệt nhau** cho "email không tồn tại" và "sai mật khẩu", không có `details`, để không dò được email nào đã đăng ký (US-02 tiêu chí 2).
 2. **Thời gian xử lý tương đương**: khi không có email vẫn gọi `bcrypt.compare` với `DUMMY_HASH` (sinh một lần khi khởi động bằng `bcrypt.hashSync('dummy', 10)`), tránh việc phản hồi nhanh hơn rõ rệt để lộ email chưa đăng ký (timing attack).
 
-Đăng nhập sai không khóa tài khoản trong v0.1. Giới hạn số lần thử (rate limit) là đề xuất ngoài phạm vi, ghi ở 4.1.7.
+Đăng nhập sai không khóa tài khoản trong v0.1. Giới hạn số lần thử (rate limit) là đề xuất ngoài phạm vi, ghi ở 4.1.8.
 
 ---
 
@@ -206,18 +205,19 @@ Quy ước bảo mật:
 
 ```text
 requireMember(groupId, userId):
+  group ← GroupRepository.findById(groupId)
+  nếu group = null → ném NotFoundError(404, "Nhóm không tồn tại")
   gm ← GroupMemberRepository.find(groupId, userId)
-  nếu nhóm không tồn tại → 404 NOT_FOUND
-  nếu gm = null → 403 FORBIDDEN          // người ngoài nhóm
-  trả gm
+  nếu gm = null → ném ForbiddenError(403, "Bạn không có quyền truy cập thông tin nhóm này")
+  trả { group, gm }
 
 requireLeader(groupId, userId):
-  gm ← requireMember(groupId, userId)
-  nếu gm.role ≠ 'leader' → 403 FORBIDDEN
-  trả gm
+  { group, gm } ← requireMember(groupId, userId)
+  nếu gm.role ≠ 'leader' → ném ForbiddenError(403)
+  trả { group, gm }
 ```
 
-Thứ tự kiểm tra: **401 (chưa đăng nhập) → 404 (nhóm không tồn tại) → 403 (không thuộc nhóm / không phải Trưởng nhóm)**. Bảng ma trận quyền:
+Phải tra sự tồn tại của nhóm **trước** khi tra tư cách thành viên: nếu chỉ tra `group_members`, kết quả rỗng không phân biệt được "nhóm không tồn tại" (404) với "không thuộc nhóm" (403). Thứ tự kiểm tra: **401 (chưa đăng nhập) → 404 (nhóm không tồn tại) → 403 (không thuộc nhóm / không phải Trưởng nhóm)**. Bảng ma trận quyền:
 
 | Endpoint | Công khai | Đã đăng nhập | Thành viên nhóm | Trưởng nhóm |
 | :--- | :---: | :---: | :---: | :---: |
@@ -236,9 +236,47 @@ Nếu sau này cần: rút Access Token xuống 15 phút; cấp Refresh Token ng
 
 ---
 
-### 4.1.5. Luồng Quản lý nhóm
+### 4.1.5. Luồng Xem và cập nhật hồ sơ cá nhân (US-06)
 
-#### 4.1.5.1. Tạo nhóm (US-03, UC-03)
+Service: `UserService` (`getProfile(userId)`, `updateDisplayName(userId, displayName)`), phục vụ `GET /api/users/me` và `PATCH /api/users/me`. Cả hai đã qua `authenticate`, chỉ thao tác trên hồ sơ của chính người gọi (`req.userId`), không nhận `userId` từ body hay đường dẫn.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart TD
+    A([PATCH /api/users/me, đã qua authenticate]) --> B{displayName là chuỗi?}
+    B -->|Không| E400[400 VALIDATION_ERROR]
+    B -->|Có| C[validateDisplayName: NFC + trim, đếm code point]
+    C --> D{1 đến 100 ký tự BR-08?}
+    D -->|Không: rỗng, chỉ khoảng trắng hoặc quá dài| E400
+    D -->|Có| F[UPDATE users SET display_name WHERE id = req.userId RETURNING ...]
+    F --> G{Có dòng được cập nhật?}
+    G -->|Không: tài khoản không còn| E401[401 UNAUTHORIZED]
+    G -->|Có| H[200 OK: User, không có passwordHash]
+    E400 --> Z([Kết thúc: giữ nguyên dữ liệu cũ])
+    E401 --> Z
+```
+
+```text
+getProfile(userId):
+  user ← UserRepository.findById(userId)
+  nếu user = null → ném UnauthorizedError          // token còn hạn nhưng tài khoản không còn
+  trả user.toProfile()                              // id, email, displayName, createdAt
+
+updateDisplayName(userId, displayName):
+  r ← validateDisplayName(displayName)              // backend/src/utils/validation.ts
+  nếu r.isValid = false → ném ValidationError(details[field=displayName])
+  user ← UserRepository.updateDisplayName(userId, r.normalized)
+  nếu user = null → ném UnauthorizedError
+  trả user.toProfile()
+```
+
+- Lưu giá trị đã chuẩn hóa (`r.normalized`), không tự cắt tên quá dài (BR-08); lỗi thì dữ liệu cũ giữ nguyên.
+- Email chưa cho sửa ở v0.1; body có thêm trường khác thì bỏ qua.
+- Tên mới hiện ngay ở mọi nhóm vì danh sách thành viên đọc từ `users.display_name`.
+
+### 4.1.6. Luồng Quản lý nhóm
+
+#### 4.1.6.1. Tạo nhóm (US-03, UC-03)
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -259,7 +297,7 @@ flowchart TD
 
 Hai INSERT nằm trong **một transaction** để không bao giờ có nhóm thiếu Trưởng nhóm. Chỉ mục `uq_group_members_one_leader_per_group` bảo đảm mỗi nhóm tối đa một Trưởng nhóm ở tầng CSDL.
 
-#### 4.1.5.2. Lấy hoặc tạo liên kết mời (US-04)
+#### 4.1.6.2. Lấy hoặc tạo liên kết mời (US-04)
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -281,7 +319,7 @@ flowchart TD
 - `inviteUrl = CORS_ORIGIN + '/invite/' + token`; `token`/`inviteUrl` chỉ trả cho Trưởng nhóm.
 - `regenerate`: bỏ nhánh "trả lại liên kết cũ", luôn UPDATE token mới và đặt lại 7 ngày; liên kết cũ vô hiệu ngay.
 
-#### 4.1.5.3. Tham gia nhóm bằng liên kết mời (US-05, UC-04)
+#### 4.1.6.3. Tham gia nhóm bằng liên kết mời (US-05, UC-04)
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -317,11 +355,11 @@ flowchart TD
 - **Khóa `FOR SHARE`** trên `groups`: nếu thành viên cuối vừa rời và nhóm bị xóa, trả 404 thay vì lỗi khóa ngoại 500.
 - Tham gia nhóm không làm lộ lịch riêng tư: API nhóm chỉ trả khoảng bận/rảnh (BR-02).
 
-#### 4.1.5.4. Chuyển quyền và rời nhóm (US-07)
+#### 4.1.6.4. Chuyển quyền và rời nhóm (US-07)
 
 | Nghiệp vụ | Thuật toán (trong một transaction) |
 | :--- | :--- |
-| Chuyển Trưởng nhóm `PUT .../leader` | `requireLeader` → kiểm tra `userId` ≠ người gọi (400) → khóa `groups FOR UPDATE` → xác minh người nhận là `member` (không thì 404 "Thành viên không còn trong nhóm") → **hạ** Trưởng nhóm cũ xuống `member` → **nâng** người nhận lên `leader`, `can_organize_meetings = false` |
+| Chuyển Trưởng nhóm `PUT .../leader` (Service `transferLeader(callerId, groupId, newLeaderId)`) | `requireLeader` → kiểm tra `newLeaderId` (`req.body.userId`, người nhận quyền) ≠ `callerId` (`req.userId`, người đang đăng nhập), trùng thì 400 `VALIDATION_ERROR` → khóa `groups FOR UPDATE` → xác minh người nhận là `member` (không thì 404 "Thành viên không còn trong nhóm") → **hạ** Trưởng nhóm cũ xuống `member` → **nâng** người nhận lên `leader`, `can_organize_meetings = false` |
 | Trưởng nhóm rời, còn người khác | `requireMember` → khóa → bắt buộc có `successorId` hợp lệ (thiếu hoặc trùng chính mình: 400; không còn trong nhóm: 404) → hạ rồi nâng như trên → xóa dòng `group_members` của người rời → gỡ giao thẻ Kanban (`assigned_to_user_id = NULL`) |
 | Thành viên thường rời | khóa → xóa dòng `group_members` → gỡ giao thẻ Kanban; quyền họp mất theo |
 | Thành viên cuối rời | khóa → đếm thành viên = 1 → `DELETE groups` (CASCADE xóa `group_members`, `invitation_links`, dữ liệu nhóm); lịch cá nhân, việc, khung giờ học giữ nguyên; `groupDeleted = true` |
@@ -330,7 +368,7 @@ flowchart TD
 
 ---
 
-### 4.1.6. Các điều kiện biên và cách xử lý
+### 4.1.7. Các điều kiện biên và cách xử lý
 
 | # | Tình huống | Điều kiện phát hiện | Kết quả | Căn cứ |
 | :--- | :--- | :--- | :--- | :--- |
@@ -364,11 +402,11 @@ flowchart TD
 
 ---
 
-### 4.1.7. Giả định, rủi ro và việc tiếp theo
+### 4.1.8. Giả định, rủi ro và việc tiếp theo
 
 1. **Chưa giới hạn số lần đăng nhập sai** (rate limit/khóa tạm). Khuyến nghị bổ sung ở bản sau; v0.1 chưa có trong yêu cầu.
 2. **Token lưu ở `localStorage`** (qua `tokenStorage`) dễ bị đọc nếu có lỗ hổng XSS. Chấp nhận ở v0.1; React mặc định escape đầu ra, không dùng `dangerouslySetInnerHTML`.
 3. **Đăng ký không xác minh email** (`api.md`): ai cũng đăng ký được bằng email chưa xác minh.
-4. **Thời hạn token 7 ngày và liên kết mời 7 ngày** vẫn là đề xuất chờ Product Owner xác nhận (`tv1-requirements.md`, mục 2).
-5. **Cần đồng bộ tài liệu** nếu Kiên đồng ý các quyết định ở 4.1.0: `tv1-requirements.md` (quy tắc họ tên, mật khẩu) và `api.md` (claim JWT, nếu thêm Refresh Token).
-6. **Gợi ý kiểm thử cho #117**: bảng 4.1.6 có thể chuyển thẳng thành các ca kiểm thử (mỗi dòng một ca), đặc biệt các ca 4, 6, 8, 10, 13, 22, 26.
+4. **Thời hạn token 7 ngày và liên kết mời 7 ngày** vẫn là đề xuất chờ Product Owner xác nhận (Báo cáo Yêu cầu M2, phần Quy định nghiệp vụ).
+5. **Cần đồng bộ tài liệu** nếu Kiên đồng ý các quyết định ở 4.1.0: Báo cáo Yêu cầu M2 trên Google Docs (quy tắc họ tên, mật khẩu) và `api.md` (claim JWT, nếu thêm Refresh Token).
+6. **Gợi ý kiểm thử cho #117**: bảng 4.1.7 có thể chuyển thẳng thành các ca kiểm thử (mỗi dòng một ca), đặc biệt các ca 4, 6, 8, 10, 13, 22, 26.
