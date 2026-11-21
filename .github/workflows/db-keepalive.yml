@@ -1,0 +1,63 @@
+name: Supabase Database Keepalive
+
+on:
+  schedule:
+    # Chạy vào 04:00 UTC (11:00 giờ Việt Nam) các ngày Thứ Hai, Thứ Tư, Thứ Sáu và Chủ Nhật
+    - cron: '0 4 * * 1,3,5,0'
+  workflow_dispatch:
+
+jobs:
+  ping-database:
+    name: Ping Supabase Database (Chống Auto-pause 7 ngày)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Run keepalive query
+        run: |
+          node -e "
+          const { Pool } = require('pg');
+          const dbUrl = process.env.DATABASE_URL || process.env.DIRECT_URL;
+
+          if (!dbUrl) {
+            console.error('::error::Chưa cấu hình biến bí mật DATABASE_URL hoặc DIRECT_URL trên GitHub Secrets! Vui lòng cấu hình để duy trì hoạt động CSDL.');
+            process.exit(1);
+          }
+
+          // Loại bỏ sslmode để tránh xung đột ép verify-full của driver pg
+          const cleanUrl = dbUrl
+            .replace(/[?&]sslmode=[^&]+/g, '')
+            .replace(/\?&/, '?')
+            .replace(/\?$/, '');
+
+          const pool = new Pool({
+            connectionString: cleanUrl,
+            ssl: { rejectUnauthorized: false },
+            connectionTimeoutMillis: 5000,
+          });
+
+          pool.query('SELECT 1 AS keepalive')
+            .then(res => {
+              console.log('Keepalive query thành công:', res.rows);
+              return pool.end();
+            })
+            .catch(err => {
+              console.error('::error::Lỗi khi thực thi keepalive query:', err.message);
+              return pool.end().then(() => process.exit(1));
+            });
+          "
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
