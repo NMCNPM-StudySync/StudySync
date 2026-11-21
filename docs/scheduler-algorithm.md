@@ -1,6 +1,6 @@
 # Thiết kế giải thuật xếp lịch TV3
 
-Trạng thái: Chờ review · Người viết: Nhi · Người review: Hưng · Issue: #112 · Cập nhật: 19/11/2026
+Trạng thái: Chờ review · Người viết: Nhi · Người review: Hưng · Issue: #112 · Cập nhật: 21/11/2026 (sửa theo review của Hưng)
 
 Tài liệu này là bản trong repo của mục 4.3 (phần 4.3.1 đến 4.3.4) và mục 5.1, 5.3 (bảng TV3) của báo cáo M3. Số hình và số bảng giữ đúng như trong báo cáo để hai nơi tra chéo được. Thiết kế dựa trên `docs/api.md` (vùng TV3), `docs/data-dictionary.md` (vùng TV3), `docs/architecture.md` (Hình 6, Hình 11) và thư viện `backend/src/utils/interval.ts`. Đây là đặc tả cho Issue #119 (cài đặt `SchedulerEngine` và `SchedulerService`).
 
@@ -74,9 +74,9 @@ Thứ tự kiểm tra của từng endpoint giống Hình 4.4 và 4.5, mỗi bư
 Xếp lịch (`autoPlan`, U021):
 
 1. Xác thực JWT. Lỗi: 401.
-2. Đọc `now` một lần, đặt `end = now + 7 ngày`.
+2. Đọc `now` một lần, đặt `end = floorStep(now + 7 ngày)` (làm tròn xuống mốc lưới 15 phút, mục 5.1.2), để mọi mốc của W và Free đều là bội số 15 phút.
 3. Nạp các việc `is_done = false` của người gọi (`TaskRepository`), sự kiện cố định giao `[now, end)` (`FixedEventRepository`, chỉ `starts_at`, `ends_at`) và khung `scheduled`, `studied` của người gọi (`StudySlotRepository.listBusyByUser`). Khung của việc dài hơn phạm vi vẫn được nạp để tính thời lượng đã xếp và khoảng nghỉ 30 phút.
-4. Không có việc chưa hoàn thành nào: trả 200 với `data.proposal = null` và cảnh báo `NO_TASKS_TO_SCHEDULE`, không ghi CSDL (yêu cầu 3.6, U021 2a).
+4. Không có việc chưa hoàn thành nào, hoặc mọi việc chưa hoàn thành đều đã xếp đủ thời lượng (R = 0 theo mục 5.1.4): trả 200 với `data.proposal = null` và cảnh báo `NO_TASKS_TO_SCHEDULE`, không ghi CSDL (yêu cầu 3.6, U021 2a).
 5. Gọi `SchedulerEngine.planSlots` (mục 5.1.7). Engine trả `slots` và `taskResults`.
 6. Trong một transaction: chuyển lượt `pending` cũ sang `outdated` và xóa các khung `proposed` của lượt đó, thêm lượt `auto_plan` mới, thêm các khung `proposed`. Có việc nhưng không xếp được khung nào thì lượt vẫn được tạo với `slots` rỗng để giao diện hiện lý do của từng việc (`docs/api.md`).
 7. Trả 200 `{ data: { proposal } }`, mọi mốc thời gian đổi bằng `toSlot`.
@@ -131,7 +131,7 @@ interface PlanSlotInput {           // khung đã có của sinh viên, kể c�
   status: 'scheduled' | 'studied';
   needsReschedule: boolean;         // tính theo Bảng 4.7 trước khi gọi
 }
-interface PlanWindow { now: Date; end: Date }          // end = now + 7 ngày
+interface PlanWindow { now: Date; end: Date }          // end = floorStep(now + 7 ngày)
 function planSlots(tasks: PlanTask[], busy: { fixed: TimeInterval[]; slots: PlanSlotInput[] },
                    window: PlanWindow): PlanResult;
 ```
@@ -172,6 +172,7 @@ Mọi khoảng là nửa mở `[start, end)` theo UTC, cùng quy ước với BR
 
 Mọi khung do Engine tạo nằm trên lưới 15 phút neo ở 00:00 giờ Việt Nam:
 
+- Mốc cuối của phạm vi là `end = floorStep(now + 7 ngày)`: bấm lúc 10:07 Thứ Hai thì `end` là 10:00 Thứ Hai tuần sau, không phải 10:07. Nhờ vậy mọi điểm mút của W đều là bội số 15 phút.
 - Mốc bắt đầu sớm nhất `t0` là mốc lưới đầu tiên sau `now` (lúc 10:07 thì `t0` là 10:15, lúc đúng 10:15 thì `t0` là 10:30), vì khung phải bắt đầu sau thời điểm hiện tại (yêu cầu 3.1).
 - Sự kiện cố định được làm tròn ra ngoài trước khi gộp: giờ bắt đầu làm tròn xuống, giờ kết thúc làm tròn lên (ca làm 13:10 đến 15:05 được coi là bận 13:00 đến 15:15). Làm tròn ra ngoài chỉ làm khoảng bận rộng thêm nên không thể sinh khung trùng sự kiện cố định (BR-01). Thư viện không làm tròn nên TV3 làm trước khi gọi thư viện.
 - Mốc cuối mà khung được phép kết thúc là `dueAt` làm tròn xuống theo lưới (khung kết thúc không muộn hơn hạn chót).
@@ -197,7 +198,7 @@ Với mỗi việc chưa hoàn thành:
 - `dueAt <= now`: không xếp, `result = overdue`, `missingMinutes = R` (yêu cầu 3.6, BR-04).
 - Còn lại: đưa vào danh sách chờ xếp.
 
-Trường hợp không có việc chưa hoàn thành nào do Service xử lý trước khi gọi Engine (`NO_TASKS_TO_SCHEDULE`, mục 4.3.3).
+Hai trường hợp không có việc chưa hoàn thành nào, hoặc mọi việc đều có R = 0, do Service xử lý trước khi gọi Engine: trả `NO_TASKS_TO_SCHEDULE`, không tạo lượt đề xuất (mục 4.3.3).
 
 ### 5.1.5 Bước 3. Thứ tự xếp và phép kiểm tra gộp theo hạn chót (mô hình EDF)
 
@@ -289,7 +290,8 @@ function keepsDeadlines(before, s, ℓ, t):
     Free' ← subtractIntervals(Free, [[s, s+ℓ)]); used' ← used với ngày của s tăng ℓ
     rem'  ← rem với rem'[t] = rem[t] − ℓ
     after ← slackAll(Free', used', rem')
-    return với mọi T trong before: before[T] < 0 or after[T] ≥ 0
+    return với mọi T trong before: before[T] < 0 or (after[T] ?? 0) ≥ 0
+    # T không còn trong after (việc vừa xếp đủ, rem' = 0) thì coi như thỏa
 
 function slackAll(Free, used, rem):
     for each hạn chót T (tăng dần) của việc có rem > 0 và dueAt ≤ end:
@@ -329,7 +331,7 @@ Hình 5.1: Lưu đồ thuật toán xếp lịch (`planSlots`)
 
 ### 5.1.8 Khung giờ bù (findMakeupSlots)
 
-Đầu vào: khung bị lỡ, việc của khung (`dueAt`, `durationMinutes`), khoảng bận như `planSlots` (khung bị lỡ đã là `missed` nên không còn là bận) và `{ now, end = now + 7 ngày }`. Đầu ra: 0, 1 hoặc 2 khung không giao nhau.
+Đầu vào: khung bị lỡ, việc của khung (`dueAt`, `durationMinutes`), khoảng bận như `planSlots` (khung bị lỡ đã là `missed` nên không còn là bận) và `{ now, end = floorStep(now + 7 ngày) }`. Đầu ra: 0, 1 hoặc 2 khung không giao nhau.
 
 1. Phạm vi tìm: `[t0, min(end, dueAt))`. Hạn chót không muộn hơn `t0` thì trả rỗng.
 2. Độ dài khung bù L = min(độ dài khung bị lỡ, R của việc theo mục 5.1.4) (yêu cầu 3.12). Bất biến của yêu cầu 3.19 (giảm thời lượng thì rút khung) bảo đảm L > 0 khi Service cho phép báo lỡ.
@@ -365,7 +367,7 @@ flowchart TD
     A["Nhận khung bị lỡ, việc, busy, now"] --> B{"Hạn chót sau t0?"}
     B -- Không --> Z["Trả rỗng: NO_MAKEUP_SLOT"]
     B -- Có --> C["L = min(độ dài khung lỡ, phần còn thiếu)"]
-    C --> D["Free trong t0 đến min(now + 7 ngày, hạn chót), giữ khoảng dài từ L"]
+    C --> D["Free trong t0 đến min(end, hạn chót), giữ khoảng dài từ L"]
     D --> E{"Có ngày còn đủ 4 giờ chứa khoảng phù hợp?"}
     E -- Không --> Z
     E -- Có --> F["Khung 1 = vị trí sớm nhất"]
@@ -386,7 +388,8 @@ Hình 5.1a: Lưu đồ tìm khung giờ bù (`findMakeupSlots`)
 
 1. Khung bị ảnh hưởng A: các khung `scheduled` có `startsAt > now`, `startsAt < end` và `hasOverlap` với một khoảng của `mergeIntervals(fixed)` (yêu cầu 3.15). Khung nối tiếp, khung đã bắt đầu, khung "Đã học", "Bỏ lỡ" không thuộc A.
 2. A rỗng và không có việc mới: trả `null`, không tạo lượt (U023 2a).
-3. Bỏ A khỏi khoảng bận. Gọi `planSlots` cho tập việc gồm việc mới và các việc có khung trong A. Khung trong A được tính như "Cần xếp lại" nên không vào thời lượng đã xếp, do đó R của các việc này tự gồm phần cần dời. Việc mới và việc bị ảnh hưởng xếp chung theo thứ tự và phép kiểm tra ở mục 5.1.5 (yêu cầu 3.16).
+3. Bỏ A khỏi khoảng bận và không tính A vào `used[d]`. Gọi `planSlots` cho tập việc gồm việc mới và các việc có khung trong A. Khung trong A được tính như "Cần xếp lại" nên không vào thời lượng đã xếp, do đó R của các việc này tự gồm phần cần dời. Việc mới và việc bị ảnh hưởng xếp chung theo thứ tự và phép kiểm tra ở mục 5.1.5 (yêu cầu 3.16).
+   Lưu ý: điểm này khác `autoPlan`. Ở `autoPlan`, khung "Cần xếp lại" vẫn là khoảng bận (Bảng 4.3b) để giữ chỗ trên lịch tuần cho tới khi sinh viên chấp nhận đề xuất. Ở `planReplan`, khung trong A chính là khung cần dời và sẽ bị xóa khi sinh viên xác nhận, nên được bỏ khỏi khoảng bận và khỏi `used[d]` để nhường chỗ tìm khung mới, không bị tính hai lần vào giới hạn 4 giờ.
 4. Việc mới chưa `full` và có hạn chót trong phạm vi: xét dời khung của việc có độ ưu tiên thấp hơn việc mới (yêu cầu 3.16, U023 3a).
    - Ứng viên: khung `scheduled` chưa bắt đầu, không thuộc A, của việc có độ ưu tiên thấp hơn hẳn việc mới, bắt đầu trước hạn chót của việc mới. Không xét việc cùng hoặc cao hơn độ ưu tiên.
    - Thử nhả hết ứng viên. Nếu việc mới vẫn không đủ thì không nhả khung nào, giữ kết quả bước 3.
@@ -399,14 +402,14 @@ function planReplan(tasks, busy, window, newTaskId):
     A ← { s ∈ busy.slots : s.status = scheduled, window.now < s.start < window.end,
                            ∃ f ∈ F: hasOverlap(s, f) }
     if A = ∅ and newTaskId = null: return null
-    busy1 ← busy với A đánh dấu needsReschedule và bỏ khỏi khoảng bận
+    busy1 ← busy với A đánh dấu needsReschedule, bỏ khỏi khoảng bận và khỏi used[d]
     T1    ← { việc của A } ∪ { newTask }
     res   ← planSlots(T1, busy1, window)
+    release ← []                                   # khởi tạo trước để luôn có giá trị
     if newTask chưa full và newTask.dueAt ≤ window.end:
         C ← khung scheduled chưa bắt đầu, ∉ A, việc có priority < newTask.priority,
             start < newTask.dueAt
         if newTask đủ khi nhả toàn bộ C:
-            release ← []
             for each c in C theo (thứ tự xếp của việc giảm dần, start giảm dần):
                 release.add(c)
                 if planSlots({newTask} ∪ T1, busy1 bỏ release, window) cho newTask full: break
@@ -486,7 +489,7 @@ Bảng 5.1: Trường hợp biên và kết quả mong đợi (TV3)
 | Trùng đúng giờ biên: lớp 07:30 đến 09:30 | Khung có thể bắt đầu đúng 09:30, không khung nào giao 07:30 đến 09:30 | TC-TV3-03 |
 | Hai sự kiện cố định chồng nhau 18:00 đến 20:00 và 19:00 đến 21:00 | Coi là một khoảng bận 18:00 đến 21:00 | TC-TV3-04 |
 | Không có việc chưa hoàn thành | `proposal = null`, cảnh báo `NO_TASKS_TO_SCHEDULE`, không ghi CSDL | TC-TV3-05 |
-| Mọi việc chưa hoàn thành đều đã xếp đủ | Đề xuất: xử lý như dòng trên (chờ chốt, xem câu hỏi 1 trong hướng dẫn) | TC-TV3-06 |
+| Mọi việc chưa hoàn thành đều đã xếp đủ (R = 0) | `proposal = null`, cảnh báo `NO_TASKS_TO_SCHEDULE`, không ghi CSDL | TC-TV3-06 |
 | Việc có hạn chót đã qua | Không xếp, `overdue`; các việc khác vẫn được xếp | TC-TV3-07 |
 | Hạn chót nằm giữa khoảng trống: trống 09:30 đến 12:00, việc 1 giờ hạn 10:00 | Khung 09:30 đến 10:00, `partial` ("Chỉ xếp được 0,5/1 giờ") | TC-TV3-08 |
 | Việc 4 giờ, trước hạn chót chỉ còn 2 giờ trống (US-17 tiêu chí 11) | Đề xuất 2 giờ, `partial` ("Chỉ xếp được 2/4 giờ") | TC-TV3-09 |
