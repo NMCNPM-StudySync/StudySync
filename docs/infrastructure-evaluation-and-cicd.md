@@ -72,7 +72,7 @@ Bảng 1.1: Kết quả thẩm định các dịch vụ hạ tầng 0 đồng
   - Cron-job định kỳ 10 phút gửi yêu cầu vào `/health` của Backend thực thi truy vấn `SELECT 1` xuống CSDL. Nhờ đó, CSDL liên tục ghi nhận hoạt động truy vấn và không bị rơi vào trạng thái tạm dừng trong suốt 11 tuần học kỳ.
 - **Phân định chuỗi kết nối Transaction Pooler và Direct Connection:**
   - **Transaction Pooler (Cổng 6543 - Supavisor):** Tham số `?pgbouncer=true&sslmode=require`, gán cho biến `DATABASE_URL` phục vụ ứng dụng runtime xử lý truy vấn thông thường, tối ưu tái sử dụng kết nối.
-  - **Session Pooler / Direct Connection (Cổng 5432):** Tham số `?sslmode=require`, gán cho biến `DIRECT_URL` phục vụ chạy migration cấu trúc bảng bằng `node-pg-migrate`.
+  - **Direct Connection / Session Pooler (Cổng 5432):** Tham số `?sslmode=require`, gán cho biến `DIRECT_URL` phục vụ chạy migration cấu trúc bảng bằng `node-pg-migrate` (kết nối trực tiếp tới `db.[project-ref].supabase.co:5432`; hoặc dùng Session Pooler `aws-0-[region].pooler.supabase.com:5432` làm phương án dự phòng cho mạng thuần IPv4).
   - **Cấu hình SSL bắt buộc (`PGSSLMODE`):** Cả Supabase và Neon đều bắt buộc kết nối bảo mật qua SSL. Khi chạy công cụ migration trên môi trường deploy, cấu hình thêm biến môi trường `PGSSLMODE=require` để tránh lỗi từ chối kết nối.
 - **Phương án CSDL dự phòng (Neon):** Khởi tạo sẵn 1 project PostgreSQL 15/16 trên Neon cùng vùng Singapore, chạy sẵn bộ migration để đồng bộ cấu trúc bảng. Khi cần chuyển đổi, chỉ cần thay thế giá trị biến `DATABASE_URL` và `DIRECT_URL` trên Backend.
 
@@ -95,10 +95,12 @@ PORT=3000
 
 # Cơ sở dữ liệu PostgreSQL
 # Chuỗi kết nối Supabase PostgreSQL (Transaction Pooler - Cổng 6543 dùng cho ứng dụng runtime)
-DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require"
+DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?uselibpqcompat=true&sslmode=require"
 
-# Chuỗi kết nối Session Pooler (Cổng 5432 dùng khi chạy migration bằng node-pg-migrate)
-DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
+# Chuỗi kết nối trực tiếp Direct Connection (Cổng 5432 dùng khi chạy migration bằng node-pg-migrate)
+DIRECT_URL="postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres?uselibpqcompat=true&sslmode=require"
+# Phương án dự phòng kết nối qua Session Pooler (cổng 5432) cho môi trường mạng không hỗ trợ định tuyến IPv6:
+# DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres?uselibpqcompat=true&sslmode=require"
 
 # Bắt buộc chế độ SSL khi chạy công cụ node-pg-migrate trên môi trường deploy
 PGSSLMODE=require
