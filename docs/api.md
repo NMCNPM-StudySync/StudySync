@@ -2867,7 +2867,7 @@ sequenceDiagram
 
 <!-- TV4:BEGIN -->
 
-Trạng thái: Nháp · Người viết: Thư Q.A. · Người review: Kiên · Cập nhật: 14/11/2026
+Trạng thái: Nháp · Người viết: Thư Q.A. · Người review: Kiên · Cập nhật: 19/11/2026
 
 Phạm vi: US-23 đến US-28. Use case: U031 đến U036. Mọi endpoint theo quy ước chung ở đầu file (REST, JSON UTF-8, tiền tố `/api`, camelCase, id là UUID, thời gian ISO 8601 hậu tố Z và luôn có mili giây khi API trả về, dạng phản hồi `data`, `warnings`, `error`). Bảng và cột liên quan xem vùng TV4 trong `docs/data-dictionary.md` (`meeting_proposals`, `meeting_invitations`, `reminders`, cột `group_members.can_organize_meetings`).
 
@@ -2877,11 +2877,11 @@ Phạm vi: US-23 đến US-28. Use case: U031 đến U036. Mọi endpoint theo q
 | --- | --- |
 | Người tổ chức họp (U031, U032, U036) | Trưởng nhóm, hoặc Thành viên nhóm được Trưởng nhóm ủy quyền (`group_members.can_organize_meetings = true`). Kiểm tra động theo CSDL ở API, không chỉ ẩn nút ở giao diện. Quyền chỉ có hiệu lực trong nhóm đó và tự mất khi người đó rời nhóm |
 | Quyền xem phản hồi (U034) | Trưởng nhóm hiện tại và người gửi lời mời (`organizer_user_id`) xem được trạng thái của mọi người (`viewScope = "all"`). Thành viên khác chỉ xem lời mời của chính mình (`viewScope = "self"`) |
-| Riêng tư (BR-02) | Chỉ đọc `starts_at`, `ends_at` của `fixed_events` để tìm giờ họp. API chỉ trả `displayName` của thành viên, không trả email, tên sự kiện hay dữ liệu lịch. Nhắc việc chỉ trả cho chủ việc |
+| Riêng tư (BR-02) | Chỉ đọc `user_id`, `starts_at`, `ends_at` của `fixed_events` để tìm giờ họp. API chỉ trả `displayName` của thành viên, không trả email, tên sự kiện hay dữ liệu lịch. Điểm `score` là số tổng hợp theo nhóm. Nhắc việc chỉ trả cho chủ việc |
 | Thời gian (BR-07) | Lưu và truyền UTC, hậu tố `Z`, có mili giây khi trả về. Khung tìm giờ họp xét `07:00–22:00` giờ Việt Nam (`Asia/Ho_Chi_Minh`). Giao diện tự đổi sang giờ Việt Nam |
 | Tên buổi họp (BR-08) | Chuẩn hóa NFC, cắt khoảng trắng hai đầu, đếm theo code point, tối thiểu 1, tối đa 200. Quá dài thì `400 VALIDATION_ERROR`, không tự cắt |
 | Một lời mời chưa chốt mỗi nhóm (US-24) | Gửi lời mời mới thì lời mời `pending` của đề xuất cũ trong nhóm chuyển `superseded`. Đề xuất đã "Đủ người" được giữ nguyên (U032 4b) |
-| Nhắc việc (US-28, BR-04) | Hai mốc nhắc là 24 giờ và 1 giờ trước `dueAt`. Mốc đã qua tại lúc lưu thì bỏ, không gửi bù. Bộ hẹn giờ (Timer) gửi trong tối đa 5 phút kể từ mốc, mỗi mốc gửi tối đa một lần (U035) |
+| Nhắc việc (US-28, BR-04) | Hai mốc nhắc là 24 giờ và 1 giờ trước `dueAt`. Mốc đã qua tại lúc lưu thì bỏ, không gửi bù. Bộ hẹn giờ (`ReminderJob`, chu kỳ mặc định 60 giây) gửi trong tối đa 5 phút kể từ mốc, mỗi mốc gửi tối đa một lần (U035) |
 | Thông báo trong ứng dụng | Không có bảng hay endpoint thông báo riêng. Mỗi thông báo lấy từ endpoint đọc dữ liệu gốc, xem bảng dưới. Phiên bản này không có đẩy (push), frontend gọi lại khi mở ứng dụng hoặc theo chu kỳ |
 
 ### Thông báo trong ứng dụng và endpoint cung cấp dữ liệu
@@ -2908,11 +2908,10 @@ Phạm vi: US-23 đến US-28. Use case: U031 đến U036. Mọi endpoint theo q
 
 ---
 
-
 ### `POST /api/groups/{groupId}/meeting-slots/search`
 
 Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
-Mô tả: Tìm các khung giờ họp chung của nhóm trong khoảng thời gian được chọn, dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên; trả danh sách khung rảnh hoàn toàn (`allFreeSlots`) hoặc khung có nhiều người rảnh nhất (`partialSlots`) khi không có giờ chung (US-23, U031).  
+Mô tả: Tìm các khung giờ họp chung của nhóm dài đúng `durationMinutes` trong khoảng thời gian được chọn, dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên; trả danh sách khung cả nhóm cùng rảnh (`allFreeSlots`) hoặc tối đa 10 khung có nhiều người rảnh nhất (`partialSlots`) kèm điểm thuận tiện `score` và thứ hạng `rank` (US-23, U031).  
 Quyền: Người tổ chức họp của nhóm – gồm **Trưởng nhóm** hoặc **Thành viên nhóm được Trưởng nhóm ủy quyền** (kiểm tra động theo CSDL của nhóm, U036); không phải quyền tĩnh chỉ theo vai trò.
 
 **Tham số đường dẫn**
@@ -2927,15 +2926,17 @@ Quyền: Người tổ chức họp của nhóm – gồm **Trưởng nhóm** ho
 {
   "from": "2026-11-08T17:00:00.000Z",
   "to": "2026-11-15T17:00:00.000Z",
-  "durationMinutes": 60
+  "durationMinutes": 60,
+  "sortBy": "time"
 }
 ```
 
 | Trường | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
 | `from` | `string` (ISO 8601 UTC) | Có | Thời điểm bắt đầu khoảng tìm kiếm (nửa mở `[from, to)`) |
-| `to` | `string` (ISO 8601 UTC) | Có | Thời điểm kết thúc khoảng tìm kiếm |
-| `durationMinutes` | `integer` | Không | Thời lượng tối thiểu của khung giờ họp (phút); mặc định `60`, bước nhảy `30`, tối đa `900` |
+| `to` | `string` (ISO 8601 UTC) | Có | Thời điểm kết thúc khoảng tìm kiếm; khoảng `to - from` tối đa 31 ngày |
+| `durationMinutes` | `integer` | Không | Thời lượng của mỗi khung giờ họp (phút); mặc định `60`, nằm trong `[30, 900]` và chia hết cho `30` (bước nhảy `30`) |
+| `sortBy` | `string` | Không | Cách sắp xếp danh sách trả về: `"time"` (mặc định, đúng yêu cầu 4.1) hoặc `"score"` (xếp hạng theo độ thuận tiện) |
 
 **Kết quả thành công (200 OK)**
 
@@ -2945,10 +2946,12 @@ Quyền: Người tổ chức họp của nhóm – gồm **Trưởng nhóm** ho
     "allFreeSlots": [
       {
         "startsAt": "2026-11-10T01:00:00.000Z",
-        "endsAt": "2026-11-10T03:00:00.000Z",
+        "endsAt": "2026-11-10T02:00:00.000Z",
         "availableCount": 5,
         "totalMembers": 5,
-        "busyMembers": []
+        "busyMembers": [],
+        "score": 92,
+        "rank": 1
       }
     ],
     "partialSlots": []
@@ -2956,7 +2959,7 @@ Quyền: Người tổ chức họp của nhóm – gồm **Trưởng nhóm** ho
 }
 ```
 
-Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `partialSlots` trả tối đa 10 khung có nhiều thành viên rảnh nhất, sắp giảm dần theo `availableCount`, ưu tiên `startsAt` sớm hơn khi bằng nhau. Mỗi phần tử của `partialSlots` có thêm `busyMembers` chứa danh sách tên hiển thị (`displayName`) của thành viên bận tại khung đó – đây là tên hiển thị trong hồ sơ nhóm, **không phải** tên hay chi tiết sự kiện cá nhân (BR-02).
+Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `partialSlots` trả tối đa 10 khung có nhiều thành viên rảnh nhất (bỏ qua khung có `availableCount = 0`). Mỗi phần tử có `busyMembers` chứa danh sách tên hiển thị (`displayName`) của thành viên bận tại khung đó – đây là tên hiển thị trong hồ sơ nhóm, **không phải** tên hay chi tiết sự kiện cá nhân (BR-02).
 
 ```json
 {
@@ -2970,7 +2973,9 @@ Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `part
         "totalMembers": 5,
         "busyMembers": [
           { "displayName": "Nguyễn Văn B" }
-        ]
+        ],
+        "score": 74.5,
+        "rank": 1
       }
     ]
   },
@@ -2983,26 +2988,40 @@ Khi không có khung nào cả nhóm cùng rảnh (`allFreeSlots` rỗng), `part
 }
 ```
 
+| Trường trong mỗi khung | Kiểu | Mô tả |
+| --- | --- | --- |
+| `startsAt`, `endsAt` | `string` (ISO 8601 UTC) | Khung ứng viên dài đúng `durationMinutes`, nằm trên lưới 30 phút neo tại `07:00` giờ Việt Nam, luôn có mili giây |
+| `availableCount` | `integer` | Số thành viên rảnh trọn khung |
+| `totalMembers` | `integer` | Tổng số thành viên hiện tại của nhóm |
+| `busyMembers` | `Array<{ displayName: string }>` | Tên hiển thị các thành viên bận trong khung (rỗng ở `allFreeSlots`) |
+| `score` | `number` | Điểm thuận tiện từ `0` đến `100` (làm tròn 1 chữ số thập phân), tính từ `round(100 × (0,6 × H + 0,4 × B), 1)` với `H` là hệ số giờ hành chính và `B` là khoảng đệm cách đều các buổi bận (trần 60 phút). Là số tổng hợp trên nhóm, không kèm số liệu từng người (BR-02) |
+| `rank` | `integer` | Thứ hạng thuận tiện từ `1` trở đi, luôn tính theo thứ tự `sortBy = "score"` trên tập khung trả về (không phụ thuộc `sortBy` đã chọn), để giao diện đánh dấu "Gợi ý" cho `rank` từ `1` đến `3` |
+
+Thứ tự sắp xếp theo `sortBy`:
+- `sortBy = "time"` (mặc định): `allFreeSlots` sắp theo `startsAt` tăng dần; `partialSlots` lấy tối đa 10 khung đầu sắp theo `availableCount` giảm dần, bằng nhau thì `startsAt` tăng dần.
+- `sortBy = "score"`: `allFreeSlots` sắp theo `score` giảm dần, bằng nhau thì `startsAt` tăng dần; `partialSlots` lấy tối đa 10 khung đầu sắp theo `availableCount` giảm dần, rồi `score` giảm dần, rồi `startsAt` tăng dần.
+
 **Cảnh báo có thể gặp**
 
 | Mã cảnh báo (`warnings[].code`) | Điều kiện |
 | --- | --- |
-| `MEMBER_NO_FIXED_EVENTS` | Có ít nhất một thành viên chưa nhập sự kiện cố định nào trong khoảng `[from, to)`; thành viên đó được coi là rảnh hoàn toàn trong khoảng (yêu cầu 4.1, U031) |
+| `MEMBER_NO_FIXED_EVENTS` | Có thành viên chưa nhập sự kiện cố định nào trong khoảng `[from, to)`; sinh một cảnh báo cho từng người nêu `displayName`; thành viên đó được coi là rảnh hoàn toàn trong khoảng (yêu cầu 4.1, U031) |
 
 **Lỗi có thể gặp**
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; `from >= to`; toàn bộ khoảng `[from, to)` nằm trong quá khứ so với thời điểm hiện tại; `durationMinutes` nhỏ hơn 30, lớn hơn 900 hoặc không chia hết cho 30; `from` hoặc `to` không phải chuỗi ISO 8601 hậu tố Z (BR-07) |
+| `400` | `VALIDATION_ERROR` | Nhóm có ít hơn 2 thành viên; `from >= to`; khoảng `to - from` vượt quá 31 ngày; toàn bộ khoảng `[from, to)` nằm trong quá khứ so với thời điểm hiện tại; `durationMinutes` nhỏ hơn 30, lớn hơn 900 hoặc không chia hết cho 30; `sortBy` không thuộc `["time", "score"]`; `from` hoặc `to` không phải chuỗi ISO 8601 hậu tố Z (BR-07) |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
 | `403` | `FORBIDDEN` | Người gọi không thuộc nhóm, hoặc là thành viên thường chưa được Trưởng nhóm ủy quyền tổ chức họp (U031, U036) |
 | `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` đã truyền |
 | `500` | `INTERNAL_ERROR` | Lỗi máy chủ |
 
 Ghi chú:
-- Khoảng tìm kiếm hiểu theo nửa mở `[from, to)` tính bằng UTC (BR-01, BR-07); chỉ xét trong khung hoạt động `07:00–22:00` giờ Việt Nam (`Asia/Ho_Chi_Minh`) mỗi ngày và loại bỏ các mốc đã qua so với `now()` (yêu cầu 4.1).
-- **Tuyệt đối không lộ tên, loại, địa điểm, ghi chú sự kiện cá nhân (BR-02):** Service chỉ đọc `starts_at` và `ends_at` từ `fixed_events`; không đọc `title`, `kind`, `location`, `notes`, `source`. Không coi `tasks` hay `study_slots` là bận (yêu cầu 4.1, mục 1.7).
-- Phân quyền kiểm tra động: backend tra `group_members` xem `user_id` của token có vai trò `leader` hoặc có cờ ủy quyền tổ chức họp không (U036); không chỉ kiểm tra ở giao diện.
+- Khoảng tìm kiếm hiểu theo nửa mở `[from, to)` tính bằng UTC (BR-01, BR-07); chỉ xét trong khung hoạt động `07:00–22:00` giờ Việt Nam (`Asia/Ho_Chi_Minh`) mỗi ngày và loại bỏ các khung ứng viên có `startsAt < now` (yêu cầu 4.1).
+- Khi nạp dữ liệu bận từ CSDL, Service truy vấn mở rộng lề 60 phút ở hai đầu (`[from - 60 phút, to + 60 phút)`) chỉ để tính khoảng đệm `B` cho chính xác ở mép tuần, không làm đổi giờ rảnh và không ảnh hưởng điều kiện sinh cảnh báo `MEMBER_NO_FIXED_EVENTS` (vẫn xét trong `[from, to)`).
+- **Tuyệt đối không lộ tên, loại, địa điểm, ghi chú sự kiện cá nhân (BR-02):** Repository chỉ chọn ba cột `user_id`, `starts_at`, `ends_at` từ `fixed_events`; không đọc `title`, `kind`, `location`, `notes`, `source`. Không coi `tasks` hay `study_slots` là bận (yêu cầu 4.1, mục 1.7). Không ghi khoảng bận hay kết quả tìm kiếm vào nhật ký hệ thống.
+- Phân quyền kiểm tra động: backend tra `group_members` xem `user_id` của token có vai trò `leader` hoặc có cờ `can_organize_meetings = true` không (U036); không chỉ kiểm tra ở giao diện.
 
 ---
 
@@ -3024,7 +3043,7 @@ Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành v
 {
   "title": "Họp đồ án tuần 4",
   "startsAt": "2026-11-10T01:00:00.000Z",
-  "endsAt": "2026-11-10T03:00:00.000Z",
+  "endsAt": "2026-11-10T02:00:00.000Z",
   "location": "Phòng họp B2",
   "notes": "Chuẩn bị slide demo"
 }
@@ -3032,7 +3051,7 @@ Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành v
 
 | Trường | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
-| `title` | `string` | Có | Tên buổi họp; tối đa 200 code point, tối thiểu 1 ký tự sau cắt khoảng trắng (BR-08) |
+| `title` | `string` | Có | Tên buổi họp; tối đa 200 code point, tối thiểu 1 ký tự sau chuẩn hóa NFC và cắt khoảng trắng hai đầu (BR-08) |
 | `startsAt` | `string` (ISO 8601 UTC) | Có | Thời điểm bắt đầu buổi họp |
 | `endsAt` | `string` (ISO 8601 UTC) | Có | Thời điểm kết thúc buổi họp; phải sau `startsAt` |
 | `location` | `string` | Không | Địa điểm họp (tùy chọn) |
@@ -3048,7 +3067,7 @@ Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành v
     "organizerUserId": "772a0600-a41d-63f6-c938-668877662222",
     "title": "Họp đồ án tuần 4",
     "startsAt": "2026-11-10T01:00:00.000Z",
-    "endsAt": "2026-11-10T03:00:00.000Z",
+    "endsAt": "2026-11-10T02:00:00.000Z",
     "status": "open",
     "location": "Phòng họp B2",
     "notes": "Chuẩn bị slide demo",
@@ -3060,22 +3079,23 @@ Quyền: Người tổ chức họp của nhóm (Trưởng nhóm hoặc Thành v
 ```
 
 - `invitationsSent`: số lời mời vừa được tạo (bằng số thành viên nhóm trừ Người tổ chức họp; Người tổ chức họp không tự gửi mời cho chính mình).
-- Hệ thống tạo một dòng `meeting_invitations` với `status = 'pending'` cho mỗi thành viên nhóm còn lại. Trước khi tạo lời mời mới, mọi lời mời `'pending'` thuộc các đề xuất `open` cũ trong cùng nhóm chuyển sang `'superseded'` (U032); lời mời `'accepted'` và `'declined'` giữ nguyên để lưu vết lịch sử.
+- Hệ thống tạo một dòng `meeting_invitations` với `status = 'pending'` cho mỗi thành viên nhóm còn lại. Trước khi tạo lời mời mới, mọi lời mời `'pending'` thuộc các đề xuất `open` cũ trong cùng nhóm chuyển sang `'superseded'` (U032); lời mời `'accepted'` và `'declined'` giữ nguyên để lưu vết lịch sử. Buổi họp đã "Đủ người" không còn dòng `pending` nào nên tự được giữ nguyên (U032 4b).
 
 **Lỗi có thể gặp**
 
 | Mã HTTP | error.code | Điều kiện |
 | --- | --- | --- |
-| `400` | `VALIDATION_ERROR` | `title` rỗng, chỉ gồm khoảng trắng hoặc vượt 200 ký tự (BR-08); `endsAt <= startsAt`; `startsAt` đã qua so với thời điểm hiện tại (U032 3b); trường bắt buộc thiếu; `startsAt`/`endsAt` không phải ISO 8601 hậu tố Z (BR-07); nhóm có ít hơn 2 thành viên (không có ai để mời) |
+| `400` | `VALIDATION_ERROR` | `title` rỗng, chỉ gồm khoảng trắng hoặc vượt 200 ký tự (BR-08); `endsAt <= startsAt`; `startsAt` đã qua so với thời điểm hiện tại ("Khung giờ đã qua", U032 3b); trường bắt buộc thiếu; `startsAt`/`endsAt` không phải ISO 8601 hậu tố Z (BR-07); nhóm có ít hơn 2 thành viên (không có ai để mời) |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
 | `403` | `FORBIDDEN` | Người gọi không thuộc nhóm hoặc chưa được ủy quyền tổ chức họp (U036) |
 | `404` | `NOT_FOUND` | Không tìm thấy nhóm với `groupId` |
 | `500` | `INTERNAL_ERROR` | Lỗi máy chủ |
 
 Ghi chú:
+- Toàn bộ phần xử lý trong Service chạy trong một transaction có khóa dòng `groups` (`SELECT id FROM groups WHERE id = $groupId FOR UPDATE`) để hai lần gửi đồng thời trong cùng một nhóm chạy lần lượt (bảo đảm mỗi nhóm chỉ giữ một lời mời chưa chốt) và đồng bộ với `GroupService.leaveGroup` (tránh lệch danh sách thành viên được mời).
+- Cảnh báo "khung có người bận" (U032 3c) do giao diện xử lý dựa trên `availableCount` và `busyMembers` mà kết quả tìm giờ họp đã trả, người gửi xác nhận lại rồi mới gọi API. Server không bắt buộc khung gửi phải trùng một khung đã tìm ra và không kiểm tra lại số người bận.
 - Người tổ chức họp được tính là `"Đã xác nhận"` thông qua cột `organizer_user_id` của bảng `meeting_proposals` khi đếm số người đã xác nhận trên tổng số thành viên (ví dụ `3/5` ở U032 bước 4, U034 bước 3), không tạo dòng `meeting_invitations` riêng.
-- Quy tắc lời mời `'superseded'` (U032): khi tạo đề xuất mới, lời mời `'pending'` của đề xuất `open` cũ (cùng nhóm) đổi thành `'superseded'` để hiển thị thông báo "Lời mời đã được thay bằng giờ mới" (U032 4a); lời mời `'accepted'`/`'declined'` giữ nguyên để lưu vết lịch sử.
-- Khi thành viên rời nhóm sau khi đề xuất đã được tạo, lời mời của người đó không tính vào tổng lời mời đang mở (U033, U034, U036); logic do ứng dụng thực hiện cùng lúc xóa dòng `group_members` trong một transaction (mục 1.5).
+- Khi thành viên rời nhóm sau khi đề xuất đã được tạo, lời mời của người đó không tính vào tổng lời mời đang mở (U033, U034, U036); truy vấn đọc lọc theo `group_members` và `mp.created_at >= gm.joined_at`.
 - `invitationsSent` chỉ là số lượng. Danh sách đề xuất của nhóm lấy ở `GET /api/groups/{groupId}/meeting-proposals`; danh sách từng thành viên và trạng thái phản hồi (U034, US-27) lấy ở `GET /api/groups/{groupId}/meeting-proposals/{proposalId}`.
 
 ---
@@ -3342,7 +3362,7 @@ Ghi chú:
 
 Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Thành viên nhóm phản hồi (chấp nhận hoặc từ chối) lời mời tham dự một buổi họp đã được đề xuất (U033).  
-Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); chỉ người có `user_id` khớp với `meeting_invitations.user_id` mới được phản hồi.
+Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); chỉ người có `user_id` khớp với `meeting_invitations.user_id`, vẫn là thành viên hiện tại và đã vào nhóm trước khi đề xuất được tạo mới được phản hồi.
 
 **Tham số đường dẫn**
 
@@ -3383,14 +3403,14 @@ Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); ch
 | --- | --- | --- |
 | `400` | `VALIDATION_ERROR` | `response` không phải `"accepted"` hoặc `"declined"` |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
-| `403` | `FORBIDDEN` | Người gọi không phải chủ sở hữu lời mời (`invitationId`), hoặc không thuộc nhóm (U033 2a) |
-| `404` | `NOT_FOUND` | Không tìm thấy `groupId`, `proposalId` hoặc `invitationId` |
-| `409` | `CONFLICT` | Lời mời đã ở trạng thái `'superseded'` (đề xuất cũ bị thay thế, U032), hoặc giờ bắt đầu buổi họp (`startsAt`) đã qua (U033 2b), hoặc đề xuất không còn ở trạng thái `'open'` |
+| `403` | `FORBIDDEN` | Người gọi không phải chủ sở hữu lời mời (`invitationId`), không còn là thành viên nhóm, hoặc vào nhóm sau khi đề xuất được tạo (`mp.created_at < gm.joined_at`, U033 2a) |
+| `404` | `NOT_FOUND` | Không tìm thấy `groupId`, `proposalId` hoặc `invitationId` khớp trên đường dẫn |
+| `409` | `CONFLICT` | Lời mời hết hiệu lực ("Lời mời đã hết hiệu lực", U033 2b): lời mời đã ở trạng thái `'superseded'`, hoặc đề xuất không còn ở trạng thái `'open'`, hoặc giờ bắt đầu buổi họp (`startsAt`) đã qua, hoặc đề xuất đã bị đề xuất mới hơn của nhóm thay thế (`replacedByProposalId` khác `null`) mà chưa đạt trạng thái "Đủ người" (`full`) – kể cả khi lời mời hiện tại đang là `'accepted'` hoặc `'declined'` |
 | `500` | `INTERNAL_ERROR` | Lỗi máy chủ |
 
 Ghi chú:
-- Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn đề xuất còn ở trạng thái `'open'` và giờ bắt đầu buổi họp (`startsAt`) chưa qua (U033 3b, 3c); mỗi lần phản hồi cập nhật `responded_at`.
-- Lời mời ở trạng thái `'superseded'`, hoặc giờ bắt đầu buổi họp đã qua, hoặc đề xuất không còn `'open'` thì không đổi trạng thái và trả `409 CONFLICT` ("Lời mời đã hết hiệu lực", U033 2b).
+- Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn lời mời còn hiệu lực: đề xuất còn `'open'`, `startsAt` chưa qua và đề xuất chưa bị đề xuất mới hơn thay thế (U033 3b, 3c); mỗi lần phản hồi cập nhật `responded_at`.
+- Khi ghi nhận phản hồi, Service mở transaction ngắn, khóa dòng lời mời (`SELECT ... FOR UPDATE`) và kiểm tra lại trạng thái trước khi `UPDATE`, để xếp hàng với bước chuyển `'superseded'` khi nhóm tạo đề xuất mới (tránh ghi đè lời mời vừa bị thay).
 - Khi thành viên phản hồi `"declined"`, thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (U033 3a, 3c) được lấy trực tiếp từ các dòng `meeting_invitations` có `status = 'declined'` kèm tên hiển thị của thành viên, dùng chung nguồn dữ liệu với màn hình xem phản hồi (U034).
 
 ---
@@ -3419,7 +3439,7 @@ Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chín
         "organizerDisplayName": "Nguyễn Văn An",
         "title": "Họp đồ án tuần 4",
         "startsAt": "2026-11-10T01:00:00.000Z",
-        "endsAt": "2026-11-10T03:00:00.000Z",
+        "endsAt": "2026-11-10T02:00:00.000Z",
         "status": "pending",
         "respondedAt": null
       }
@@ -3440,7 +3460,7 @@ Quyền: Người dùng đang đăng nhập (chỉ trả lời mời của chín
 Ghi chú:
 - BR-02: chỉ trả tên nhóm, thời gian buổi họp và tên người gửi, không có dữ liệu lịch hay tên sự kiện cá nhân.
 - Sắp xếp theo `startsAt ASC, invitationId ASC`. Không phân trang vì mỗi người chỉ có vài lời mời còn hiệu lực.
-- Quy tắc lọc bảo đảm toàn vẹn khi thành viên rời nhóm (U033 2a, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT` để ngăn xóa người dùng khi còn dữ liệu tham chiếu, ứng dụng giữ lại các dòng `meeting_invitations` để lưu lịch sử kiểm toán. Bảng `meeting_invitations` không có cột `group_id`, do đó câu truy vấn cần JOIN với `meeting_proposals` và chỉ lấy các lời mời (`pending`, `superseded`) thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG:
+- Quy tắc lọc bảo đảm toàn vẹn khi thành viên rời nhóm (U033 2a, mục 1.5, 4.3): Khóa ngoại `user_id` dùng `ON DELETE RESTRICT` để ngăn xóa người dùng khi còn dữ liệu tham chiếu, ứng dụng giữ lại các dòng `meeting_invitations` để lưu lịch sử kiểm toán. Bảng `meeting_invitations` không có cột `group_id`, do đó câu truy vấn cần JOIN với `meeting_proposals` và chỉ lấy các lời mời thuộc những nhóm mà người dùng HIỆN ĐANG LÀ THÀNH VIÊN HOẠT ĐỘNG:
   `SELECT mi.id AS invitation_id, mi.meeting_proposal_id AS proposal_id, mp.group_id, g.name AS group_name, u.display_name AS organizer_display_name, mp.title, mp.starts_at, mp.ends_at, mi.status, mi.responded_at FROM meeting_invitations mi JOIN meeting_proposals mp ON mi.meeting_proposal_id = mp.id JOIN groups g ON mp.group_id = g.id JOIN users u ON mp.organizer_user_id = u.id JOIN group_members gm ON gm.group_id = mp.group_id AND gm.user_id = mi.user_id WHERE mi.user_id = $currentUserId AND (mi.status IN ('pending', 'superseded') OR (mi.status IN ('accepted', 'declined') AND mp.status = 'open' AND mp.starts_at > now())) AND mp.created_at >= gm.joined_at ORDER BY mp.starts_at ASC, mi.id ASC`.
   Điều kiện `mp.created_at >= gm.joined_at` đảm bảo nếu thành viên rời nhóm rồi sau đó tham gia lại (qua link mời mới), người này sẽ không thấy lại các lời mời từ đợt tham gia trước.
 
@@ -3502,12 +3522,12 @@ Quyền: Người dùng đang đăng nhập (chỉ trả nhắc việc của ch�
 | `500` | `INTERNAL_ERROR` | Lỗi máy chủ |
 
 Ghi chú:
-- Chỉ trả nhắc việc của việc chưa hoàn thành (`tasks.is_done = false`, U035 2a, US-14); việc được bỏ đánh dấu hoàn thành thì nhắc việc của mốc chưa qua trả lại (U035 2b). Mốc nhắc do TV2 tạo, hủy và tính lại trong transaction của `POST`, `PATCH`, `DELETE /api/tasks`, TV4 chỉ đọc.
+- Chỉ trả nhắc việc của việc chưa hoàn thành (`tasks.is_done = false`, U035 2a, US-14); việc được bỏ đánh dấu hoàn thành thì nhắc việc của mốc chưa qua được khôi phục (U035 2b). Mốc nhắc do `ReminderService.syncForTask` (TV4) tạo, hủy và tính lại bên trong transaction của `POST`, `PATCH`, `DELETE /api/tasks` (TV2).
 - Frontend lấy nhắc việc sắp đến bằng cách bỏ trống `isSent` hoặc `isSent=false`, và hiển thị thông báo đã gửi bằng `isSent=true` (mặc định 7 ngày gần nhất, hoặc đặt `from`, `to`). Nội dung nhắc hiển thị tên việc và hạn chót theo giờ Việt Nam (U035 bước 3).
 - Nhắc việc chỉ trả cho chính người dùng đang đăng nhập; không có endpoint trả nhắc việc của người khác (BR-02).
 - Danh sách `reminders` luôn sắp theo `remindAt ASC, id ASC`: hai nhắc việc cùng `remindAt` (ví dụ hai việc cùng hạn, cùng nhắc trước 1 giờ) thì sắp theo khóa chính `id` tăng dần, nên thứ tự luôn xác định. `limit` áp dụng sau khi sắp xếp theo đúng thứ tự này, vì vậy kết quả cắt ở `limit` cũng xác định.
 - Nhắc việc gắn với việc đã xóa sẽ bị xóa CASCADE từ `tasks` → không bao giờ trả `taskId` của việc đã xóa (mục 1.5, U035); `taskId` luôn hợp lệ, không có trường hợp `null` ở endpoint này (khác với `study_slots.task_id` có thể `null` theo quy ước từ `#57`).
-- Bộ hẹn giờ hệ thống (Timer, tác nhân `Timer` trong sơ đồ tuần tự) quét định kỳ và gửi thông báo; endpoint này chỉ đọc danh sách, không kích hoạt gửi thông báo.
+- Bộ hẹn giờ hệ thống (`ReminderJob`, tác nhân `Timer` trong sơ đồ tuần tự) quét định kỳ mỗi 60 giây (biến `REMINDER_POLL_SECONDS`, mặc định `60`) bằng `ReminderService.dispatchDue(now)` theo lô tối đa 500 dòng (`WHERE r.is_sent = false AND r.remind_at <= $now AND t.is_done = false AND t.due_at > $now ... LIMIT 500 FOR UPDATE OF r SKIP LOCKED`) rồi đặt `is_sent = true` trong cùng transaction. Điều kiện `t.due_at > $now` giúp mốc đến muộn do máy chủ tạm dừng vẫn được gửi nếu việc chưa quá hạn, còn việc đã quá hạn thì bỏ qua. Endpoint này chỉ đọc danh sách, không kích hoạt gửi thông báo.
 
 ---
 
@@ -3569,7 +3589,7 @@ Ghi chú:
 
 #### 1. Tìm giờ họp chung (U031, U036)
 
-Sơ đồ mô tả quy trình Người tổ chức họp (Trưởng nhóm hoặc Thành viên nhóm được Trưởng nhóm ủy quyền, U036) tìm khung giờ rảnh chung của nhóm: kiểm tra định dạng ở API, kiểm tra quyền theo CSDL nhóm ở Service, chỉ đọc `user_id`, `starts_at` và `ends_at` của `fixed_events` theo `BR-02` (không đọc `title`, `kind`, `location`, `notes`, `source`, `tasks`, `study_slots`), dựng khung tìm kiếm `07:00–22:00` giờ Việt Nam (`BR-01`, `BR-07`), gọi các hàm thuần của thư viện khoảng thời gian (`toInterval`, `mergeIntervals`, `subtractIntervals`, `intersectIntervalLists`, `filterByMinDuration`, `countCoveringLists`, `toSlot`) trên kiểu `TimeInterval`, trả `allFreeSlots` hoặc tối đa 10 `partialSlots` kèm cảnh báo `MEMBER_NO_FIXED_EVENTS` nếu có.
+Sơ đồ mô tả quy trình Người tổ chức họp (Trưởng nhóm hoặc Thành viên nhóm được Trưởng nhóm ủy quyền, U036) tìm khung giờ rảnh chung của nhóm: kiểm tra định dạng ở API (kèm giới hạn khoảng tìm kiếm tối đa 31 ngày và tham số `sortBy`), kiểm tra quyền theo CSDL nhóm ở Service, chỉ đọc `user_id`, `starts_at` và `ends_at` của `fixed_events` kèm lề 60 phút hai đầu theo `BR-02` (không đọc `title`, `kind`, `location`, `notes`, `source`, `tasks`, `study_slots`), dựng khung tìm kiếm `07:00–22:00` giờ Việt Nam (`BR-01`, `BR-07`), gọi các hàm thuần của thư viện khoảng thời gian (`toInterval`, `mergeIntervals`, `subtractIntervals`, `intersectIntervalLists`, `filterByMinDuration`, `countCoveringLists`, `toSlot`) trên kiểu `TimeInterval`, chấm điểm giờ hành chính và khoảng đệm để gán `score` và `rank`, trả `allFreeSlots` hoặc tối đa 10 `partialSlots` kèm cảnh báo `MEMBER_NO_FIXED_EVENTS` nếu có.
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -3582,17 +3602,17 @@ sequenceDiagram
     participant DB as CSDL
 
     NTH->>FE: Chọn tuần, thời lượng (mặc định 60 phút) và bấm Tìm giờ họp
-    FE->>API: POST /api/groups/{groupId}/meeting-slots/search (from, to, durationMinutes)
+    FE->>API: POST /api/groups/{groupId}/meeting-slots/search (from, to, durationMinutes, sortBy)
     API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
         FE-->>NTH: Yêu cầu đăng nhập lại
-    else Sai định dạng ISO 8601 hậu tố Z, from không trước to, durationMinutes ngoài khoảng 30 đến 900 hoặc không chia hết cho 30 (bước nhảy 30), hoặc cả khoảng đã qua
+    else Sai định dạng ISO 8601 hậu tố Z, from không trước to, khoảng quá 31 ngày, durationMinutes ngoài 30 đến 900 hoặc không chia hết cho 30, sortBy không hợp lệ, hoặc cả khoảng đã qua
         Note over API: BR-07 - Thời gian ISO 8601 UTC hậu tố Z
         API-->>FE: 400 VALIDATION_ERROR
         FE-->>NTH: Hiển thị lỗi, yêu cầu chọn lại tuần hoặc thời lượng
     else Dữ liệu đầu vào hợp lệ
-        API->>SVC: Yêu cầu tìm giờ họp chung (userId, groupId, from, to, durationMinutes)
+        API->>SVC: Yêu cầu tìm giờ họp chung (userId, groupId, from, to, durationMinutes, sortBy)
         SVC->>DB: Truy vấn nhóm, group_members (role, can_organize_meetings) của userId và danh sách thành viên
         DB-->>SVC: Thông tin nhóm, vai trò và cờ ủy quyền của userId, danh sách thành viên
         alt Không tìm thấy nhóm
@@ -3610,17 +3630,18 @@ sequenceDiagram
             FE-->>NTH: Hiển thị thông báo nhóm cần tối thiểu 2 thành viên
         else Đủ điều kiện tìm giờ họp
             Note over SVC,DB: BR-02 - Chỉ đọc user_id, starts_at, ends_at của fixed_events, không đọc title, kind, location, notes, source, tasks, study_slots
-            SVC->>DB: Lấy user_id, starts_at, ends_at của fixed_events thuộc các thành viên, giao với khoảng from đến to
+            SVC->>DB: Lấy user_id, starts_at, ends_at của fixed_events thuộc các thành viên, giao với khoảng from trừ 60 phút đến to cộng 60 phút
             DB-->>SVC: Danh sách khoảng bận (UTC) của từng thành viên
             Note over SVC: BR-01, BR-07 - Khoảng nửa mở [starts_at, ends_at), chỉ xét khung 07:00-22:00 giờ VN, bỏ mốc đã qua
-            SVC->>SVC: Dựng khung tìm kiếm 07:00-22:00 giờ VN mỗi ngày trong khoảng from đến to, bỏ phần đã qua so với now() (Service tự làm, thư viện không đổi múi giờ và không đọc giờ hiện tại)
+            SVC->>SVC: Dựng khung tìm kiếm 07:00-22:00 giờ VN mỗi ngày trong khoảng from đến to (Service truyền now vào Finder, thư viện không đổi múi giờ và không đọc giờ hiện tại)
             SVC->>SVC: Gọi thư viện khoảng thời gian (hàm thuần, kiểu TimeInterval) - toInterval đổi from, to và khoảng bận sang TimeInterval, mergeIntervals chuẩn hóa lịch bận từng thành viên, subtractIntervals lấy khung tìm kiếm trừ lịch bận ra giờ rảnh từng người, intersectIntervalLists giao giờ rảnh của cả nhóm, filterByMinDuration giữ khoảng dài tối thiểu durationMinutes
             opt Không có khung nào cả nhóm cùng rảnh
-                SVC->>SVC: countCoveringLists đếm số thành viên rảnh của từng khung ứng viên (dài durationMinutes, cách nhau 30 phút), chọn tối đa 10 partialSlots nhiều người rảnh nhất kèm busyMembers chỉ gồm displayName
+                SVC->>SVC: countCoveringLists đếm số thành viên rảnh của từng khung ứng viên (dài durationMinutes, lưới 30 phút neo 07:00), bỏ khung 0 người rảnh, chọn tối đa 10 partialSlots nhiều người rảnh nhất kèm busyMembers chỉ gồm displayName
             end
-            SVC->>SVC: toSlot đổi kết quả sang TimeSlot (startsAt, endsAt có mili giây), lập allFreeSlots hoặc partialSlots và warnings MEMBER_NO_FIXED_EVENTS nếu có thành viên chưa nhập sự kiện cố định
+            SVC->>SVC: toSlot đổi kết quả sang TimeSlot (startsAt, endsAt có mili giây), lập allFreeSlots hoặc partialSlots và warnings MEMBER_NO_FIXED_EVENTS nếu có thành viên chưa nhập sự kiện cố định trong from đến to
+            SVC->>SVC: Chấm điểm giờ hành chính và khoảng đệm, sắp xếp theo sortBy, gán score và rank (mục 5.2.5)
             SVC-->>API: Danh sách khung giờ đề xuất kèm warnings nếu có
-            API-->>FE: 200 OK { data, warnings } - chỉ có khoảng thời gian và trạng thái bận hoặc rảnh, không có tên sự kiện
+            API-->>FE: 200 OK { data, warnings } - chỉ có khoảng thời gian, trạng thái bận hoặc rảnh và điểm tổng hợp, không có tên sự kiện
             FE-->>NTH: Hiển thị khung giờ gợi ý theo giờ Việt Nam và cảnh báo nếu có
         end
     end
@@ -3628,7 +3649,7 @@ sequenceDiagram
 
 #### 2. Gửi lời mời họp và phản hồi xác nhận (U032, U033, U036)
 
-Sơ đồ gồm hai giai đoạn: (1) Người tổ chức họp chốt khung giờ và gửi lời mời, trong một transaction hệ thống chuyển lời mời `pending` của đề xuất `open` cũ cùng nhóm thành `superseded` rồi tạo `meeting_proposals` và `meeting_invitations` cho các thành viên còn lại, trong đó Người tổ chức họp được tính là `Đã xác nhận` qua `organizer_user_id` (`U032`, `U034`); (2) Thành viên nhóm mở ứng dụng xem danh sách lời mời (`pending`, `superseded` và lời mời đã phản hồi còn đổi được) qua `GET /api/users/me/meeting-invitations` và gửi phản hồi chấp nhận hoặc từ chối khi lời mời còn hiệu lực, hệ thống cập nhật `status` và `responded_at` (`U033`). Thông báo trong ứng dụng cho thành viên chính là các lời mời `pending` và `superseded`; thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (`U033` 3a, 3c) được tạo từ các dòng `meeting_invitations` có `status = 'declined'`, dùng chung nguồn dữ liệu với màn hình xem phản hồi (`U034`).
+Sơ đồ gồm hai giai đoạn: (1) Người tổ chức họp chốt khung giờ và gửi lời mời, trong một transaction có khóa dòng `groups` (`FOR UPDATE`), hệ thống chuyển lời mời `pending` của đề xuất `open` cũ cùng nhóm thành `superseded` rồi tạo `meeting_proposals` và `meeting_invitations` cho các thành viên còn lại, trong đó Người tổ chức họp được tính là `Đã xác nhận` qua `organizer_user_id` (`U032`, `U034`); (2) Thành viên nhóm mở ứng dụng xem danh sách lời mời (`pending`, `superseded` và lời mời đã phản hồi còn đổi được) qua `GET /api/users/me/meeting-invitations` và gửi phản hồi chấp nhận hoặc từ chối khi lời mời còn hiệu lực, hệ thống khóa dòng lời mời (`FOR UPDATE`) rồi cập nhật `status` và `responded_at` (`U033`). Thông báo trong ứng dụng cho thành viên chính là các lời mời `pending` và `superseded`; thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (`U033` 3a, 3c) được tạo từ các dòng `meeting_invitations` có `status = 'declined'`, dùng chung nguồn dữ liệu với màn hình xem phản hồi (`U034`).
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -3654,7 +3675,8 @@ sequenceDiagram
         FE-->>NTH: Hiển thị thông báo lỗi dữ liệu
     else Dữ liệu hợp lệ
         API->>SVC: Yêu cầu tạo đề xuất buổi họp (userId, groupId, dữ liệu buổi họp)
-        SVC->>DB: Truy vấn nhóm, group_members (role, can_organize_meetings) của userId và danh sách thành viên
+        Note over SVC,DB: Toàn bộ các bước đọc lại quyền và ghi dưới đây chạy trong một transaction, khóa dòng groups FOR UPDATE
+        SVC->>DB: Khóa dòng groups FOR UPDATE, đọc vai trò, cờ ủy quyền của userId và danh sách thành viên hiện tại
         DB-->>SVC: Thông tin nhóm, quyền của userId, danh sách thành viên
         alt Không tìm thấy nhóm
             SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
@@ -3665,13 +3687,16 @@ sequenceDiagram
             SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
             API-->>FE: 403 FORBIDDEN
             FE-->>NTH: Hiển thị thông báo không có quyền gửi lời mời
+        else Nhóm có ít hơn 2 thành viên
+            SVC-->>API: Lỗi dữ liệu nghiệp vụ (VALIDATION_ERROR)
+            API-->>FE: 400 VALIDATION_ERROR
+            FE-->>NTH: Hiển thị thông báo nhóm cần tối thiểu 2 thành viên
         else Đủ điều kiện tạo đề xuất
-            Note over SVC,DB: Toàn bộ các thao tác ghi dưới đây chạy trong một transaction
             Note over SVC,DB: U032 - Lời mời pending của đề xuất open cũ cùng nhóm chuyển thành superseded, lời mời accepted hoặc declined giữ nguyên
             SVC->>DB: UPDATE meeting_invitations SET status = superseded WHERE status = pending và meeting_proposal_id thuộc meeting_proposals open của nhóm
             SVC->>DB: INSERT meeting_proposals (status = open, organizer_user_id = userId)
             SVC->>DB: INSERT meeting_invitations (status = pending) cho từng thành viên còn lại, trừ Người tổ chức họp
-            DB-->>SVC: Đã tạo đề xuất và lời mời
+            DB-->>SVC: Đã tạo đề xuất và lời mời, commit transaction
             Note over SVC,DB: U032, U034 - Người tổ chức họp được tính là Đã xác nhận qua organizer_user_id, không có dòng meeting_invitations riêng
             Note over SVC,DB: Thông báo trong ứng dụng chính là các lời mời pending và superseded vừa ghi, hệ thống không tạo bảng thông báo riêng - lời mời superseded hiển thị thông báo Lời mời đã được thay bằng giờ mới (U032 4a)
             SVC-->>API: Thông tin đề xuất và invitationsSent
@@ -3707,25 +3732,25 @@ sequenceDiagram
         FE-->>TVN: Hiển thị thông báo phản hồi không hợp lệ
     else Phản hồi đúng định dạng
         API->>SVC: Yêu cầu cập nhật phản hồi (userId, groupId, proposalId, invitationId, response)
-        SVC->>DB: Truy vấn meeting_invitations theo invitationId, proposalId, groupId kèm status của lời mời, starts_at và status của meeting_proposals
-        DB-->>SVC: Lời mời, user_id chủ lời mời, status lời mời, starts_at và status đề xuất
+        SVC->>DB: Truy vấn meeting_invitations theo invitationId, proposalId, groupId kèm status lời mời, starts_at, status đề xuất và đề xuất mới hơn nếu có
+        DB-->>SVC: Lời mời, user_id chủ lời mời, trạng thái lời mời, thông tin đề xuất và tư cách thành viên
         alt Không tìm thấy nhóm, đề xuất hoặc lời mời
             SVC-->>API: Lỗi không tìm thấy (NOT_FOUND)
             API-->>FE: 404 NOT_FOUND
             FE-->>TVN: Hiển thị thông báo không tìm thấy lời mời
-        else Người gọi không phải chủ lời mời hoặc không thuộc nhóm
+        else Người gọi không phải chủ lời mời, không còn thuộc nhóm hoặc vào nhóm sau khi đề xuất được tạo
             SVC-->>API: Lỗi không đủ quyền (FORBIDDEN)
             API-->>FE: 403 FORBIDDEN
             FE-->>TVN: Hiển thị thông báo không có quyền phản hồi
-        else Lời mời đã superseded, hoặc giờ bắt đầu buổi họp đã qua, hoặc đề xuất không còn open
+        else Lời mời đã superseded, đề xuất không còn open, starts_at đã qua, hoặc đề xuất đã bị đề xuất mới hơn thay thế mà chưa Đủ người
             Note over SVC,DB: U033 2b - Lời mời hết hiệu lực nên không đổi trạng thái
             SVC-->>API: Lỗi xung đột (CONFLICT)
             API-->>FE: 409 CONFLICT
             FE-->>TVN: Hiển thị thông báo Lời mời đã hết hiệu lực
         else Phản hồi hợp lệ
-            Note over SVC,DB: Cho phép đổi phản hồi nhiều lần khi đề xuất còn open, mỗi lần cập nhật responded_at
-            SVC->>DB: UPDATE meeting_invitations SET status = accepted hoặc declined, responded_at = now() WHERE id = invitationId
-            DB-->>SVC: Đã cập nhật
+            Note over SVC,DB: Mở transaction ngắn, khóa dòng lời mời FOR UPDATE rồi kiểm tra lại trạng thái trước khi cập nhật
+            SVC->>DB: SELECT ... FOR UPDATE và UPDATE meeting_invitations SET status = accepted hoặc declined, responded_at = now() WHERE id = invitationId
+            DB-->>SVC: Đã cập nhật và commit
             SVC-->>API: Thông tin lời mời đã cập nhật
             API-->>FE: 200 OK
             FE-->>TVN: Hiển thị xác nhận phản hồi đã được ghi nhận
@@ -3881,24 +3906,24 @@ sequenceDiagram
 
 #### 5. Nhắc việc sắp đến hạn (U035)
 
-Sơ đồ gồm ba giai đoạn: (1) khi Sinh viên lưu, sửa, hoàn thành hoặc xóa việc, transaction của TV2 tạo, hủy hoặc khôi phục các mốc nhắc 24 giờ và 1 giờ trước `dueAt`, bỏ mốc đã qua (U035 1a, 1b, 1c, 2a, 2b); (2) Bộ hẹn giờ quét định kỳ, gửi mốc đến hạn của việc chưa hoàn thành và đánh dấu `is_sent` đúng một lần; (3) Sinh viên mở ứng dụng và xem nhắc việc đã gửi. Bộ hẹn giờ không gọi endpoint HTTP của TV4, chỉ dùng Service và CSDL.
+Sơ đồ gồm ba giai đoạn: (1) khi Sinh viên lưu, sửa, hoàn thành hoặc xóa việc, `TaskService` (TV2) gọi `ReminderService.syncForTask` (TV4) trong cùng transaction để tạo, hủy hoặc khôi phục các mốc nhắc 24 giờ và 1 giờ trước `dueAt`, bỏ mốc đã qua (U035 1a, 1b, 1c, 2a, 2b); (2) Bộ hẹn giờ (`ReminderJob`) quét định kỳ mỗi 60 giây theo lô tối đa 500 dòng với `FOR UPDATE OF r SKIP LOCKED` và điều kiện việc chưa hoàn thành, chưa quá hạn (`t.due_at > now`), đánh dấu `is_sent = true` trong cùng transaction để mỗi mốc gửi tối đa một lần; (3) Sinh viên mở ứng dụng và xem nhắc việc đã gửi. Bộ hẹn giờ không gọi endpoint HTTP của TV4, chỉ gọi `ReminderService.dispatchDue`.
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     autonumber
     actor ND as Sinh viên
-    actor Timer as Bộ hẹn giờ
+    participant Timer as ReminderJob (Bộ hẹn giờ)
     participant FE as Frontend
     participant API as API
     participant SVC as Service
     participant DB as CSDL
 
-    Note over ND,DB: Giai đoạn 1 - Tạo hoặc tính lại mốc nhắc khi lưu việc (TV2)
+    Note over ND,DB: Giai đoạn 1 - Tạo hoặc tính lại mốc nhắc khi lưu việc (TaskService TV2 gọi ReminderService.syncForTask TV4)
     ND->>FE: Lưu hoặc sửa việc cần làm có hạn chót
     FE->>API: POST /api/tasks hoặc PATCH /api/tasks/{taskId}
     API->>SVC: Lưu việc cần làm (userId, dữ liệu việc)
-    Note over SVC,DB: BR-04, BR-07 - So sánh theo UTC, mốc là dueAt trừ 24 giờ và dueAt trừ 1 giờ
+    Note over SVC,DB: BR-04, BR-07 - So sánh theo UTC, mốc là dueAt trừ 24 giờ và dueAt trừ 1 giờ, chạy trong cùng transaction
     SVC->>DB: Lưu tasks, xóa reminders chưa gửi của việc rồi INSERT mốc còn ở tương lai
     DB-->>SVC: Đã lưu
     Note over SVC,DB: U035 1a, 1b - Hạn chót đã qua thì không tạo mốc, mốc đã qua bị bỏ và không gửi bù. U035 1c - Sửa hạn chót thì mốc chưa gửi được tính lại
@@ -3906,18 +3931,17 @@ sequenceDiagram
     API-->>FE: 200 OK hoặc 201 Created
     FE-->>ND: Hiển thị việc đã lưu
 
-    Note over ND,DB: Giai đoạn 2 - Bộ hẹn giờ gửi nhắc việc
-    Timer->>SVC: Quét định kỳ các mốc đến hạn, tối đa 5 phút kể từ mốc
-    SVC->>DB: SELECT reminders nối tasks WHERE is_sent là false, remind_at không sau now() và is_done là false
-    DB-->>SVC: Danh sách mốc cần gửi
-    alt Việc đã hoàn thành hoặc đã bị xóa trước mốc
-        Note over SVC,DB: U035 2a - Việc hoàn thành bị loại bởi điều kiện is_done, việc đã xóa mất reminders qua CASCADE
+    Note over ND,DB: Giai đoạn 2 - Bộ hẹn giờ ReminderJob quét mỗi 60 giây (không qua HTTP)
+    Timer->>SVC: dispatchDue(now) - bỏ qua nếu lượt trước chưa xong
+    SVC->>DB: SELECT reminders nối tasks WHERE is_sent = false, remind_at <= now, is_done = false và due_at > now LIMIT 500 FOR UPDATE OF r SKIP LOCKED
+    DB-->>SVC: Danh sách mốc đến hạn
+    alt Không có mốc hợp lệ (việc đã hoàn thành, đã xóa hoặc đã quá hạn)
+        Note over SVC,DB: U035 2a - Việc hoàn thành bị loại bởi is_done, việc xóa mất reminders qua CASCADE, việc quá hạn bị loại bởi due_at > now
         SVC->>SVC: Bỏ qua, không gửi
-    else Việc còn tồn tại và chưa hoàn thành
-        SVC->>DB: UPDATE reminders SET is_sent là true WHERE id và is_sent là false
+    else Có mốc cần gửi
+        SVC->>DB: UPDATE reminders SET is_sent = true WHERE id = ANY(ids) rồi commit
         DB-->>SVC: Số dòng được cập nhật
-        Note over SVC,DB: U035 bước 4 - Chỉ gửi khi cập nhật được 1 dòng nên mỗi mốc gửi tối đa một lần dù Timer chạy lặp
-        SVC->>SVC: Tạo nhắc việc trong ứng dụng cho chủ việc với tên việc và hạn chót
+        Note over SVC,DB: U035 bước 4 - Chọn và đánh dấu trong cùng transaction kèm SKIP LOCKED nên mỗi mốc gửi tối đa một lần
     end
 
     Note over ND,DB: Giai đoạn 3 - Sinh viên xem nhắc việc
