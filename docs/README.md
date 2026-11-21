@@ -13,4 +13,6 @@
 - [Thiết kế giải thuật và chi tiết module TV2 (M3 Mục 4.2 và Mục 5)](./tv2-algorithm-design.md)
 - [Thiết kế chi tiết luồng xử lý module TV1 (M3 Mục 4.1)](./tv1-detailed-design.md)
 - [Chiến lược kiểm thử hệ thống](./testing/strategy.md) - Phạm vi, phân tầng, công cụ, ma trận kiểm thử BR-01 đến BR-08 và kịch bản tích hợp liên module (M3 / M5).
+- [Thiết kế giải thuật xếp lịch TV3 (Scheduler Engine)](./scheduler-algorithm.md)
+- [Thiết kế giải thuật tìm giờ họp chung và nhắc việc TV4 (Meeting Slot Finder)](./meeting-slot-algorithm.md)
 
