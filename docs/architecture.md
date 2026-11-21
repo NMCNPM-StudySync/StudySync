@@ -74,6 +74,8 @@ Bảng 2: Các phụ thuộc chéo module được phép
 | `SchedulerService` (TV3) | `TaskRepository`, `FixedEventRepository` (TV2) | Đọc việc chưa hoàn thành và khoảng bận của chính sinh viên | Vùng TV3 từ điển dữ liệu |
 | `MeetingSlotService` (TV4) | `FixedEventRepository.findBusyIntervals` (TV2) | Chỉ đọc `starts_at`, `ends_at` của thành viên nhóm | BR-02, yêu cầu 4.1 |
 | `MeetingPermissionService` (TV4) | `GroupMemberRepository.setMeetingPermission` (TV1) | Bật, tắt quyền tổ chức họp | U036 |
+| `MeetingSlotService`, `MeetingProposalService` (TV4) | `GroupMemberRepository` (TV1) | Đọc danh sách thành viên hiện tại và tên hiển thị (`displayName`) để tìm giờ họp chung, tạo lời mời và tính phản hồi | U031, U032, U034 |
+| `MeetingProposalService` (TV4) | `GroupRepository.lockForUpdate` (TV1) | Khóa dòng nhóm khi tạo đề xuất họp để xếp hàng các lần gửi đồng thời và đồng bộ với rời nhóm | U032, Giao dịch TV1 |
 | `MeetingSlotService`, `MeetingProposalService`, `MeetingPermissionService` (TV4), `KanbanService` (TV5) | `MembershipService` (TV1) | Kiểm tra người gọi thuộc nhóm, là Trưởng nhóm hoặc Người tổ chức họp | BR-02, mục 4.8 |
 | `StatisticsService` (TV5) | `StudySlotRepository.sumStudiedMinutesByDay` (TV3) | Cộng thời lượng khung `studied` của chính người đăng nhập | US-33, U045 |
 
@@ -901,20 +903,20 @@ classDiagram
         +searchSlots(userId: string, groupId: string, input: SlotSearchInput) Result~SlotSearchResult~
     }
     class MeetingSlotFinder {
-        +findCommonFreeSlots(memberBusy: TimeInterval[][], window: TimeInterval, durationMinutes: number) SlotSearchResult
+        +findCommonFreeSlots(members: MemberBusy[], input: SlotSearchInput) SlotSearchResult
     }
     class MeetingProposalService {
         +createProposal(userId: string, groupId: string, input: ProposalInput) MeetingProposal
         +listProposals(userId: string, groupId: string) ProposalSummary[]
         +getProposalDetail(userId: string, groupId: string, proposalId: string) ProposalDetail
-        +respond(userId: string, invitationId: string, accepted: boolean) MeetingInvitation
+        +respond(userId: string, groupId: string, proposalId: string, invitationId: string, response: InvitationResponse) MeetingInvitation
         +listMyInvitations(userId: string) MeetingInvitation[]
     }
     class MeetingPermissionService {
         +setPermission(leaderId: string, groupId: string, memberId: string, enabled: boolean) GroupMember
     }
     class ReminderService {
-        +syncForTask(task: Task, now: Date) void
+        +syncForTask(task: Task, now: Date, db: Queryable) void
         +listMine(userId: string, filter: ReminderFilter) Reminder[]
         +dispatchDue(now: Date) number
     }
@@ -922,11 +924,13 @@ classDiagram
         +insert(proposal: MeetingProposal) MeetingProposal
         +listByGroup(groupId: string) MeetingProposal[]
         +findById(id: string) MeetingProposal | null
+        +findLatestAfter(groupId: string, createdAt: Date) string | null
         +updateStatus(proposal: MeetingProposal) void
     }
     class MeetingInvitationRepository {
         +insertMany(invitations: MeetingInvitation[]) MeetingInvitation[]
         +supersedePendingInGroup(groupId: string) number
+        +lockById(id: string) MeetingInvitation | null
         +listForCurrentMembers(proposalId: string) MeetingInvitation[]
         +listMine(userId: string) MeetingInvitation[]
         +update(invitation: MeetingInvitation) void
@@ -935,15 +939,21 @@ classDiagram
         +insertMany(reminders: Reminder[]) void
         +deleteUnsentByTask(taskId: string) number
         +listByUser(userId: string, filter: ReminderFilter) Reminder[]
-        +listDue(now: Date) Reminder[]
-        +markSent(id: string) void
+        +lockDueBatch(now: Date, limit: number) string[]
+        +markSentBatch(ids: string[]) number
     }
     class IntervalLibrary {
         <<utility>>
+        +mergeIntervals()
+        +subtractIntervals()
         +intersectIntervalLists()
+        +filterByMinDuration()
         +countCoveringLists()
     }
     class MembershipService {
+        <<TV1>>
+    }
+    class GroupRepository {
         <<TV1>>
     }
     class GroupMemberRepository {
@@ -958,10 +968,13 @@ classDiagram
     ReminderController ..> ReminderService
     ReminderJob ..> ReminderService : quét định kỳ
     MeetingSlotService ..> MembershipService
+    MeetingSlotService ..> GroupMemberRepository : đọc thành viên hiện tại
     MeetingSlotService ..> FixedEventRepository : chỉ starts_at, ends_at
     MeetingSlotService ..> MeetingSlotFinder
     MeetingSlotFinder ..> IntervalLibrary
     MeetingProposalService ..> MembershipService
+    MeetingProposalService ..> GroupRepository : lockForUpdate dòng nhóm
+    MeetingProposalService ..> GroupMemberRepository : đọc thành viên hiện tại
     MeetingProposalService ..> MeetingProposalRepository
     MeetingProposalService ..> MeetingInvitationRepository
     MeetingPermissionService ..> MembershipService
@@ -1026,11 +1039,11 @@ Bảng 9: Phương thức chính của tầng Service
 | TV3 | `SchedulerService` | `autoPlan(userId)`, `confirm(userId, input)`, `reportMissed(userId, slotId)`, `replan(userId, input)`, `markCompleted(userId, slotId)` | 5 endpoint `/api/scheduler/*`, U021–U024 |
 | TV3 | `SchedulerEngine` | `planSlots(tasks, busy, window)`, `findMakeupSlots(missedSlot, task, busy, window)`, `planReplan(tasks, slots, busy, window)` | Hàm thuần, không đọc CSDL, không đọc giờ hiện tại |
 | TV4 | `MeetingSlotService` | `searchSlots(userId, groupId, input)` | `POST /api/groups/{groupId}/meeting-slots/search`, U031 |
-| TV4 | `MeetingSlotFinder` | `findCommonFreeSlots(memberBusy, window, durationMinutes)` | Hàm thuần: trả khung cả nhóm cùng rảnh hoặc tối đa 10 khung nhiều người rảnh nhất |
-| TV4 | `MeetingProposalService` | `createProposal(userId, groupId, input)`, `listProposals(userId, groupId)`, `getProposalDetail(userId, groupId, proposalId)`, `respond(userId, invitationId, accepted)`, `listMyInvitations(userId)` | U032–U034 |
+| TV4 | `MeetingSlotFinder` | `findCommonFreeSlots(members, input)` | Hàm thuần: trả khung cả nhóm cùng rảnh hoặc tối đa 10 khung nhiều người rảnh nhất kèm `score` và `rank` |
+| TV4 | `MeetingProposalService` | `createProposal(userId, groupId, input)`, `listProposals(userId, groupId)`, `getProposalDetail(userId, groupId, proposalId)`, `respond(userId, groupId, proposalId, invitationId, response)`, `listMyInvitations(userId)` | U032–U034 |
 | TV4 | `MeetingPermissionService` | `setPermission(leaderId, groupId, memberId, enabled)` | `PATCH .../meeting-permission`, U036 |
 | TV4 | `ReminderService` | `syncForTask(task, now, db)`, `listMine(userId, filter)`, `dispatchDue(now)` | U035, `GET /api/users/me/reminders` |
-| TV4 | `ReminderJob` | `start()`, `runOnce()` | Bộ hẹn giờ quét định kỳ, gọi `ReminderService.dispatchDue` |
+| TV4 | `ReminderJob` | `start()`, `runOnce()` | Bộ hẹn giờ quét định kỳ (mặc định 60 giây), gọi `ReminderService.dispatchDue` |
 | TV5 | `KanbanService` | `listCards(userId, groupId, filter)`, `createCard(userId, groupId, input)`, `updateCard(...)`, `deleteCard(...)`, `changeStatus(...)`, `assignCard(...)` | 6 endpoint `/api/groups/{groupId}/cards`, U041–U044, U046 |
 | TV5 | `StatisticsService` | `getWeeklyStatistics(userId, from, to)` | `GET /api/statistics/weekly`, U045 |
 
