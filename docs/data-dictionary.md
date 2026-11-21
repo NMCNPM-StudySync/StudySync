@@ -345,7 +345,7 @@ Phạm vi: US-08 đến US-15 (Use Case U011 đến U015, mục 3.2.1 Bảng 3.2
 #### fixed_events
 
 Mô tả: Mỗi dòng là một sự kiện cố định không dời được của sinh viên (buổi học trên lớp, lịch thi, ca làm thêm hoặc việc cá nhân có giờ cố định theo U011; thực thể: Sự kiện cố định).  
-Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Hưng  
+Module: TV2 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Hưng  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -376,7 +376,7 @@ Ghi chú:
 #### tasks
 
 Mô tả: Mỗi dòng là một việc cần làm cá nhân có hạn chót do sinh viên tạo (thực thể: Việc cần làm; U012, US-09, US-12, US-13, US-14; dùng chung với TV3 cho thuật toán xếp lịch theo quy ước #57).  
-Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Hưng  
+Module: TV2 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Hưng  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -403,7 +403,7 @@ Ghi chú:
 #### recurring_rules
 
 Mô tả: Mỗi dòng lưu quy tắc lặp định kỳ cho các sự kiện lặp (lịch học hàng tuần, lặp theo thứ, hoặc từ thuộc tính `RRULE` chuẩn RFC 5545; thực thể: Quy tắc lặp sự kiện).  
-Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Hưng  
+Module: TV2 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Hưng  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -425,7 +425,7 @@ Ghi chú:
 #### imported_files
 
 Mô tả: Mỗi dòng lưu nhật ký và siêu dữ liệu của một tệp lịch (`.ics` hoặc `.csv`) do sinh viên nạp vào hệ thống (thực thể: Nhật ký tệp nạp; US-11, US-15, U014, U015).  
-Module: TV2 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Hưng  
+Module: TV2 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Hưng  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -510,7 +510,7 @@ Phạm vi: US-17 đến US-22 (Use Case U021 đến U024, yêu cầu 3.1 đến 
 #### schedule_proposals
 
 Mô tả: Mỗi dòng là một lượt đề xuất của hệ thống: đề xuất xếp lịch (US-17), khung giờ bù (US-20) hoặc tái xếp lịch (US-21). Các khung trong lượt đề xuất là các dòng `study_slots` có `status = 'proposed'` trỏ về lượt này (thực thể: Lượt đề xuất xếp lịch).  
-Module: TV3 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Nhi  
+Module: TV3 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Nhi  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -532,7 +532,7 @@ Ghi chú:
 #### study_slots
 
 Mô tả: Mỗi dòng là một khung giờ học của một sinh viên cho một việc cần làm: khung đề xuất đang chờ, khung "Đã xếp", "Đã học" hoặc "Bỏ lỡ" (thực thể: Khung giờ học đề xuất).  
-Module: TV3 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Nhi  
+Module: TV3 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Nhi  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -601,7 +601,7 @@ Trạng thái: Đã tích hợp (Chờ review) · Người viết: Thư Q.A. · 
 #### meeting_proposals
 
 Mô tả: Mỗi dòng là một đề xuất buổi họp nhóm do Người tổ chức họp tạo ra sau khi tìm giờ rảnh chung, ghi lại khung giờ được chọn để gửi lời mời đến các thành viên (US-23, U031, U032).  
-Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -635,7 +635,7 @@ Dữ liệu mẫu (cùng nhóm `7d2c9a51-...` và hai người dùng `0b8f6f5e-.
 #### meeting_invitations
 
 Mô tả: Mỗi dòng là một lời mời gửi đến một thành viên nhóm cho một đề xuất buổi họp cụ thể, lưu trạng thái phản hồi của thành viên đó (U032, U033, U034, U036).  
-Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -665,7 +665,7 @@ Dữ liệu mẫu (3 lời mời của đề xuất `e1a2b3c4-...0003` ở bản
 #### reminders
 
 Mô tả: Mỗi dòng là một lịch nhắc việc của người dùng gắn với một việc cần làm sắp đến hạn, lưu thời điểm sẽ gửi thông báo nhắc (U035).  
-Module: TV4 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Thư Q.A.  
+Module: TV4 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Thư Q.A.  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |
@@ -703,7 +703,7 @@ Phạm vi: US-29 đến US-34 (Use Case U041 đến U046, mục 3.2.1 Bảng 3.6
 #### kanban_cards
 
 Mô tả: Mỗi dòng là một thẻ công việc trên bảng Kanban 3 cột cố định (`Cần làm`, `Đang làm`, `Đã xong`) của một nhóm đồ án (thực thể: Thẻ Kanban; `U041`–`U044`, `U046`). Thẻ Kanban lưu tên thẻ, hạn chót gồm ngày và giờ, người tạo và tối đa một người được giao; không có thời lượng ước tính (`BR-04`), không có mô tả riêng và không lưu thứ tự kéo thả thủ công (`position`).  
-Module: TV5 · Migration tạo bảng: Việc #69 (Sprint 1) · Người sở hữu: Kiên  
+Module: TV5 · Migration tạo bảng: 1795016290231_create-remaining-tables.ts · Người sở hữu: Kiên  
 
 | Tên cột | Kiểu | Cho phép rỗng | Khóa, ràng buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- | --- | --- |

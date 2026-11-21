@@ -104,6 +104,47 @@ Hệ thống sử dụng công cụ **`node-pg-migrate@9.0.0`** để quản lý
 3. **Quy tắc thay đổi cấu trúc CSDL dùng chung:**
    - Mọi thay đổi cấu trúc sau này bắt buộc phải tạo tệp migration mới theo chiều thuận (`npm run migrate:create -- <tên>`), tuyệt đối không sửa đè lên migration đã merge vào `main`.
 
+Có thể thay bước 2–3 bằng `npm run migrate:redo` (rollback rồi chạy lại **chỉ migration gần nhất**).
+
+### 3.3. Các file migration hiện có
+
+| File | Nội dung |
+| :--- | :--- |
+| `1794574466995_init-tv1-tables.ts` | Hàm `set_updated_at()` và 4 bảng TV1: `users`, `groups`, `group_members`, `invitation_links` |
+| `1795016290231_create-remaining-tables.ts` | 10 bảng còn lại: TV2 (`recurring_rules`, `imported_files`, `fixed_events`, `tasks`), TV3 (`schedule_proposals`, `study_slots`), TV4 (`meeting_proposals`, `meeting_invitations`, `reminders`), TV5 (`kanban_cards`) |
+
+Hai file cùng tạo đủ 14 bảng, 24 khóa ngoại (7 `CASCADE`, 5 `SET NULL`, 12 `RESTRICT`) theo `docs/data-dictionary.md` (Phần 3, Bảng 4.1 và 4.2). Lưu ý khi sửa hoặc thêm migration:
+
+- Tạo bảng theo chiều khóa ngoại (bảng cha trước), hàm `down` xóa theo chiều ngược lại.
+- Khóa ngoại vòng `schedule_proposals` ↔ `study_slots`: `up` tạo `schedule_proposals` chưa có `missed_slot_id`, tạo `study_slots`, rồi `ALTER TABLE` thêm cột và khóa ngoại. `down` bỏ khóa ngoại `fk_schedule_proposals_missed_slot_id` trước khi xóa hai bảng.
+- Không xóa hàm `set_updated_at()` trong `down` của migration sau, vì hàm này thuộc migration khởi tạo.
+- Đã được merge vào `main` thì không sửa file migration cũ; muốn đổi lược đồ phải tạo file migration mới.
+
+### 3.4. Chạy migration an toàn: local và Supabase dùng chung
+
+Nhóm có hai loại CSDL, tách bạch bằng `DATABASE_URL` trong `.env`:
+
+| | CSDL local cá nhân | CSDL Supabase dùng chung |
+| :--- | :--- | :--- |
+| Chủ sở hữu | Mỗi thành viên tự cài trên máy | Cả nhóm cùng dùng |
+| `DATABASE_URL` | `postgresql://<user>:<mật_khẩu>@localhost:5432/studysync` | Chuỗi kết nối Supabase do nhóm chia sẻ riêng (không commit) |
+| `migrate:up` | Tự do chạy | Chỉ chạy khi migration đã được review và merge vào `main` |
+| `migrate:redo` | Tự do chạy | **Không chạy** |
+| `migrate:down` | Tự do chạy | **NGHIÊM CẤM** |
+| Mất dữ liệu nếu sai | Chỉ dữ liệu của bạn | Dữ liệu của mọi thành viên |
+
+> **CẢNH BÁO: tuyệt đối không chạy `npm run migrate:down` hay `npm run migrate:redo` trên CSDL Supabase dùng chung.** `down` thực hiện `DROP TABLE`, xóa sạch dữ liệu của các thành viên khác và không khôi phục được. Muốn thử rollback hãy dùng CSDL local.
+
+Quy trình bắt buộc:
+
+1. **Thử trên local trước:** `npm run migrate:up` → `npm run migrate:redo` (hoặc chu trình 3 bước ở mục 3.2) phải chạy sạch, không lỗi.
+2. **Mở Pull Request**, được người review duyệt và merge vào `main`.
+3. **Kiểm tra `DATABASE_URL` đang trỏ tới đâu** trước mỗi lệnh migration (xem host trong `.env`, host dạng `*.supabase.co` hoặc `*.pooler.supabase.com` là CSDL dùng chung).
+4. **Báo trong nhóm** rồi chỉ một người chạy `npm run migrate:up` lên Supabase, tránh hai người chạy cùng lúc.
+5. Với Supabase, dùng chuỗi kết nối **trực tiếp hoặc Session pooler (cổng 5432)**, không dùng Transaction pooler (cổng 6543) vì không hỗ trợ khóa tư vấn (advisory lock) mà công cụ migration cần.
+6. Migration đã chạy lên Supabase mà có lỗi: **không** `migrate:down`. Tạo migration mới để sửa tiếp (roll-forward) và báo nhóm.
+7. Đừng để `.env` trỏ Supabase khi đang thử nghiệm; giữ `.env` cho local, dán chuỗi Supabase vào biến môi trường của phiên terminal khi cần chạy `migrate:up` (ví dụ `DATABASE_URL="..." npm run migrate:up`).
+
 ---
 
 ## 4. Cấu trúc thư mục Backend
