@@ -22,8 +22,19 @@ function readDatabaseUrl(): string {
   return url;
 }
 
+export function readDirectUrl(
+  envSource: { DIRECT_URL?: string; DATABASE_URL?: string } = process.env,
+): string {
+  const directUrl = envSource.DIRECT_URL;
+  if (directUrl && directUrl.trim().length > 0) {
+    return directUrl.trim();
+  }
+  return envSource.DATABASE_URL?.trim() || readDatabaseUrl();
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: readPort(),
   databaseUrl: readDatabaseUrl(),
+  directUrl: readDirectUrl(),
 };
