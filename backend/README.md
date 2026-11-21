@@ -66,6 +66,14 @@ Toàn bộ nhóm StudySync sử dụng chung một cơ sở dữ liệu PostgreS
   createdb -U postgres -E UTF8 studysync
   ```
   Và tạm thời trỏ `DATABASE_URL` và `DIRECT_URL` về `postgresql://postgres:postgres@localhost:5432/studysync`.
+- **Lưu ý về mạng và Session Pooler Fallback (IPv4 / IPv6):**
+  - Kết nối trực tiếp của Supabase (`db.<project-ref>.supabase.co:5432`) trên gói Free mặc định phân giải địa chỉ IPv6.
+  - Trường hợp mạng máy cá nhân hoặc nhà mạng không hỗ trợ định tuyến IPv6, kết nối tới host trực tiếp sẽ gặp lỗi timeout hoặc không thể phân giải tên miền.
+  - Khi đó, thành viên có thể chuyển cấu hình sang sử dụng **Session Pooler** của Supabase hỗ trợ IPv4:
+    - Host: `aws-0-<region>.pooler.supabase.com`
+    - Cổng: `5432` (chế độ Session Mode, tương thích hoàn toàn với các truy vấn migration và prepared statements)
+    - Username: `postgres.<project-ref>`
+    - Database name và mật khẩu giữ nguyên như cấu hình Supabase đã cấp.
 
 ---
 
@@ -78,15 +86,16 @@ Hệ thống sử dụng công cụ **`node-pg-migrate@9.0.0`** để quản lý
 | Lệnh npm | Chức năng | Cơ chế kết nối & Bảo vệ |
 | :--- | :--- | :--- |
 | `npm run migrate:create -- <tên>` | Tạo tệp migration TypeScript mới kèm dấu thời gian | Không kết nối CSDL |
-| `npm run migrate:up` | Áp dụng toàn bộ migration chưa chạy lên CSDL | Đọc `DIRECT_URL` (kết nối trực tiếp cổng 5432) |
-| `npm run migrate:down` | Lùi (rollback) 1 bước migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối cloud, chỉ cho phép trên `localhost` |
-| `npm run migrate:redo` | Rollback và chạy lại ngay migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối cloud, chỉ cho phép trên `localhost` |
+| `npm run migrate:up` | Áp dụng toàn bộ migration chưa chạy lên CSDL | Đọc `DIRECT_URL` (tự động fallback sang `DATABASE_URL` nếu thiếu), kết nối cổng 5432 |
+| `npm run migrate:down` | Lùi (rollback) 1 bước migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối CSDL từ xa, chỉ cho phép trên `localhost` |
+| `npm run migrate:redo` | Rollback và chạy lại ngay migration gần nhất | **Có Safety Guard:** Tự động chặn khi kết nối CSDL từ xa, chỉ cho phép trên `localhost` |
 
 ### 3.2. Quy trình kiểm thử bắt buộc và Cơ chế Khóa An toàn (Safety Guard)
 
 1. **Cơ chế Khóa An toàn Tự động (Safety Guard):**
-   - Để bảo vệ CSDL Supabase dùng chung của nhóm, các lệnh `npm run migrate:down` và `npm run migrate:redo` được bảo vệ bởi tập lệnh [scripts/safe-migrate.mjs](scripts/safe-migrate.mjs).
-   - Nếu phát hiện chuỗi kết nối là CSDL đám mây (`supabase.co` hoặc `pooler.supabase.com`), lệnh sẽ **lập tức bị chặn đứng** và xuất thông báo cảnh báo rõ ràng trên terminal để ngăn ngừa nguy cơ xóa mất dữ liệu của nhóm.
+   - Để bảo vệ CSDL Supabase dùng chung của nhóm, toàn bộ các thao tác migration (`migrate:up`, `migrate:down`, `migrate:redo`) đều được bọc và quản lý bởi tập lệnh [scripts/safe-migrate.mjs](scripts/safe-migrate.mjs).
+   - Với `migrate:up`: Script tự động chuẩn hóa biến môi trường, tự động fallback `DIRECT_URL` từ `DATABASE_URL` nếu chưa khai báo riêng `DIRECT_URL`, giúp tránh triệt để lỗi thiếu biến khi thành viên thao tác.
+   - Với `migrate:down` và `migrate:redo`: Script tự động phân tích hostname kết nối. Nếu máy chủ kết nối **không phải `localhost` hoặc `127.0.0.1`** (tức là CSDL đám mây Supabase, staging, hoặc production từ xa), lệnh sẽ **lập tức bị chặn đứng** (exit code 1) kèm cảnh báo chi tiết để bảo vệ an toàn toàn diện cho dữ liệu của nhóm.
 
 2. **Kiểm thử trên CSDL máy cá nhân (Localhost):**
    - Khi phát triển tính năng mới có migration, thành viên chỉ kiểm thử hàm `down` trên môi trường CSDL cá nhân cục bộ (`localhost`):
@@ -153,7 +162,7 @@ Quy trình bắt buộc:
 backend/
 ├── dist/                  # Mã nguồn JavaScript sau khi biên dịch (tsc)
 ├── migrations/            # Các tệp migration CSDL bằng TypeScript (.ts)
-├── scripts/               # Tập lệnh vận hành (safe-migrate.cjs bảo vệ rollback)
+├── scripts/               # Tập lệnh vận hành (safe-migrate.mjs bảo vệ an toàn migration)
 ├── src/
 │   ├── config/            # Cấu hình hệ thống (env.ts, db.ts quản lý pool pg và SSL)
 │   ├── routes/            # Khai báo các router API (health.ts, ...)

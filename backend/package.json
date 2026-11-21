@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "migrate:create": "node-pg-migrate create -j ts",
-    "migrate:up": "node-pg-migrate -d DIRECT_URL up",
+    "migrate:up": "node scripts/safe-migrate.mjs up",
     "migrate:down": "node scripts/safe-migrate.mjs down",
     "migrate:redo": "node scripts/safe-migrate.mjs redo"
   },

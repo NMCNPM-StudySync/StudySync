@@ -12,10 +12,11 @@ healthRouter.get('/', async (_req, res) => {
       time: new Date().toISOString(),
     });
   } catch (error) {
+    // Ghi log chi tiết lỗi phía server để debug, không trả chuỗi lỗi thô ra client để tránh lộ thông tin nhạy cảm
+    console.error('Lỗi kiểm tra sức khỏe CSDL:', error);
     res.status(503).json({
       status: 'error',
       database: 'disconnected',
-      error: (error as Error).message,
       time: new Date().toISOString(),
     });
   }

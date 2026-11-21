@@ -67,12 +67,13 @@ describe('createPoolConfig()', () => {
 
   it('bật SSL và loại bỏ ?sslmode=require duy nhất cho cloud database', () => {
     const input =
-      'postgresql://postgres:pass@db.rttnzbohhmxgofqezgun.supabase.co:5432/postgres?sslmode=require';
+      'postgresql://postgres:pass@db.test-project-ref.supabase.co:5432/postgres?sslmode=require';
     const config = createPoolConfig(input);
 
     expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(config.connectionTimeoutMillis).toBe(5000);
     expect(config.connectionString).toBe(
-      'postgresql://postgres:pass@db.rttnzbohhmxgofqezgun.supabase.co:5432/postgres',
+      'postgresql://postgres:pass@db.test-project-ref.supabase.co:5432/postgres',
     );
     expect(config.connectionString).not.toContain('sslmode');
   });

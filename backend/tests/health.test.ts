@@ -15,14 +15,16 @@ describe('GET /health', () => {
     expect(res.body.time).toBeDefined();
   });
 
-  it('trả về status 503 và database disconnected khi kết nối CSDL thất bại', async () => {
-    vi.spyOn(db, 'testConnection').mockRejectedValueOnce(new Error('Connection timeout'));
+  it('trả về status 503 và database disconnected khi kết nối CSDL thất bại (không lộ error message)', async () => {
+    vi.spyOn(db, 'testConnection').mockRejectedValueOnce(
+      new Error('Sensitive host:port connection timeout'),
+    );
 
     const res = await request(createApp()).get('/health');
 
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('error');
     expect(res.body.database).toBe('disconnected');
-    expect(res.body.error).toBe('Connection timeout');
+    expect(res.body.error).toBeUndefined();
   });
 });
