@@ -3,11 +3,13 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import type { SampleService } from './modules/sample/sample.service';
+import type { SchedulerService } from './modules/scheduler/scheduler.service';
 import { createApiRouter } from './routes/api';
 import { healthRouter } from './routes/health';
 
 export interface AppOptions {
   sampleService?: SampleService;
+  schedulerService?: SchedulerService;
 }
 
 export function createApp(options?: AppOptions) {
