@@ -1,9 +1,17 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
+import {
+  createMeetingRouter,
+  type MeetingModuleServices,
+} from '../modules/meetings/meeting.routes';
 import { createSampleRouter } from '../modules/sample/sample.routes';
 import type { SampleService } from '../modules/sample/sample.service';
 
 export interface ApiRouterOptions {
   sampleService?: SampleService;
+  /** Dịch vụ TV4; có thì mount `/v1/...` (họp nhóm, lời mời, nhắc việc). */
+  meetings?: MeetingModuleServices;
+  /** Middleware xác thực JWT của TV1; mặc định chỉ kiểm tra `req.userId`. */
+  authenticate?: RequestHandler;
 }
 
 export function createApiRouter(options?: ApiRouterOptions): Router {
@@ -16,7 +24,9 @@ export function createApiRouter(options?: ApiRouterOptions): Router {
     router.use('/sample', createSampleRouter(options.sampleService));
   }
 
+  if (options?.meetings) {
+    router.use('/v1', createMeetingRouter(options.meetings, options.authenticate));
+  }
+
   return router;
 }
-
-export const apiRouter = createApiRouter();
