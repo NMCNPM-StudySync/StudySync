@@ -1,6 +1,6 @@
 # Hướng dẫn Phát triển Backend – StudySync
 
-Tài liệu hướng dẫn thiết lập môi trường, kết nối cơ sở dữ liệu PostgreSQL (Supabase Cloud Database dùng chung), quy trình thực thi migration và các lệnh vận hành backend StudySync (Node.js + Express + TypeScript).
+Tài liệu hướng dẫn thiết lập môi trường, kết nối cơ sở dữ liệu PostgreSQL (Supabase Cloud Database dùng chung), quy trình thực thi migration, quy ước kiến trúc phân tầng (Clean / Layered Architecture) và các lệnh vận hành backend StudySync (Node.js + Express + TypeScript).
 
 ---
 
@@ -50,6 +50,20 @@ Toàn bộ nhóm StudySync sử dụng chung một cơ sở dữ liệu PostgreS
        ```
      - `PGSSLMODE`: Bắt buộc giá trị `require` khi chạy migration trên môi trường cloud.
      - `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN`, `VITE_API_URL`, `APP_TIMEZONE`, `MAX_IMPORT_FILE_MB`.
+
+Bảng danh mục các biến môi trường được quản lý tập trung qua `src/config/env.ts`:
+
+| Biến môi trường | Kiểu dữ liệu | Giá trị mặc định | Bắt buộc | Mô tả và quy ước nghiệp vụ |
+| :--- | :--- | :--- | :--- | :--- |
+| `PORT` | `number` | `3000` | Không | Cổng máy chủ Express lắng nghe. Bắt buộc là số nguyên dương. |
+| `NODE_ENV` | `string` | `development` | Không | Môi trường thực thi: `development`, `production`, hoặc `test`. |
+| `DATABASE_URL` | `string` | *(test fallback)* | **Có** | Chuỗi kết nối PostgreSQL chính thức cho backend runtime và migration. |
+| `DIRECT_URL` | `string` | *(fallback sang DATABASE_URL)* | Không | Chuỗi kết nối trực tiếp (Cổng 5432) dành riêng cho công cụ di trú CSDL `node-pg-migrate`. |
+| `JWT_SECRET` | `string` | *(dev fallback)* | **Có (Prod)** | Khóa ký JWT. Trong production bắt buộc tối thiểu 32 ký tự và không chứa ký tự mẫu `<>`. |
+| `JWT_EXPIRES_IN`| `string` | `7d` | Không | Thời hạn sống của token đăng nhập (mặc định 7 ngày). |
+| `CORS_ORIGIN` | `string` | `*` (dev) | **Có (Prod)** | Danh sách origin frontend được phép gọi API (trong production bắt buộc cấu hình cụ thể). |
+| `APP_TIMEZONE` | `string` | `Asia/Ho_Chi_Minh` | Không | Múi giờ hiển thị và nhập liệu (BR-07). Dữ liệu lưu trữ trong CSDL luôn ở chuẩn UTC. |
+| `MAX_IMPORT_FILE_MB` | `number` | `5` | Không | Giới hạn dung lượng tối đa cho tệp import `.ics`, `.csv` hoặc ảnh (BR-05: 5 MB). |
 
 > **Lưu ý bảo mật tuyệt đối (P0):**
 > - Tuyệt đối **KHÔNG commit tệp `.env`** hoặc bất kỳ chuỗi kết nối chứa mật khẩu thật lên GitHub repository.
@@ -158,27 +172,95 @@ Quy trình bắt buộc:
 
 ## 4. Cấu trúc thư mục Backend
 
-```
+Kiến trúc backend được chuẩn hóa theo mô hình phân tầng kết hợp chia mô-đun nghiệp vụ độc lập (căn cứ theo `docs/architecture.md`):
+
+```text
 backend/
-├── dist/                  # Mã nguồn JavaScript sau khi biên dịch (tsc)
-├── migrations/            # Các tệp migration CSDL bằng TypeScript (.ts)
-├── scripts/               # Tập lệnh vận hành (safe-migrate.mjs bảo vệ an toàn migration)
+├── dist/                          # Mã nguồn JavaScript sau khi biên dịch (tsc)
+├── migrations/                    # Các tệp migration CSDL bằng TypeScript (.ts)
+├── scripts/                       # Tập lệnh vận hành (safe-migrate.mjs bảo vệ an toàn migration)
 ├── src/
-│   ├── config/            # Cấu hình hệ thống (env.ts, db.ts quản lý pool pg và SSL)
-│   ├── routes/            # Khai báo các router API (health.ts, ...)
-│   ├── utils/             # Các hàm tiện ích dùng chung (interval.ts, validation.ts, ...)
-│   ├── app.ts             # Khởi tạo Express Application và middleware
-│   └── server.ts          # Điểm khởi động máy chủ HTTP và xử lý shutdown
-├── tests/                 # Bộ unit test và integration test (Vitest)
-├── .env.example           # Biến môi trường mẫu
-├── eslint.config.mjs      # Cấu hình linter ESLint
-├── package.json           # Khai báo thư viện và scripts vận hành
-└── tsconfig.json          # Cấu hình trình biên dịch TypeScript (module: nodenext)
+│   ├── app.ts                     # Khởi tạo Express Application, gắn middleware và router
+│   ├── server.ts                  # Điểm khởi động máy chủ HTTP và xử lý shutdown
+│   ├── config/
+│   │   ├── env.ts                 # Thẩm định và nạp biến môi trường tập trung
+│   │   └── db.ts                  # Kết nối pool PostgreSQL, hàm query và withTransaction
+│   ├── middlewares/
+│   │   ├── error-handler.ts       # Global Error Handling Middleware chuẩn hóa theo docs/api.md
+│   │   └── not-found-handler.ts   # Xử lý các đường dẫn không tồn tại (trả 404 NOT_FOUND)
+│   ├── shared/                    # Lớp cơ sở và quy ước dùng chung cho 5 module
+│   │   ├── base-entity.ts         # Lớp trừu tượng BaseEntity (id, createdAt, updatedAt)
+│   │   ├── base-repository.ts     # Lớp trừu tượng BaseRepository<T> và giao diện Queryable
+│   │   ├── base-controller.ts     # BaseController chuẩn hóa response helper
+│   │   ├── errors.ts              # Hệ thống ngoại lệ AppError và 7 lớp con cụ thể
+│   │   ├── response.ts            # Định dạng phản hồi { data, warnings?, error }
+│   │   └── time-range.ts          # Giao diện TimeRange tích hợp thư viện utils/interval.ts
+│   ├── utils/
+│   │   ├── interval.ts            # Thư viện khoảng thời gian RFC 5545 (toSlot, toInterval)
+│   │   └── validation.ts          # Các hàm kiểm tra regex, định dạng ISO 8601
+│   ├── routes/
+│   │   ├── api.ts                 # Điểm tập trung đăng ký tất cả router của 5 module (/api)
+│   │   └── health.ts              # Endpoint kiểm tra sức khỏe hệ thống (GET /health)
+│   └── modules/                   # Các mô-đun tính năng của 5 thành viên (TV1-TV5)
+│       └── sample/                # Mô-đun lát cắt mẫu tham chiếu đầy đủ 4 tầng
+├── tests/                         # Bộ unit test và integration test (Vitest)
+├── .env.example                   # Biến môi trường mẫu
+├── eslint.config.mjs              # Cấu hình linter ESLint
+├── package.json                   # Khai báo thư viện và scripts vận hành
+└── tsconfig.json                  # Cấu hình trình biên dịch TypeScript (module: nodenext)
 ```
 
 ---
 
-## 5. Các lệnh vận hành hàng ngày
+## 5. Quy ước Kiến trúc Phân tầng và Hướng dẫn Cắm Module (TV1–TV5)
+
+### 5.1. Luồng xử lý một yêu cầu chuẩn
+
+```
+HTTP Request -> Middleware -> Route -> Controller -> Service -> Repository -> Database
+```
+
+- **Route:** Khai báo URL, phương thức HTTP, gắn middleware và chuyển tiếp tới Controller.
+- **Controller:** Đọc `params`, `query`, `body`; kiểm tra kiểu dữ liệu, định dạng thời gian ISO 8601 có hậu tố `Z` (BR-07); gọi Service; trả kết quả qua `this.ok()`, `this.created()`, hoặc `this.noContent()`.
+- **Service:** Xử lý toàn bộ logic nghiệp vụ, áp dụng BR-01 đến BR-08; mở transaction qua `withTransaction` khi cần ghi nhiều bảng; ném ngoại lệ lớp con của `AppError` khi có lỗi.
+- **Repository:** Chạy câu lệnh SQL tham số hóa (`$1`, `$2`), chuyển đổi snake_case sang camelCase của Entity. Nhận tham số cuối `db: Queryable` để dùng được trong transaction.
+- **Global Error Handler:** Bắt mọi ngoại lệ ném ra từ Controller/Service và tự động chuyển đổi thành format JSON chuẩn của `docs/api.md`:
+  ```json
+  {
+    "error": {
+      "code": "VALIDATION_ERROR",
+      "message": "Chi tiết lỗi",
+      "details": [{ "field": "title", "issue": "bắt buộc" }]
+    }
+  }
+  ```
+
+### 5.2. Hướng dẫn cắm module mới
+
+Khi triển khai các module TV1 đến TV5:
+1. Tạo thư mục tương ứng trong `src/modules/<tên_module>/` (ví dụ `calendar/`, `scheduler/`, `kanban/`).
+2. Viết Entity kế thừa `BaseEntity`, Repository kế thừa `BaseRepository<T>`, Service và Controller kế thừa `BaseController`.
+3. Khai báo router trong `<tên_module>.routes.ts`.
+4. Đăng ký router vừa tạo vào `src/routes/api.ts`:
+   ```typescript
+   // src/routes/api.ts
+   import { calendarRouter } from '../modules/calendar/calendar.routes';
+
+   apiRouter.use('/calendar', calendarRouter);
+   ```
+
+### 5.3. Lưu ý về Mô-đun Lát cắt Mẫu (`src/modules/sample/`)
+
+- Lát cắt mẫu (`src/modules/sample/`) được tạo ra với mục đích làm khuôn mẫu tham chiếu cấu trúc phân tầng (Route -> Controller -> Service -> Repository) và mẫu xử lý giao dịch `withTransaction`.
+- Hệ thống **không tạo bảng `samples` trong CSDL thật**, và đường dẫn `/api/sample` không được gắn vào ứng dụng khi chạy runtime thật (`npm run dev` hoặc `npm start`) nhằm tránh phát sinh lỗi không mong muốn.
+- Toàn bộ luồng hoạt động của mô-đun mẫu được kiểm chứng toàn diện thông qua bộ kiểm thử tự động với `Queryable` giả lập:
+  ```bash
+  npm test -- sample
+  ```
+
+---
+
+## 6. Các lệnh vận hành hàng ngày
 
 - **Khởi chạy môi trường phát triển (Hot-reload):**
   ```bash
@@ -196,7 +278,7 @@ backend/
   npm run format
   ```
 
-- **Chạy toàn bộ kiểm thử tự động (Unit Tests):**
+- **Chạy toàn bộ kiểm thử tự động (Unit & Integration Tests):**
   ```bash
   npm test
   ```
