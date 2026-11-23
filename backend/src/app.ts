@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
@@ -7,7 +7,7 @@ import { createApiRouter } from './routes/api';
 import { healthRouter } from './routes/health';
 
 export type AppOptions = ApiRouterOptions & {
-  authMiddleware?: express.RequestHandler;
+  authMiddleware?: RequestHandler;
 };
 
 export function createApp(options?: AppOptions) {
@@ -35,7 +35,7 @@ export function createApp(options?: AppOptions) {
   // Health check endpoint (outside /api prefix per docs/api.md convention)
   app.use('/health', healthRouter);
 
-  // Optional authentication middleware (e.g. JWT auth from TV1 or test auth mock)
+  // Optional authentication middleware (e.g. for TV2 test harness)
   if (options?.authMiddleware) {
     app.use(options.authMiddleware);
   }

@@ -1,9 +1,13 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import type { CalendarImportService } from '../modules/events/calendar-import.service';
 import { createEventsRouter } from '../modules/events/events.routes';
 import type { FixedEventService } from '../modules/events/events.service';
-import type { SampleService } from '../modules/sample/sample.service';
+import {
+  createMeetingRouter,
+  type MeetingModuleServices,
+} from '../modules/meetings/meeting.routes';
 import { createSampleRouter } from '../modules/sample/sample.routes';
+import type { SampleService } from '../modules/sample/sample.service';
 import type { WeekScheduleService } from '../modules/schedule/schedule.service';
 import { createScheduleRouter } from '../modules/schedule/schedule.routes';
 import type { TaskService } from '../modules/tasks/tasks.service';
@@ -15,6 +19,10 @@ export interface ApiRouterOptions {
   calendarImportService?: CalendarImportService;
   tasksService?: TaskService;
   scheduleService?: WeekScheduleService;
+  /** Dịch vụ TV4; có thì mount các endpoint họp nhóm, lời mời, nhắc việc dưới `/api`. */
+  meetings?: MeetingModuleServices;
+  /** Middleware xác thực JWT của TV1; mặc định chỉ kiểm tra `req.userId`. */
+  authenticate?: RequestHandler;
 }
 
 export function createApiRouter(options?: ApiRouterOptions): Router {
@@ -30,7 +38,10 @@ export function createApiRouter(options?: ApiRouterOptions): Router {
     router.use('/sample', createSampleRouter(options.sampleService));
   }
 
+  // TV4 Modules: Họp nhóm, lời mời, nhắc việc (US-24 đến US-28)
+  if (options?.meetings) {
+    router.use(createMeetingRouter(options.meetings, options.authenticate));
+  }
+
   return router;
 }
-
-export const apiRouter = createApiRouter();
