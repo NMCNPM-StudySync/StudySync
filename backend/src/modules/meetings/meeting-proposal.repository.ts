@@ -40,12 +40,16 @@ export class MeetingProposalRepository extends BaseRepository<MeetingProposal> {
     });
   }
 
-  /** `created_at`, `updated_at`, `status`, `id` lấy mặc định của CSDL để cùng đồng hồ với `joined_at`. */
+  /**
+   * Ghi `created_at`, `updated_at` bằng `clock_timestamp()` (chạy sau khi đã giữ khóa dòng nhóm)
+   * thay vì `now()` (giờ bắt đầu transaction), tránh đảo thứ tự "đề xuất mới nhất" khi hai
+   * transaction tạo đề xuất đồng thời.
+   */
   public async insert(input: NewProposal, db: Queryable): Promise<MeetingProposal> {
     const res = await db.query(
       `INSERT INTO meeting_proposals
-         (group_id, organizer_user_id, title, starts_at, ends_at, location, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (group_id, organizer_user_id, title, starts_at, ends_at, location, notes, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())
        RETURNING *`,
       [
         input.groupId,

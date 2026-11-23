@@ -34,11 +34,11 @@ export class ReminderService {
    * TV2 gọi trong transaction của POST, PATCH, DELETE /tasks. Idempotent: xóa mốc chưa gửi rồi lập lại.
    * Việc đã hoàn thành chỉ bị xóa mốc chưa gửi, không lập mới. Mốc đã gửi giữ làm lịch sử.
    */
-  public async syncForTask(task: TaskForReminder, db: Queryable): Promise<void> {
-    const { reminders, clock } = this.deps;
+  public async syncForTask(task: TaskForReminder, now: Date, db: Queryable): Promise<void> {
+    const { reminders } = this.deps;
     await reminders.deleteUnsentByTask(task.id, db);
     if (task.isDone) return;
-    const times = Reminder.computeRemindTimes(task.dueAt, clock());
+    const times = Reminder.computeRemindTimes(task.dueAt, now);
     await reminders.insertMany(task.id, task.userId, times, db);
   }
 

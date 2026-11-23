@@ -137,14 +137,14 @@ Phần tử của `warnings` có thể kèm `details` (tùy chọn, cùng dạng
 | TV3 | POST /api/scheduler/missed-session | Báo lỡ khung giờ học và nhận khung giờ bù | Nháp |
 | TV3 | POST /api/scheduler/replan | Đề xuất tái xếp lịch khi có việc phát sinh | Nháp |
 | TV3 | POST /api/scheduler/completed-session | Đánh dấu khung giờ học đã học xong | Nháp |
-| TV4 | `POST /api/v1/groups/{groupId}/meetings/find-common-slots` | Tìm giờ họp chung | Nháp |
-| TV4 | `POST /api/v1/groups/{groupId}/meetings/proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
-| TV4 | `GET /api/v1/groups/{groupId}/meetings/proposals` | Danh sách đề xuất buổi họp của nhóm kèm trạng thái chung | Nháp |
-| TV4 | `GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}` | Xem chi tiết đề xuất buổi họp và trạng thái phản hồi của từng thành viên | Nháp |
-| TV4 | `POST /api/v1/meetings/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
-| TV4 | `GET /api/v1/users/me/meeting-invitations` | Lấy danh sách lời mời họp của tôi | Nháp |
-| TV4 | `GET /api/v1/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn và đã gửi | Nháp |
-| TV4 | `PATCH /api/v1/groups/{groupId}/members/{userId}/meeting-permission` | Bật hoặc tắt quyền tổ chức họp của một thành viên | Nháp |
+| TV4 | `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | Nháp |
+| TV4 | `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | Nháp |
+| TV4 | `GET /api/groups/{groupId}/meeting-proposals` | Danh sách đề xuất buổi họp của nhóm kèm trạng thái chung | Nháp |
+| TV4 | `GET /api/groups/{groupId}/meeting-proposals/{proposalId}` | Xem chi tiết đề xuất buổi họp và trạng thái phản hồi của từng thành viên | Nháp |
+| TV4 | `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Phản hồi lời mời tham dự buổi họp | Nháp |
+| TV4 | `GET /api/users/me/meeting-invitations` | Lấy danh sách lời mời họp của tôi | Nháp |
+| TV4 | `GET /api/users/me/reminders` | Lấy danh sách nhắc việc sắp đến hạn và đã gửi | Nháp |
+| TV4 | `PATCH /api/groups/{groupId}/members/{userId}/meeting-permission` | Bật hoặc tắt quyền tổ chức họp của một thành viên | Nháp |
 | TV5 | `GET /api/groups/{groupId}/cards` | Danh sách và lọc thẻ Kanban | Nháp |
 | TV5 | `POST /api/groups/{groupId}/cards` | Tạo thẻ Kanban mới | Nháp |
 | TV5 | `PATCH /api/groups/{groupId}/cards/{cardId}` | Sửa tên và hạn chót thẻ Kanban | Nháp |
@@ -273,7 +273,7 @@ Member:
 | PUT /api/groups/{groupId}/leader | Chuyển quyền Trưởng nhóm | US-07 | Trưởng nhóm | Nháp |
 | POST /api/groups/{groupId}/leave | Rời nhóm | US-07 | Thành viên nhóm | Nháp |
 
-Ghi chú về phạm vi: endpoint bật hoặc tắt quyền ủy quyền tổ chức họp (U036, `PATCH /api/v1/groups/{groupId}/members/{userId}/meeting-permission`) thuộc TV4, ghi vào cột `group_members.can_organize_meetings` trong từ điển dữ liệu. Danh sách thành viên ở `GET /api/groups/{groupId}` đã trả cột này để giao diện U036 dùng.
+Ghi chú về phạm vi: endpoint bật hoặc tắt quyền ủy quyền tổ chức họp (U036, `PATCH /api/groups/{groupId}/members/{userId}/meeting-permission`) thuộc TV4, ghi vào cột `group_members.can_organize_meetings` trong từ điển dữ liệu. Danh sách thành viên ở `GET /api/groups/{groupId}` đã trả cột này để giao diện U036 dùng.
 
 ---
 
@@ -2888,27 +2888,27 @@ Phạm vi: US-23 đến US-28. Use case: U031 đến U036. Mọi endpoint theo q
 
 | Thông báo | Người nhận | Lấy ở |
 | --- | --- | --- |
-| Lời mời họp mới (U032 bước 5) | Thành viên được mời | `GET /api/v1/users/me/meeting-invitations`, `status = "pending"` |
-| "Lời mời đã được thay bằng giờ mới" (U032 4a) | Thành viên đã nhận lời mời cũ | `GET /api/v1/users/me/meeting-invitations`, `status = "superseded"` |
-| "<Tên> đã từ chối" (U033 3a, 3c) | Người gửi lời mời và Trưởng nhóm | `GET /api/v1/groups/{groupId}/meetings/proposals`, mảng `declinedMembers` |
-| Nhắc việc sắp đến hạn (U035) | Chủ việc | `GET /api/v1/users/me/reminders` với `isSent=true` |
+| Lời mời họp mới (U032 bước 5) | Thành viên được mời | `GET /api/users/me/meeting-invitations`, `status = "pending"` |
+| "Lời mời đã được thay bằng giờ mới" (U032 4a) | Thành viên đã nhận lời mời cũ | `GET /api/users/me/meeting-invitations`, `status = "superseded"` |
+| "<Tên> đã từ chối" (U033 3a, 3c) | Người gửi lời mời và Trưởng nhóm | `GET /api/groups/{groupId}/meeting-proposals`, mảng `declinedMembers` |
+| Nhắc việc sắp đến hạn (U035) | Chủ việc | `GET /api/users/me/reminders` với `isSent=true` |
 
 ### Danh sách endpoint TV4
 
 | Phương thức và đường dẫn | Mô tả ngắn | Story | Quyền | Trạng thái |
 | --- | --- | --- | --- | --- |
-| `POST /api/v1/groups/{groupId}/meetings/find-common-slots` | Tìm giờ họp chung | US-23 | Người tổ chức họp | Nháp |
-| `POST /api/v1/groups/{groupId}/meetings/proposals` | Tạo đề xuất buổi họp và gửi lời mời | US-24 | Người tổ chức họp | Nháp |
-| `GET /api/v1/groups/{groupId}/meetings/proposals` | Danh sách đề xuất buổi họp của nhóm kèm trạng thái chung | US-27 | Thành viên nhóm (phạm vi theo vai trò) | Nháp |
-| `GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}` | Chi tiết đề xuất và trạng thái phản hồi từng thành viên | US-27 | Thành viên nhóm (phạm vi theo vai trò) | Nháp |
-| `POST /api/v1/meetings/invitations/{invitationId}/respond` | Chấp nhận hoặc từ chối lời mời | US-25, US-26 | Người được mời | Nháp |
-| `GET /api/v1/users/me/meeting-invitations` | Lời mời họp của tôi | US-25, US-26 | Đã đăng nhập | Nháp |
-| `PATCH /api/v1/groups/{groupId}/members/{userId}/meeting-permission` | Bật hoặc tắt quyền tổ chức họp của một thành viên | US-23, US-24 (U036) | Trưởng nhóm | Nháp |
-| `GET /api/v1/users/me/reminders` | Nhắc việc sắp đến hạn và đã gửi | US-28 | Đã đăng nhập | Nháp |
+| `POST /api/groups/{groupId}/meeting-slots/search` | Tìm giờ họp chung | US-23 | Người tổ chức họp | Nháp |
+| `POST /api/groups/{groupId}/meeting-proposals` | Tạo đề xuất buổi họp và gửi lời mời | US-24 | Người tổ chức họp | Nháp |
+| `GET /api/groups/{groupId}/meeting-proposals` | Danh sách đề xuất buổi họp của nhóm kèm trạng thái chung | US-27 | Thành viên nhóm (phạm vi theo vai trò) | Nháp |
+| `GET /api/groups/{groupId}/meeting-proposals/{proposalId}` | Chi tiết đề xuất và trạng thái phản hồi từng thành viên | US-27 | Thành viên nhóm (phạm vi theo vai trò) | Nháp |
+| `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond` | Chấp nhận hoặc từ chối lời mời | US-25, US-26 | Người được mời | Nháp |
+| `GET /api/users/me/meeting-invitations` | Lời mời họp của tôi | US-25, US-26 | Đã đăng nhập | Nháp |
+| `PATCH /api/groups/{groupId}/members/{userId}/meeting-permission` | Bật hoặc tắt quyền tổ chức họp của một thành viên | US-23, US-24 (U036) | Trưởng nhóm | Nháp |
+| `GET /api/users/me/reminders` | Nhắc việc sắp đến hạn và đã gửi | US-28 | Đã đăng nhập | Nháp |
 
 ---
 
-### `POST /api/v1/groups/{groupId}/meetings/find-common-slots`
+### `POST /api/groups/{groupId}/meeting-slots/search`
 
 Module: TV4 · Story: US-23 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Tìm các khung giờ họp chung của nhóm dài đúng `durationMinutes` trong khoảng thời gian được chọn, dựa trên khoảng bận (`starts_at`, `ends_at`) từ sự kiện cố định của các thành viên; trả danh sách khung cả nhóm cùng rảnh (`allFreeSlots`) hoặc tối đa 10 khung có nhiều người rảnh nhất (`partialSlots`) kèm điểm thuận tiện `score` và thứ hạng `rank` (US-23, U031).  
@@ -3025,7 +3025,7 @@ Ghi chú:
 
 ---
 
-### `POST /api/v1/groups/{groupId}/meetings/proposals`
+### `POST /api/groups/{groupId}/meeting-proposals`
 
 Module: TV4 · Story: US-24 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Người tổ chức họp tạo một đề xuất buổi họp cho nhóm (chốt một khung giờ từ kết quả tìm kiếm hoặc tự nhập) và gửi lời mời đến toàn bộ thành viên nhóm (U032).  
@@ -3096,11 +3096,11 @@ Ghi chú:
 - Cảnh báo "khung có người bận" (U032 3c) do giao diện xử lý dựa trên `availableCount` và `busyMembers` mà kết quả tìm giờ họp đã trả, người gửi xác nhận lại rồi mới gọi API. Server không bắt buộc khung gửi phải trùng một khung đã tìm ra và không kiểm tra lại số người bận.
 - Người tổ chức họp được tính là `"Đã xác nhận"` thông qua cột `organizer_user_id` của bảng `meeting_proposals` khi đếm số người đã xác nhận trên tổng số thành viên (ví dụ `3/5` ở U032 bước 4, U034 bước 3), không tạo dòng `meeting_invitations` riêng.
 - Khi thành viên rời nhóm sau khi đề xuất đã được tạo, lời mời của người đó không tính vào tổng lời mời đang mở (U033, U034, U036); truy vấn đọc lọc theo `group_members` và `mp.created_at >= gm.joined_at`.
-- `invitationsSent` chỉ là số lượng. Danh sách đề xuất của nhóm lấy ở `GET /api/v1/groups/{groupId}/meetings/proposals`; danh sách từng thành viên và trạng thái phản hồi (U034, US-27) lấy ở `GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}`.
+- `invitationsSent` chỉ là số lượng. Danh sách đề xuất của nhóm lấy ở `GET /api/groups/{groupId}/meeting-proposals`; danh sách từng thành viên và trạng thái phản hồi (U034, US-27) lấy ở `GET /api/groups/{groupId}/meeting-proposals/{proposalId}`.
 
 ---
 
-### `GET /api/v1/groups/{groupId}/meetings/proposals`
+### `GET /api/groups/{groupId}/meeting-proposals`
 
 Module: TV4 · Story: US-27 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Liệt kê các đề xuất buổi họp của nhóm, mới nhất trước, kèm trạng thái chung, để người gửi lời mời và Trưởng nhóm tìm `proposalId` mở màn hình xem phản hồi (U034) kể cả sau khi đã đóng màn hình gửi lời mời hoặc khi Trưởng nhóm không phải người gửi.  
@@ -3173,7 +3173,7 @@ Quyền: Thành viên hiện tại của nhóm, danh sách giới hạn theo vai
 }
 ```
 
-Mỗi phần tử có `summary` và `viewScope` cùng ý nghĩa như ở `GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}` (kể cả bảng `state` và quy tắc `replacedByProposalId`), nhưng không có `members`, `location`, `notes`; muốn xem chi tiết thì gọi endpoint chi tiết. `declinedMembers` là danh sách thành viên đang ở trạng thái `declined` (`displayName`, `respondedAt`), mới nhất trước, dùng để hiện thông báo "<Tên> đã từ chối" cho người gửi lời mời và Trưởng nhóm (U033 3a, 3c) mà không phải gọi endpoint chi tiết cho từng đề xuất; chỉ có tên hiển thị (BR-02). Phần tử `viewScope = "self"` có `summary: null` và `declinedMembers: null`. Nhóm chưa có đề xuất nào thì `proposals` là mảng rỗng, vẫn trả 200.
+Mỗi phần tử có `summary` và `viewScope` cùng ý nghĩa như ở `GET /api/groups/{groupId}/meeting-proposals/{proposalId}` (kể cả bảng `state` và quy tắc `replacedByProposalId`), nhưng không có `members`, `location`, `notes`; muốn xem chi tiết thì gọi endpoint chi tiết. `declinedMembers` là danh sách thành viên đang ở trạng thái `declined` (`displayName`, `respondedAt`), mới nhất trước, dùng để hiện thông báo "<Tên> đã từ chối" cho người gửi lời mời và Trưởng nhóm (U033 3a, 3c) mà không phải gọi endpoint chi tiết cho từng đề xuất; chỉ có tên hiển thị (BR-02). Phần tử `viewScope = "self"` có `summary: null` và `declinedMembers: null`. Nhóm chưa có đề xuất nào thì `proposals` là mảng rỗng, vẫn trả 200.
 
 **Lỗi có thể gặp**
 
@@ -3194,10 +3194,10 @@ Ghi chú:
 
 ---
 
-### `GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}`
+### `GET /api/groups/{groupId}/meeting-proposals/{proposalId}`
 
 Module: TV4 · Story: US-27 · Người viết: Thư Q.A. · Trạng thái: Nháp  
-Mô tả: Xem chi tiết một đề xuất buổi họp (`proposalId` lấy từ `GET /api/v1/groups/{groupId}/meetings/proposals`) kèm danh sách thành viên nhóm và trạng thái phản hồi của từng người (`pending`, `accepted`, `declined`, `superseded`), số người đã xác nhận trên tổng số và trạng thái chung của buổi họp (U034).  
+Mô tả: Xem chi tiết một đề xuất buổi họp (`proposalId` lấy từ `GET /api/groups/{groupId}/meeting-proposals`) kèm danh sách thành viên nhóm và trạng thái phản hồi của từng người (`pending`, `accepted`, `declined`, `superseded`), số người đã xác nhận trên tổng số và trạng thái chung của buổi họp (U034).  
 Quyền: Thành viên hiện tại của nhóm, nhưng phạm vi dữ liệu theo vai trò (U034 2b):
 - **Toàn bộ phản hồi** (`viewScope = "all"`): Trưởng nhóm hiện tại của nhóm, hoặc người gửi lời mời (`meeting_proposals.organizer_user_id`) khi người đó vẫn là thành viên nhóm. Quyền của người gửi không phụ thuộc việc cờ ủy quyền tổ chức họp (U036) còn bật hay không.
 - **Chỉ phản hồi của chính mình** (`viewScope = "self"`): Thành viên nhóm khác có lời mời thuộc đề xuất này (U033 2a). Không thấy trạng thái, tên hay số lượng của người khác.
@@ -3207,7 +3207,7 @@ Quyền: Thành viên hiện tại của nhóm, nhưng phạm vi dữ liệu the
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
 | `groupId` | `uuid` | Có | Mã nhóm |
-| `proposalId` | `uuid` | Có | Mã đề xuất buổi họp, lấy từ `data.id` của `POST /api/v1/groups/{groupId}/meetings/proposals` |
+| `proposalId` | `uuid` | Có | Mã đề xuất buổi họp, lấy từ `data.id` của `POST /api/groups/{groupId}/meeting-proposals` |
 
 **Tham số query:** Không có.
 
@@ -3353,12 +3353,12 @@ Ghi chú:
   `SELECT mi.id AS invitation_id, mi.user_id, u.display_name, mi.status, mi.responded_at FROM meeting_invitations mi JOIN meeting_proposals mp ON mp.id = mi.meeting_proposal_id JOIN group_members gm ON gm.group_id = mp.group_id AND gm.user_id = mi.user_id JOIN users u ON u.id = mi.user_id WHERE mp.id = $proposalId AND mp.group_id = $groupId AND mp.created_at >= gm.joined_at ORDER BY u.display_name ASC, mi.user_id ASC`.
   Dòng người tổ chức thêm từ `meeting_proposals.organizer_user_id` (JOIN `group_members` để kiểm tra còn trong nhóm) và luôn đứng đầu; các thành viên còn lại sắp theo `displayName ASC, userId ASC` để thứ tự tất định.
 - `replacedByProposalId` lấy từ đề xuất mới nhất cùng nhóm có `created_at` lớn hơn, không cần cột hay migration mới: `SELECT np.id FROM meeting_proposals np WHERE np.group_id = $groupId AND np.created_at > $createdAt ORDER BY np.created_at DESC, np.id DESC LIMIT 1`. Cách tính này bắt được cả đề xuất cũ không còn lời mời `pending` nào (chỉ `pending` mới đổi sang `superseded` ở dòng lời mời nên không thể dựa vào dòng đó). Dòng lời mời `superseded` vẫn giữ để lưu vết và hiển thị "Lời mời đã được thay bằng giờ mới" cho thành viên (U032 4a).
-- Endpoint chỉ đọc, dùng chung nguồn dữ liệu với thông báo từ chối của `respond` (U033 3a, 3c). Nút "Chọn giờ khác" quay lại `POST /api/v1/groups/{groupId}/meetings/find-common-slots`, không có endpoint riêng.
-- Thành viên thường vẫn xem lời mời của mình ở `GET /api/v1/users/me/meeting-invitations`; endpoint này cho phép mở lại từ đề xuất cụ thể.
+- Endpoint chỉ đọc, dùng chung nguồn dữ liệu với thông báo từ chối của `respond` (U033 3a, 3c). Nút "Chọn giờ khác" quay lại `POST /api/groups/{groupId}/meeting-slots/search`, không có endpoint riêng.
+- Thành viên thường vẫn xem lời mời của mình ở `GET /api/users/me/meeting-invitations`; endpoint này cho phép mở lại từ đề xuất cụ thể.
 
 ---
 
-### `POST /api/v1/meetings/invitations/{invitationId}/respond`
+### `POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond`
 
 Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Thành viên nhóm phản hồi (chấp nhận hoặc từ chối) lời mời tham dự một buổi họp đã được đề xuất (U033).  
@@ -3368,7 +3368,9 @@ Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); ch
 
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
-| `invitationId` | `uuid` | Có | Mã lời mời của thành viên (`members[].invitationId` của chi tiết đề xuất). Nhóm và đề xuất được suy ra từ lời mời nên không cần trên đường dẫn |
+| `groupId` | `uuid` | Có | Mã nhóm |
+| `proposalId` | `uuid` | Có | Mã đề xuất buổi họp |
+| `invitationId` | `uuid` | Có | Mã lời mời của thành viên |
 
 **Nội dung gửi lên (body)**
 
@@ -3402,18 +3404,18 @@ Quyền: Thành viên nhóm được mời (chủ sở hữu `invitationId`); ch
 | `400` | `VALIDATION_ERROR` | `response` không phải `"accepted"` hoặc `"declined"` |
 | `401` | `UNAUTHORIZED` | Chưa đăng nhập hoặc token không hợp lệ / hết hạn |
 | `403` | `FORBIDDEN` | Người gọi không phải chủ sở hữu lời mời (`invitationId`), không còn là thành viên nhóm, hoặc vào nhóm sau khi đề xuất được tạo (`mp.created_at < gm.joined_at`, U033 2a) |
-| `404` | `NOT_FOUND` | Không tìm thấy lời mời với `invitationId` |
+| `404` | `NOT_FOUND` | Không tìm thấy `groupId`, `proposalId` hoặc `invitationId` khớp trên đường dẫn |
 | `409` | `CONFLICT` | Lời mời hết hiệu lực ("Lời mời đã hết hiệu lực", U033 2b): lời mời đã ở trạng thái `'superseded'`, hoặc đề xuất không còn ở trạng thái `'open'`, hoặc giờ bắt đầu buổi họp (`startsAt`) đã qua, hoặc đề xuất đã bị đề xuất mới hơn của nhóm thay thế (`replacedByProposalId` khác `null`) mà chưa đạt trạng thái "Đủ người" (`full`) – kể cả khi lời mời hiện tại đang là `'accepted'` hoặc `'declined'` |
 | `500` | `INTERNAL_ERROR` | Lỗi máy chủ |
 
 Ghi chú:
 - Thành viên có thể đổi phản hồi nhiều lần (từ `'accepted'` sang `'declined'` hoặc ngược lại) miễn lời mời còn hiệu lực: đề xuất còn `'open'`, `startsAt` chưa qua và đề xuất chưa bị đề xuất mới hơn thay thế (U033 3b, 3c); mỗi lần phản hồi cập nhật `responded_at`.
 - Khi ghi nhận phản hồi, Service mở transaction ngắn, khóa dòng lời mời (`SELECT ... FOR UPDATE`) và kiểm tra lại trạng thái trước khi `UPDATE`, để xếp hàng với bước chuyển `'superseded'` khi nhóm tạo đề xuất mới (tránh ghi đè lời mời vừa bị thay).
-- Khi thành viên phản hồi `"declined"`, thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (U033 3a, 3c) được lấy trực tiếp từ các dòng `meeting_invitations` có `status = 'declined'` kèm tên hiển thị của thành viên, dùng chung nguồn dữ liệu với màn hình xem phản hồi (U034).  
+- Khi thành viên phản hồi `"declined"`, thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (U033 3a, 3c) được lấy trực tiếp từ các dòng `meeting_invitations` có `status = 'declined'` kèm tên hiển thị của thành viên, dùng chung nguồn dữ liệu với màn hình xem phản hồi (U034).
 
 ---
 
-### `GET /api/v1/users/me/meeting-invitations`
+### `GET /api/users/me/meeting-invitations`
 
 Module: TV4 · Story: US-25, US-26 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Lấy các lời mời họp của người dùng đang đăng nhập: đang chờ phản hồi (`pending`), đã bị thay bằng đề xuất mới (`superseded`), và lời mời đã phản hồi (`accepted`, `declined`) của đề xuất còn `open` mà giờ bắt đầu chưa qua, để thành viên mở lời mời, phản hồi hoặc đổi phản hồi (U033 3b, 3c, U032 4a).  
@@ -3464,7 +3466,7 @@ Ghi chú:
 
 ---
 
-### `GET /api/v1/users/me/reminders`
+### `GET /api/users/me/reminders`
 
 Module: TV4 · Story: US-28 · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Lấy danh sách nhắc việc sắp đến hạn của người dùng đang đăng nhập, sắp theo thời điểm nhắc gần nhất trước, tức `remindAt ASC, id ASC` (U035).  
@@ -3529,7 +3531,7 @@ Ghi chú:
 
 ---
 
-### `PATCH /api/v1/groups/{groupId}/members/{userId}/meeting-permission`
+### `PATCH /api/groups/{groupId}/members/{userId}/meeting-permission`
 
 Module: TV4 · Story: US-23, US-24 (U036) · Người viết: Thư Q.A. · Trạng thái: Nháp  
 Mô tả: Trưởng nhóm bật hoặc tắt quyền tổ chức họp (tìm giờ họp chung và gửi lời mời) của một Thành viên nhóm. Ghi vào cột `group_members.can_organize_meetings`.  
@@ -3578,7 +3580,7 @@ Quyền: Trưởng nhóm hiện tại của nhóm. Thành viên được ủy qu
 Ghi chú:
 - Gọi lặp với cùng giá trị vẫn trả `200`, không đổi gì (lũy đẳng). Thứ tự kiểm tra: nhóm (404), người gọi là Trưởng nhóm (403), `userId` còn trong nhóm (404), `userId` không phải Trưởng nhóm (400).
 - Câu lệnh ghi: `UPDATE group_members SET can_organize_meetings = $value WHERE group_id = $groupId AND user_id = $userId AND role = 'member'`; không có dòng nào bị ảnh hưởng (người đó vừa rời nhóm) thì trả `404`.
-- Có hiệu lực ngay ở `POST .../meeting-slots/search` và `POST .../meeting-proposals` vì hai endpoint kiểm tra quyền động. Thu hồi quyền không hủy lời mời người đó đã gửi (U036 3a); người đó vẫn xem được phản hồi của đề xuất mình gửi (U034).  
+- Có hiệu lực ngay ở `POST .../meeting-slots/search` và `POST .../meeting-proposals` vì hai endpoint kiểm tra quyền động. Thu hồi quyền không hủy lời mời người đó đã gửi (U036 3a); người đó vẫn xem được phản hồi của đề xuất mình gửi (U034).
 - Danh sách thành viên kèm trạng thái ủy quyền lấy từ `GET /api/groups/{groupId}` (TV1, trường `canOrganizeMeetings`), nên không có endpoint đọc riêng. Chuyển Trưởng nhóm đặt lại cờ của người nhận về `false`; rời nhóm xóa dòng nên quyền tự mất (TV1).
 
 ---
@@ -3600,7 +3602,7 @@ sequenceDiagram
     participant DB as CSDL
 
     NTH->>FE: Chọn tuần, thời lượng (mặc định 60 phút) và bấm Tìm giờ họp
-    FE->>API: POST /api/v1/groups/{groupId}/meetings/find-common-slots (from, to, durationMinutes, sortBy)
+    FE->>API: POST /api/groups/{groupId}/meeting-slots/search (from, to, durationMinutes, sortBy)
     API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3647,7 +3649,7 @@ sequenceDiagram
 
 #### 2. Gửi lời mời họp và phản hồi xác nhận (U032, U033, U036)
 
-Sơ đồ gồm hai giai đoạn: (1) Người tổ chức họp chốt khung giờ và gửi lời mời, trong một transaction có khóa dòng `groups` (`FOR UPDATE`), hệ thống chuyển lời mời `pending` của đề xuất `open` cũ cùng nhóm thành `superseded` rồi tạo `meeting_proposals` và `meeting_invitations` cho các thành viên còn lại, trong đó Người tổ chức họp được tính là `Đã xác nhận` qua `organizer_user_id` (`U032`, `U034`); (2) Thành viên nhóm mở ứng dụng xem danh sách lời mời (`pending`, `superseded` và lời mời đã phản hồi còn đổi được) qua `GET /api/v1/users/me/meeting-invitations` và gửi phản hồi chấp nhận hoặc từ chối khi lời mời còn hiệu lực, hệ thống khóa dòng lời mời (`FOR UPDATE`) rồi cập nhật `status` và `responded_at` (`U033`). Thông báo trong ứng dụng cho thành viên chính là các lời mời `pending` và `superseded`; thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (`U033` 3a, 3c) được tạo từ các dòng `meeting_invitations` có `status = 'declined'`, dùng chung nguồn dữ liệu với màn hình xem phản hồi (`U034`).
+Sơ đồ gồm hai giai đoạn: (1) Người tổ chức họp chốt khung giờ và gửi lời mời, trong một transaction có khóa dòng `groups` (`FOR UPDATE`), hệ thống chuyển lời mời `pending` của đề xuất `open` cũ cùng nhóm thành `superseded` rồi tạo `meeting_proposals` và `meeting_invitations` cho các thành viên còn lại, trong đó Người tổ chức họp được tính là `Đã xác nhận` qua `organizer_user_id` (`U032`, `U034`); (2) Thành viên nhóm mở ứng dụng xem danh sách lời mời (`pending`, `superseded` và lời mời đã phản hồi còn đổi được) qua `GET /api/users/me/meeting-invitations` và gửi phản hồi chấp nhận hoặc từ chối khi lời mời còn hiệu lực, hệ thống khóa dòng lời mời (`FOR UPDATE`) rồi cập nhật `status` và `responded_at` (`U033`). Thông báo trong ứng dụng cho thành viên chính là các lời mời `pending` và `superseded`; thông báo từ chối cho Người tổ chức họp và Trưởng nhóm (`U033` 3a, 3c) được tạo từ các dòng `meeting_invitations` có `status = 'declined'`, dùng chung nguồn dữ liệu với màn hình xem phản hồi (`U034`).
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -3662,7 +3664,7 @@ sequenceDiagram
 
     Note over NTH,DB: Giai đoạn 1 - Người tổ chức họp chốt giờ và gửi lời mời (U032)
     NTH->>FE: Chọn khung giờ từ kết quả tìm giờ họp và bấm Gửi lời mời
-    FE->>API: POST /api/v1/groups/{groupId}/meetings/proposals (title, startsAt, endsAt, location, notes)
+    FE->>API: POST /api/groups/{groupId}/meeting-proposals (title, startsAt, endsAt, location, notes)
     API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3705,7 +3707,7 @@ sequenceDiagram
 
     Note over NTH,DB: Giai đoạn 2 - Thành viên nhận thông báo và phản hồi lời mời (U033)
     TVN->>FE: Mở ứng dụng, xem thông báo lời mời
-    FE->>API: GET /api/v1/users/me/meeting-invitations
+    FE->>API: GET /api/users/me/meeting-invitations
     API->>API: Xác thực JWT
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3720,7 +3722,7 @@ sequenceDiagram
         FE-->>TVN: Hiển thị lời mời theo giờ Việt Nam (BR-07), lời mời superseded kèm thông báo đã được thay bằng giờ mới
     end
     TVN->>FE: Bấm Chấp nhận hoặc Từ chối
-    FE->>API: POST /api/v1/meetings/invitations/{invitationId}/respond (response)
+    FE->>API: POST /api/groups/{groupId}/meeting-proposals/{proposalId}/invitations/{invitationId}/respond (response)
     API->>API: Xác thực JWT và kiểm tra giá trị response
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3773,7 +3775,7 @@ sequenceDiagram
 
     Note over NTH,DB: Giai đoạn 1 - Mở danh sách đề xuất của nhóm
     NTH->>FE: Mở màn hình lời mời đã gửi của nhóm
-    FE->>API: GET /api/v1/groups/{groupId}/meetings/proposals (limit)
+    FE->>API: GET /api/groups/{groupId}/meeting-proposals (limit)
     API->>API: Xác thực JWT và kiểm tra groupId, limit
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3806,7 +3808,7 @@ sequenceDiagram
 
     Note over NTH,DB: Giai đoạn 2 - Mở chi tiết một đề xuất
     NTH->>FE: Chọn một đề xuất
-    FE->>API: GET /api/v1/groups/{groupId}/meetings/proposals/{proposalId}
+    FE->>API: GET /api/groups/{groupId}/meeting-proposals/{proposalId}
     API->>API: Xác thực JWT và kiểm tra groupId, proposalId
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3836,7 +3838,7 @@ sequenceDiagram
             opt state là insufficient và người xem là người tổ chức họp
                 NTH->>FE: Bấm Chọn giờ khác
                 Note over FE,API: U034 4a - Quay lại tìm giờ với tuần đã chọn, tính lại theo lịch hiện tại, phản hồi khác giữ nguyên đến khi gửi lời mời mới
-                FE->>API: POST /api/v1/groups/{groupId}/meetings/find-common-slots (from, to, durationMinutes)
+                FE->>API: POST /api/groups/{groupId}/meeting-slots/search (from, to, durationMinutes)
             end
         end
     end
@@ -3861,7 +3863,7 @@ sequenceDiagram
     API-->>FE: 200 OK { data.members kèm canOrganizeMeetings }
     FE-->>TN: Hiển thị danh sách thành viên kèm trạng thái đã ủy quyền hay chưa
     TN->>FE: Bật hoặc tắt quyền của một thành viên
-    FE->>API: PATCH /api/v1/groups/{groupId}/members/{userId}/meeting-permission (canOrganizeMeetings)
+    FE->>API: PATCH /api/groups/{groupId}/members/{userId}/meeting-permission (canOrganizeMeetings)
     API->>API: Xác thực JWT và kiểm tra groupId, userId là UUID, canOrganizeMeetings là boolean
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -3944,7 +3946,7 @@ sequenceDiagram
 
     Note over ND,DB: Giai đoạn 3 - Sinh viên xem nhắc việc
     ND->>FE: Mở ứng dụng
-    FE->>API: GET /api/v1/users/me/reminders (isSent)
+    FE->>API: GET /api/users/me/reminders (isSent)
     API->>API: Xác thực JWT và kiểm tra from, to, isSent, limit
     alt Chưa đăng nhập hoặc token hết hạn
         API-->>FE: 401 UNAUTHORIZED
@@ -4713,7 +4715,7 @@ sequenceDiagram
     participant DB as CSDL
 
     NTH->>FE: Chọn tuần, thời lượng (mặc định 60 phút) và bấm Tìm giờ họp
-    FE->>API: POST /api/v1/groups/{groupId}/meetings/find-common-slots
+    FE->>API: POST /api/groups/{groupId}/meeting-slots/search
     API->>API: Xác thực JWT và kiểm tra định dạng dữ liệu đầu vào
     API->>SVC: Yêu cầu tìm giờ họp chung (userId, groupId, from, to, durationMinutes)
     SVC->>DB: Truy vấn tư cách thành viên, quyền tổ chức họp (U036) và số lượng thành viên nhóm

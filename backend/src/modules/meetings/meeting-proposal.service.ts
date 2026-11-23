@@ -314,6 +314,8 @@ export class MeetingProposalService {
    */
   public async respond(
     userId: string,
+    groupId: string,
+    proposalId: string,
     invitationId: string,
     response: InvitationResponse,
   ): Promise<RespondDto> {
@@ -322,7 +324,11 @@ export class MeetingProposalService {
     return runTransaction(async (client) => {
       const now = clock();
       const detail = await invitations.lockDetailById(invitationId, client);
-      if (!detail) {
+      if (
+        !detail ||
+        detail.groupId !== groupId ||
+        detail.invitation.meetingProposalId !== proposalId
+      ) {
         throw new NotFoundError('Không tìm thấy lời mời');
       }
       const { invitation } = detail;

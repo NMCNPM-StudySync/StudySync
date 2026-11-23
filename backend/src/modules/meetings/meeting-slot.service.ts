@@ -142,7 +142,6 @@ export class MeetingSlotService {
       .map((member) => ({
         code: 'MEMBER_NO_FIXED_EVENTS',
         message: `${member.displayName} chưa nhập sự kiện cố định nào trong khoảng thời gian này, kết quả có thể chưa phản ánh đúng`,
-        details: [{ field: 'displayName', issue: member.displayName }],
       }));
 
     return {

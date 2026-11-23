@@ -36,6 +36,7 @@ export class ReminderJob {
 
   public start(): void {
     if (this.timer) return;
+    void this.runOnce();
     this.timer = setInterval(() => void this.runOnce(), this.intervalMs);
     this.timer.unref?.();
   }

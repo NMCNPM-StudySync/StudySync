@@ -219,94 +219,183 @@ describe('tạo đề xuất (U032)', () => {
   });
   it('đề xuất mới chuyển lời mời pending cũ sang superseded, giữ accepted', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
-    await service.respond(BINH, state.invitations[0]!.id, 'accepted');
+    const p1 = await service.createProposal(AN, G, input());
+    await service.respond(BINH, G, p1.id, state.invitations[0]!.id, 'accepted');
     await service.createProposal(AN, G, input('Họp lại'));
     const old = state.invitations.filter((i) => i.meetingProposalId === 'p1');
     expect(old.map((i) => i.status)).toEqual(['accepted', 'superseded']);
+  });
+
+  it('hai transaction tạo đề xuất đồng thời: đề xuất giữ khóa sau có createdAt lớn hơn và phản hồi được', async () => {
+    let lockChain = Promise.resolve();
+    let tick = NOW.getTime();
+    const lockedRun = async <T>(work: (c: Queryable) => Promise<T>, delayBeforeLockMs = 0) => {
+      if (delayBeforeLockMs > 0) {
+        await new Promise((r) => setTimeout(r, delayBeforeLockMs));
+      }
+      const prev = lockChain;
+      let release!: () => void;
+      lockChain = new Promise<void>((r) => {
+        release = r;
+      });
+      await prev;
+      try {
+        return await work(db);
+      } finally {
+        release();
+      }
+    };
+
+    const s = setup(trio());
+    let call = 0;
+    const svc = new MeetingProposalService({
+      membership: s.membership,
+      groups: s.groups,
+      proposals: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        insert: async (i: any) => {
+          s.state.seq += 1;
+          tick += 100; // mô phỏng clock_timestamp() chạy sau khi đã giữ khóa nhóm
+          const p = new MeetingProposal({
+            id: `p${s.state.seq}`,
+            groupId: i.groupId,
+            organizerUserId: i.organizerUserId,
+            title: i.title,
+            startsAt: i.startsAt,
+            endsAt: i.endsAt,
+            status: 'open',
+            location: i.location,
+            notes: i.notes,
+            createdAt: new Date(tick),
+            updatedAt: new Date(tick),
+          });
+          s.state.proposals.push(p);
+          return p;
+        },
+        findByIdInGroup: async (id: string) => {
+          const p = s.state.proposals.find((x) => x.id === id);
+          return p ? { proposal: p, organizerDisplayName: 'An' } : null;
+        },
+        findLatestByGroup: async () => {
+          const sorted = [...s.state.proposals].sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+          );
+          const top = sorted[0];
+          return top ? { id: top.id, createdAt: top.createdAt } : null;
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      invitations: (s.service as any).deps.invitations,
+      db,
+      runTransaction: <T>(work: (c: Queryable) => Promise<T>) => {
+        call += 1;
+        return lockedRun(work, call === 1 ? 30 : 0); // X bắt đầu trước nhưng giữ khóa sau Y
+      },
+      clock: () => NOW,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const [pX, pY] = await Promise.all([
+      svc.createProposal(AN, G, input('X')),
+      svc.createProposal(AN, G, input('Y')),
+    ]);
+    const invX = s.state.invitations.find((i) => i.meetingProposalId === pX.id)!;
+    const invY = s.state.invitations.find((i) => i.meetingProposalId === pY.id)!;
+
+    await expect(svc.respond(BINH, G, pY.id, invY.id, 'accepted')).rejects.toThrow(ConflictError);
+    const resX = await svc.respond(BINH, G, pX.id, invX.id, 'accepted');
+    expect(resX.status).toBe('accepted');
   });
 });
 
 describe('phản hồi lời mời (U033)', () => {
   it('accepted rồi đổi sang declined, cập nhật respondedAt', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     const id = state.invitations[0]!.id;
-    const a = await service.respond(BINH, id, 'accepted');
+    const a = await service.respond(BINH, G, p.id, id, 'accepted');
     expect(a.status).toBe('accepted');
     state.clock = new Date(NOW.getTime() + 60_000);
-    const b = await service.respond(BINH, id, 'declined');
+    const b = await service.respond(BINH, G, p.id, id, 'declined');
     expect(b.status).toBe('declined');
     expect(b.respondedAt).toBe(state.clock.toISOString());
   });
-  it('lời mời không tồn tại: 404', async () => {
-    const { service } = setup(trio());
-    await expect(service.respond(BINH, 'nope', 'accepted')).rejects.toThrow(NotFoundError);
+  it('lời mời không tồn tại hoặc không khớp groupId/proposalId: 404', async () => {
+    const { service, state } = setup(trio());
+    const p = await service.createProposal(AN, G, input());
+    const id = state.invitations[0]!.id;
+    await expect(service.respond(BINH, G, p.id, 'nope', 'accepted')).rejects.toThrow(NotFoundError);
+    await expect(service.respond(BINH, 'other-group', p.id, id, 'accepted')).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(service.respond(BINH, G, 'other-proposal', id, 'accepted')).rejects.toThrow(
+      NotFoundError,
+    );
   });
   it('người khác phản hồi hộ: 403', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
-    await expect(service.respond(CUC, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ForbiddenError,
-    );
+    const p = await service.createProposal(AN, G, input());
+    await expect(
+      service.respond(CUC, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ForbiddenError);
   });
   it('người đã rời nhóm: 403', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     state.members = state.members.filter((m) => m.userId !== BINH);
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ForbiddenError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ForbiddenError);
   });
   it('vào nhóm sau khi đề xuất được tạo: 403', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     state.members.find((m) => m.userId === BINH)!.joinedAt = d('2026-11-30T00:00:00Z');
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ForbiddenError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ForbiddenError);
   });
   it('lời mời superseded: 409', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     await service.createProposal(AN, G, input('mới'));
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ConflictError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ConflictError);
   });
   it('đã accepted nhưng đề xuất bị thay và chưa đủ người: 409', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
-    await service.respond(BINH, state.invitations[0]!.id, 'accepted');
+    const p = await service.createProposal(AN, G, input());
+    await service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted');
     await service.createProposal(AN, G, input('mới'));
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'declined')).rejects.toThrow(
-      ConflictError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'declined'),
+    ).rejects.toThrow(ConflictError);
   });
   it('đề xuất đã đủ người vẫn cho phản hồi dù có đề xuất mới', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
-    await service.respond(BINH, state.invitations[0]!.id, 'accepted');
-    await service.respond(CUC, state.invitations[1]!.id, 'accepted');
+    const p = await service.createProposal(AN, G, input());
+    await service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted');
+    await service.respond(CUC, G, p.id, state.invitations[1]!.id, 'accepted');
     await service.createProposal(AN, G, input('mới'));
-    const r = await service.respond(BINH, state.invitations[0]!.id, 'declined');
+    const r = await service.respond(BINH, G, p.id, state.invitations[0]!.id, 'declined');
     expect(r.status).toBe('declined');
   });
   it('giờ bắt đầu đã qua: 409', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     state.clock = d('2026-11-10T01:00:00.000Z');
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ConflictError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ConflictError);
   });
   it('đề xuất không còn open: 409', async () => {
     const { service, state } = setup(trio());
-    await service.createProposal(AN, G, input());
+    const p = await service.createProposal(AN, G, input());
     state.proposals[0]!.cancel();
-    await expect(service.respond(BINH, state.invitations[0]!.id, 'accepted')).rejects.toThrow(
-      ConflictError,
-    );
+    await expect(
+      service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted'),
+    ).rejects.toThrow(ConflictError);
   });
 });
 
@@ -314,7 +403,7 @@ describe('chi tiết và danh sách (U034)', () => {
   it('trưởng nhóm thấy all, người tổ chức đứng đầu và được tính đã xác nhận', async () => {
     const { service, state } = setup(trio());
     const p = await service.createProposal(AN, G, input());
-    await service.respond(BINH, state.invitations[0]!.id, 'accepted');
+    await service.respond(BINH, G, p.id, state.invitations[0]!.id, 'accepted');
     const detail = await service.getProposalDetail(AN, G, p.id);
     expect(detail.viewScope).toBe('all');
     expect(detail.members[0]).toMatchObject({
@@ -341,7 +430,7 @@ describe('chi tiết và danh sách (U034)', () => {
   it('declined thì state insufficient', async () => {
     const { service, state } = setup(trio());
     const p = await service.createProposal(AN, G, input());
-    await service.respond(CUC, state.invitations[1]!.id, 'declined');
+    await service.respond(CUC, G, p.id, state.invitations[1]!.id, 'declined');
     const detail = await service.getProposalDetail(AN, G, p.id);
     expect(detail.summary?.state).toBe('insufficient');
   });
@@ -462,6 +551,7 @@ describe('tìm giờ họp chung (service)', () => {
       'MEMBER_NO_FIXED_EVENTS',
       'MEMBER_NO_FIXED_EVENTS',
     ]);
+    expect(res.warnings[0]?.details).toBeUndefined();
     expect((seen()[1] as Date).toISOString()).toBe('2026-11-08T23:00:00.000Z');
     expect(Object.keys(res.data.allFreeSlots[0]!).sort()).toEqual([
       'availableCount',
@@ -473,7 +563,7 @@ describe('tìm giờ họp chung (service)', () => {
       'totalMembers',
     ]);
   });
-  it('lỗi: from>=to, quá 31 ngày, tuần đã qua, không phải người tổ chức, nhóm 1 người', async () => {
+  it('TC-TV4-09 (tuần đã qua), TC-TV4-11 (nhóm 1 người), from>=to, quá 31 ngày, không phải người tổ chức', async () => {
     const { svc } = mk(trio());
     await expect(svc.searchSlots(AN, G, { ...range, to: range.from })).rejects.toThrow(
       ValidationError,
@@ -492,6 +582,18 @@ describe('tìm giờ họp chung (service)', () => {
     await expect(mk([member(AN, 'An', 'leader')]).svc.searchSlots(AN, G, range)).rejects.toThrow(
       ValidationError,
     );
+  });
+  it('TC-TV4-14: thành viên đã rời nhóm không tính vào N và không sinh cảnh báo', async () => {
+    const { svc } = mk(
+      [member(AN, 'An', 'leader'), member(BINH, 'Bình', 'member')],
+      [
+        { userId: AN, start: d('2026-11-09T05:00:00Z'), end: d('2026-11-09T06:00:00Z') },
+        { userId: BINH, start: d('2026-11-09T05:00:00Z'), end: d('2026-11-09T06:00:00Z') },
+      ],
+    );
+    const res = await svc.searchSlots(AN, G, range);
+    expect(res.data.allFreeSlots[0]?.totalMembers).toBe(2);
+    expect(res.warnings).toEqual([]);
   });
 });
 
@@ -555,11 +657,11 @@ describe('nhắc việc (U035)', () => {
     new ReminderService({ reminders: f.repo as any, db, runTransaction, clock: () => NOW });
   it('syncForTask xóa mốc chưa gửi rồi lập lại; việc xong thì chỉ xóa', async () => {
     const f = fakeRepo();
-    await mkSvc(f).syncForTask({ id: 't1', userId: AN, dueAt: due, isDone: false }, db);
+    await mkSvc(f).syncForTask({ id: 't1', userId: AN, dueAt: due, isDone: false }, NOW, db);
     expect(f.log).toEqual(['del:t1', 'ins']);
     expect(f.inserted()).toHaveLength(2);
     const g = fakeRepo();
-    await mkSvc(g).syncForTask({ id: 't1', userId: AN, dueAt: due, isDone: true }, db);
+    await mkSvc(g).syncForTask({ id: 't1', userId: AN, dueAt: due, isDone: true }, NOW, db);
     expect(g.log).toEqual(['del:t1']);
   });
   it('dispatchDue chạy theo lô 500', async () => {
@@ -608,5 +710,20 @@ describe('nhắc việc (U035)', () => {
     );
     expect(await bad.runOnce()).toBe(0);
     expect(errors).toHaveLength(1);
+  });
+  it('ReminderJob.start chạy một lượt ngay khi khởi động', async () => {
+    let calls = 0;
+    const job = new ReminderJob(
+      {
+        dispatchDue: async () => {
+          calls += 1;
+          return 0;
+        },
+      },
+      { intervalMs: 60_000, clock: () => NOW },
+    );
+    job.start();
+    job.stop();
+    expect(calls).toBe(1);
   });
 });

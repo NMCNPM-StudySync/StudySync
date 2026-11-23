@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express';
-import { requireAuthenticatedUser } from '../../middlewares/authenticate';
+import { requireAuthenticatedUser } from '../../middlewares/require-user';
 import { MeetingController, type MeetingControllerDeps } from './meeting.controller';
 import { ReminderController } from './reminder.controller';
 import type { ReminderService } from './reminder.service';
@@ -9,8 +9,8 @@ export interface MeetingModuleServices extends MeetingControllerDeps {
 }
 
 /**
- * Router TV4, gắn dưới `/api/v1`. `authenticate` mặc định chỉ kiểm tra `req.userId`;
- * `routes/api.ts` truyền middleware JWT thật của TV1 khi có.
+ * Router TV4, gắn dưới `/api`. `authenticate` được gắn cho từng route (không dùng `router.use`)
+ * để không chặn route của module khác và giữ 404 cho đường dẫn không tồn tại.
  */
 export function createMeetingRouter(
   services: MeetingModuleServices,
@@ -20,16 +20,22 @@ export function createMeetingRouter(
   const meetings = new MeetingController(services);
   const reminders = new ReminderController(services.reminders);
 
-  router.use(authenticate);
-
-  router.post('/groups/:id/meetings/find-common-slots', meetings.findCommonSlots);
-  router.post('/groups/:id/meetings/proposals', meetings.createProposal);
-  router.get('/groups/:id/meetings/proposals', meetings.listProposals);
-  router.get('/groups/:id/meetings/proposals/:proposalId', meetings.getProposal);
-  router.post('/meetings/invitations/:id/respond', meetings.respond);
-  router.get('/users/me/meeting-invitations', meetings.myInvitations);
-  router.get('/users/me/reminders', reminders.listMine);
-  router.patch('/groups/:id/members/:userId/meeting-permission', meetings.setPermission);
+  router.post('/groups/:groupId/meeting-slots/search', authenticate, meetings.findCommonSlots);
+  router.post('/groups/:groupId/meeting-proposals', authenticate, meetings.createProposal);
+  router.get('/groups/:groupId/meeting-proposals', authenticate, meetings.listProposals);
+  router.get('/groups/:groupId/meeting-proposals/:proposalId', authenticate, meetings.getProposal);
+  router.post(
+    '/groups/:groupId/meeting-proposals/:proposalId/invitations/:invitationId/respond',
+    authenticate,
+    meetings.respond,
+  );
+  router.get('/users/me/meeting-invitations', authenticate, meetings.myInvitations);
+  router.get('/users/me/reminders', authenticate, reminders.listMine);
+  router.patch(
+    '/groups/:groupId/members/:userId/meeting-permission',
+    authenticate,
+    meetings.setPermission,
+  );
 
   return router;
 }

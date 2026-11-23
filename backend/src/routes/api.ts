@@ -8,7 +8,7 @@ import type { SampleService } from '../modules/sample/sample.service';
 
 export interface ApiRouterOptions {
   sampleService?: SampleService;
-  /** Dịch vụ TV4; có thì mount `/v1/...` (họp nhóm, lời mời, nhắc việc). */
+  /** Dịch vụ TV4; có thì mount các endpoint họp nhóm, lời mời, nhắc việc dưới `/api`. */
   meetings?: MeetingModuleServices;
   /** Middleware xác thực JWT của TV1; mặc định chỉ kiểm tra `req.userId`. */
   authenticate?: RequestHandler;
@@ -25,7 +25,7 @@ export function createApiRouter(options?: ApiRouterOptions): Router {
   }
 
   if (options?.meetings) {
-    router.use('/v1', createMeetingRouter(options.meetings, options.authenticate));
+    router.use(createMeetingRouter(options.meetings, options.authenticate));
   }
 
   return router;

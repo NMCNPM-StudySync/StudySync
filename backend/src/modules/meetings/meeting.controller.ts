@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { getAuthUserId } from '../../middlewares/authenticate';
+import { getAuthUserId } from '../../middlewares/require-user';
 import { BaseController } from '../../shared/base-controller';
 import {
   parseListLimit,
@@ -38,7 +38,7 @@ export class MeetingController extends BaseController {
 
   public findCommonSlots = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const groupId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
     const input = parseSearchBody(req.body);
     const { data, warnings } = await this.deps.slots.searchSlots(userId, groupId, input);
     this.ok(res, data, warnings);
@@ -46,30 +46,35 @@ export class MeetingController extends BaseController {
 
   public createProposal = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const groupId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
     const input = parseProposalBody(req.body);
     this.created(res, await this.deps.proposals.createProposal(userId, groupId, input));
   });
 
   public listProposals = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const groupId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
     const limit = parseListLimit(req.query.limit);
     this.ok(res, await this.deps.proposals.listProposals(userId, groupId, limit));
   });
 
   public getProposal = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const groupId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
     const proposalId = requireUuid(req.params.proposalId, 'proposalId');
     this.ok(res, await this.deps.proposals.getProposalDetail(userId, groupId, proposalId));
   });
 
   public respond = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const invitationId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
+    const proposalId = requireUuid(req.params.proposalId, 'proposalId');
+    const invitationId = requireUuid(req.params.invitationId, 'invitationId');
     const response = parseRespondBody(req.body);
-    this.ok(res, await this.deps.proposals.respond(userId, invitationId, response));
+    this.ok(
+      res,
+      await this.deps.proposals.respond(userId, groupId, proposalId, invitationId, response),
+    );
   });
 
   public myInvitations = this.wrap(async (req, res) => {
@@ -79,7 +84,7 @@ export class MeetingController extends BaseController {
 
   public setPermission = this.wrap(async (req, res) => {
     const userId = getAuthUserId(req);
-    const groupId = requireUuid(req.params.id, 'id');
+    const groupId = requireUuid(req.params.groupId, 'groupId');
     const targetId = requireUuid(req.params.userId, 'userId');
     const enabled = parsePermissionBody(req.body);
     this.ok(res, await this.deps.permissions.setPermission(userId, groupId, targetId, enabled));
