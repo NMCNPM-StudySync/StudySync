@@ -2,6 +2,8 @@ import express, { type RequestHandler } from 'express';
 import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
+import type { AuthService } from './modules/auth/auth.service';
+import type { GroupService } from './modules/groups/group.service';
 import type { MeetingModuleServices } from './modules/meetings/meeting.routes';
 import type { SampleService } from './modules/sample/sample.service';
 import { createApiRouter } from './routes/api';
@@ -10,6 +12,8 @@ import { healthRouter } from './routes/health';
 export interface AppOptions {
   sampleService?: SampleService;
   meetings?: MeetingModuleServices;
+  auth?: AuthService;
+  groups?: GroupService;
   authenticate?: RequestHandler;
 }
 
