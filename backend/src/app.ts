@@ -1,8 +1,9 @@
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import type { KanbanService } from './modules/kanban/kanban.service';
+import type { MeetingModuleServices } from './modules/meetings/meeting.routes';
 import type { SampleService } from './modules/sample/sample.service';
 import type { StatsService } from './modules/stats/stats.service';
 import { createApiRouter } from './routes/api';
@@ -12,6 +13,8 @@ export interface AppOptions {
   sampleService?: SampleService;
   kanbanService?: KanbanService;
   statsService?: StatsService;
+  meetings?: MeetingModuleServices;
+  authenticate?: RequestHandler;
 }
 
 export function createApp(options?: AppOptions) {

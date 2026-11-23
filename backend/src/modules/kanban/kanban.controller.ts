@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { getAuthUserId } from '../../middlewares/authenticate';
+import { getAuthUserId } from '../../middlewares/require-user';
 import { BaseController } from '../../shared/base-controller';
 import { ValidationError } from '../../shared/errors';
 import type { KanbanCardStatus } from './kanban.dto';

@@ -1,9 +1,26 @@
+import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { StatsRepository } from '../src/modules/stats/stats.repository';
 import { StatsService } from '../src/modules/stats/stats.service';
 import type { Queryable } from '../src/shared/base-repository';
+import { UnauthorizedError } from '../src/shared/errors';
+
+const testAuthenticate: RequestHandler = (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next(new UnauthorizedError('Chưa đăng nhập hoặc thiếu token xác thực'));
+    return;
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    next(new UnauthorizedError('Token không hợp lệ'));
+    return;
+  }
+  req.userId = token;
+  next();
+};
 
 describe('Stats API (/api/statistics/weekly) - TV5', () => {
   const userId = '0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10';
@@ -12,7 +29,7 @@ describe('Stats API (/api/statistics/weekly) - TV5', () => {
   const mockRepo = new StatsRepository();
   const mockDb: Queryable = { query: vi.fn() };
   const statsService = new StatsService(mockRepo, mockDb);
-  const app = createApp({ statsService });
+  const app = createApp({ statsService, authenticate: testAuthenticate });
 
   beforeEach(() => {
     vi.clearAllMocks();

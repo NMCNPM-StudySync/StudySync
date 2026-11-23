@@ -1,3 +1,4 @@
+import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
@@ -7,6 +8,22 @@ import { KanbanService } from '../src/modules/kanban/kanban.service';
 import { StatsRepository } from '../src/modules/stats/stats.repository';
 import { StatsService } from '../src/modules/stats/stats.service';
 import type { Queryable } from '../src/shared/base-repository';
+import { UnauthorizedError } from '../src/shared/errors';
+
+const testAuthenticate: RequestHandler = (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next(new UnauthorizedError('Chưa đăng nhập hoặc thiếu token xác thực'));
+    return;
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    next(new UnauthorizedError('Token không hợp lệ'));
+    return;
+  }
+  req.userId = token;
+  next();
+};
 
 describe('TC-146 [Scenario] Kịch bản tích hợp IT-04: Luồng Kanban và Thống kê tuần (TV5)', () => {
   const groupId = '7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33';
@@ -22,7 +39,7 @@ describe('TC-146 [Scenario] Kịch bản tích hợp IT-04: Luồng Kanban và T
 
   const kanbanService = new KanbanService(kanbanRepo, mockDb);
   const statsService = new StatsService(statsRepo, mockDb);
-  const app = createApp({ kanbanService, statsService });
+  const app = createApp({ kanbanService, statsService, authenticate: testAuthenticate });
 
   const leaderAuth = `Bearer ${leaderId}`;
   const memberAAuth = `Bearer ${memberA}`;

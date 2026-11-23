@@ -1,3 +1,4 @@
+import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
@@ -5,6 +6,22 @@ import { KanbanCardEntity } from '../src/modules/kanban/kanban.entity';
 import { KanbanRepository } from '../src/modules/kanban/kanban.repository';
 import { KanbanService } from '../src/modules/kanban/kanban.service';
 import type { Queryable } from '../src/shared/base-repository';
+import { UnauthorizedError } from '../src/shared/errors';
+
+const testAuthenticate: RequestHandler = (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next(new UnauthorizedError('Chưa đăng nhập hoặc thiếu token xác thực'));
+    return;
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    next(new UnauthorizedError('Token không hợp lệ'));
+    return;
+  }
+  req.userId = token;
+  next();
+};
 
 describe('Kanban API (/api/groups/:groupId/cards...) - TV5', () => {
   const groupId = '7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33';
@@ -19,7 +36,7 @@ describe('Kanban API (/api/groups/:groupId/cards...) - TV5', () => {
   const mockRepo = new KanbanRepository();
   const mockDb: Queryable = { query: vi.fn() };
   const kanbanService = new KanbanService(mockRepo, mockDb);
-  const app = createApp({ kanbanService });
+  const app = createApp({ kanbanService, authenticate: testAuthenticate });
 
   const leaderAuthHeader = `Bearer ${leaderId}`;
   const memberAuthHeader = `Bearer ${memberId}`;

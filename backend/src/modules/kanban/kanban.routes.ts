@@ -1,8 +1,11 @@
-import { Router } from 'express';
-import { authenticate } from '../../middlewares/authenticate';
+import { Router, type RequestHandler } from 'express';
+import { requireAuthenticatedUser } from '../../middlewares/require-user';
 import { KanbanController } from './kanban.controller';
 
-export function createKanbanRouter(controller: KanbanController = new KanbanController()): Router {
+export function createKanbanRouter(
+  controller: KanbanController = new KanbanController(),
+  authenticate: RequestHandler = requireAuthenticatedUser,
+): Router {
   const router = Router();
 
   router.get('/:groupId/cards', authenticate, controller.getCards);
