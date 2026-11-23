@@ -12,33 +12,17 @@ export interface UploadedFile {
 export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'csv'): UploadedFile {
   const contentType = req.headers['content-type'] || '';
 
-  // 1. Trường hợp gửi dạng Buffer nhị phân trực tiếp (express.raw)
-  if (Buffer.isBuffer(req.body)) {
-    const headerFileName = req.headers['x-filename'] as string | undefined;
-    const fileName =
-      headerFileName || (expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv');
-
-    if (!fileName.toLowerCase().endsWith(`.${expectedExtension}`)) {
-      throw new ValidationError(`Tệp không có đuôi mở rộng .${expectedExtension}`, [
-        { field: 'file', issue: `phải có đuôi mở rộng .${expectedExtension}` },
-      ]);
-    }
-
-    return { buffer: req.body, fileName };
-  }
-
-  // 2. Trường hợp multipart/form-data
+  // 1. Trường hợp multipart/form-data (tiêu chuẩn REST API)
   if (contentType.includes('multipart/form-data')) {
     const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
     if (!boundaryMatch) {
       throw new ValidationError('Yêu cầu multipart/form-data thiếu tham số boundary');
     }
-    const boundary = boundaryMatch[1] || boundaryMatch[2];
+    const boundary = (boundaryMatch[1] || boundaryMatch[2])?.trim();
     if (!boundary) {
       throw new ValidationError('Yêu cầu multipart/form-data thiếu tham số boundary');
     }
 
-    // Nếu body là Buffer
     let bodyBuffer: Buffer;
     if (Buffer.isBuffer(req.body)) {
       bodyBuffer = req.body;
@@ -54,20 +38,25 @@ export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'cs
       throw new ValidationError('Không tìm thấy dữ liệu phân đoạn boundary trong multipart');
     }
 
-    // Tìm header và body của part đầu tiên
+    // Tìm header và body của part đầu tiên (hỗ trợ cả CRLF CRLF và LF LF)
     const crlfCrlf = Buffer.from('\r\n\r\n');
-    const headerStart = startIdx + boundaryBuffer.length + 2; // bỏ qua \r\n
-    const headerEnd = bodyBuffer.indexOf(crlfCrlf, headerStart);
+    let headerEnd = bodyBuffer.indexOf(crlfCrlf, startIdx);
+    let headerEndLen = 4;
+    if (headerEnd === -1) {
+      const lfLf = Buffer.from('\n\n');
+      headerEnd = bodyBuffer.indexOf(lfLf, startIdx);
+      headerEndLen = 2;
+    }
 
     if (headerEnd === -1) {
       throw new ValidationError('Phân đoạn multipart bị hỏng hoặc thiếu phần header');
     }
 
-    const headerStr = bodyBuffer.slice(headerStart, headerEnd).toString('utf-8');
+    const headerStr = bodyBuffer.subarray(startIdx, headerEnd).toString('utf-8');
     const filenameMatch = headerStr.match(/filename="?([^";\r\n]+)"?/i);
     const fileName =
       filenameMatch && filenameMatch[1]
-        ? filenameMatch[1].trim()
+        ? filenameMatch[1].trim().replace(/^["']|["']$/g, '')
         : expectedExtension === 'ics'
           ? 'schedule.ics'
           : 'schedule.csv';
@@ -78,17 +67,53 @@ export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'cs
       ]);
     }
 
-    const contentStart = headerEnd + 4;
+    const contentStart = headerEnd + headerEndLen;
     const nextBoundary = bodyBuffer.indexOf(boundaryBuffer, contentStart);
-    const contentEnd = nextBoundary !== -1 ? nextBoundary - 2 : bodyBuffer.length; // bỏ qua \r\n trước boundary kế
+    let contentEnd = bodyBuffer.length;
+    if (nextBoundary !== -1) {
+      contentEnd = nextBoundary;
+      // Trừ đi \r\n hoặc \n ngay trước boundary tiếp theo
+      if (
+        contentEnd >= 2 &&
+        bodyBuffer[contentEnd - 2] === 0x0d &&
+        bodyBuffer[contentEnd - 1] === 0x0a
+      ) {
+        contentEnd -= 2;
+      } else if (contentEnd >= 1 && bodyBuffer[contentEnd - 1] === 0x0a) {
+        contentEnd -= 1;
+      }
+    }
 
-    const fileData = bodyBuffer.slice(contentStart, contentEnd);
+    const fileData = bodyBuffer.subarray(contentStart, contentEnd);
     return { buffer: fileData, fileName };
+  }
+
+  // 2. Trường hợp gửi dạng Buffer nhị phân trực tiếp (express.raw)
+  if (Buffer.isBuffer(req.body)) {
+    const headerFileName = (req.headers['x-filename'] as string | undefined)?.trim();
+    if (headerFileName && !headerFileName.toLowerCase().endsWith(`.${expectedExtension}`)) {
+      throw new ValidationError(`Tệp không có đuôi mở rộng .${expectedExtension}`, [
+        { field: 'file', issue: `phải có đuôi mở rộng .${expectedExtension}` },
+      ]);
+    }
+
+    const fileName =
+      headerFileName || (expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv');
+
+    return { buffer: req.body, fileName };
   }
 
   // 3. Nếu gửi chuỗi văn bản (raw text/calendar hoặc text/csv)
   if (typeof req.body === 'string') {
-    const fileName = expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv';
+    const headerFileName = (req.headers['x-filename'] as string | undefined)?.trim();
+    if (headerFileName && !headerFileName.toLowerCase().endsWith(`.${expectedExtension}`)) {
+      throw new ValidationError(`Tệp không có đuôi mở rộng .${expectedExtension}`, [
+        { field: 'file', issue: `phải có đuôi mở rộng .${expectedExtension}` },
+      ]);
+    }
+
+    const fileName =
+      headerFileName || (expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv');
     return { buffer: Buffer.from(req.body, 'utf-8'), fileName };
   }
 

@@ -287,21 +287,26 @@ export class TaskService {
     }
 
     if (input.durationMinutes !== undefined) {
-      if (
-        typeof input.durationMinutes !== 'number' ||
-        !Number.isInteger(input.durationMinutes) ||
-        input.durationMinutes <= 0
-      ) {
-        throw new ValidationError('Thời lượng ước tính phải là số nguyên dương lớn hơn 0', [
-          { field: 'durationMinutes', issue: 'phải lớn hơn 0' },
-        ]);
+      if (input.durationMinutes === null) {
+        // Theo BR-04 và TC-118: khi durationMinutes truyền null thì tự động gán lại mặc định 60 phút
+        updateFields.durationMinutes = 60;
+      } else {
+        if (
+          typeof input.durationMinutes !== 'number' ||
+          !Number.isInteger(input.durationMinutes) ||
+          input.durationMinutes <= 0
+        ) {
+          throw new ValidationError('Thời lượng ước tính phải là số nguyên dương lớn hơn 0', [
+            { field: 'durationMinutes', issue: 'phải lớn hơn 0' },
+          ]);
+        }
+        if (input.durationMinutes > 1440) {
+          throw new ValidationError('Thời lượng ước tính không được vượt quá 1440 phút (24 giờ)', [
+            { field: 'durationMinutes', issue: 'không được vượt quá 1440 phút' },
+          ]);
+        }
+        updateFields.durationMinutes = input.durationMinutes;
       }
-      if (input.durationMinutes > 1440) {
-        throw new ValidationError('Thời lượng ước tính không được vượt quá 1440 phút (24 giờ)', [
-          { field: 'durationMinutes', issue: 'không được vượt quá 1440 phút' },
-        ]);
-      }
-      updateFields.durationMinutes = input.durationMinutes;
     }
 
     if (input.isDone !== undefined) {
@@ -313,7 +318,19 @@ export class TaskService {
       updateFields.isDone = input.isDone;
     }
 
-    const updated = await this.repo.update(taskId, userId, updateFields, this.db);
+    const updated = await this.runTransaction(async (txClient) => {
+      if (input.isDone === true) {
+        // Dọn các khung proposed và scheduled trong tương lai của việc này (architecture.md Bảng 2, yêu cầu 3.19)
+        await txClient.query(
+          `DELETE FROM study_slots
+           WHERE task_id = $1
+             AND (status = 'proposed' OR (status = 'scheduled' AND starts_at > now()))`,
+          [taskId],
+        );
+      }
+      return await this.repo.update(taskId, userId, updateFields, txClient);
+    });
+
     if (!updated) {
       throw new NotFoundError(`Không tìm thấy việc cần làm để cập nhật với mã: "${taskId}"`);
     }

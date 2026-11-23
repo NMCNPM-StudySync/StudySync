@@ -6,7 +6,9 @@ import type { ApiRouterOptions } from './routes/api';
 import { createApiRouter } from './routes/api';
 import { healthRouter } from './routes/health';
 
-export type AppOptions = ApiRouterOptions;
+export type AppOptions = ApiRouterOptions & {
+  authMiddleware?: express.RequestHandler;
+};
 
 export function createApp(options?: AppOptions) {
   const app = express();
@@ -32,6 +34,11 @@ export function createApp(options?: AppOptions) {
 
   // Health check endpoint (outside /api prefix per docs/api.md convention)
   app.use('/health', healthRouter);
+
+  // Optional authentication middleware (e.g. JWT auth from TV1 or test auth mock)
+  if (options?.authMiddleware) {
+    app.use(options.authMiddleware);
+  }
 
   // Core API endpoints with /api prefix
   app.use('/api', createApiRouter(options));

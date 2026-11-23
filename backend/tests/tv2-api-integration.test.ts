@@ -171,6 +171,13 @@ describe('TV2 End-to-End API Integration', () => {
               existing.is_done = params[paramNum - 1];
             }
           }
+          if (sql.includes('duration_minutes =')) {
+            const durIdx = sql.indexOf('duration_minutes = $');
+            const paramNum = parseInt(sql.substring(durIdx + 20, durIdx + 22).trim(), 10);
+            if (!isNaN(paramNum) && params) {
+              existing.duration_minutes = params[paramNum - 1];
+            }
+          }
           return { rows: [existing], rowCount: 1 };
         }
         return { rows: [], rowCount: 0 };
@@ -223,6 +230,13 @@ describe('TV2 End-to-End API Integration', () => {
     calendarImportService,
     tasksService,
     scheduleService,
+    authMiddleware: (req, _res, next) => {
+      const headerUserId = req.headers['x-user-id'];
+      if (typeof headerUserId === 'string' && headerUserId) {
+        (req as unknown as { userId?: string }).userId = headerUserId;
+      }
+      next();
+    },
   });
 
   beforeEach(() => {
@@ -312,6 +326,18 @@ describe('TV2 End-to-End API Integration', () => {
       expect(res.status).toBe(204);
       expect(res.text).toBe('');
     });
+
+    it('từ chối với 400 VALIDATION_ERROR khi location không phải là chuỗi (ví dụ location: 123)', async () => {
+      const res = await request(app).post('/api/events').set('x-user-id', testUserId).send({
+        title: 'Học bù cuối tuần',
+        startsAt: '2026-11-20T08:00:00.000Z',
+        endsAt: '2026-11-20T10:00:00.000Z',
+        location: 123,
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -332,7 +358,7 @@ describe('TV2 End-to-End API Integration', () => {
       expect(res.body.error.code).toBe('FILE_TOO_LARGE');
     });
 
-    it('từ chối với 422 FILE_INVALID khi tệp .ics sai định dạng cấu trúc (BR-06)', async () => {
+    it('từ chối với 422 FILE_INVALID kèm trường error.totalErrors khi tệp .ics sai định dạng cấu trúc (BR-06)', async () => {
       const invalidIcs = Buffer.from('INVALID CALENDAR DATA CONTENT', 'utf-8');
 
       const res = await request(app)
@@ -344,6 +370,82 @@ describe('TV2 End-to-End API Integration', () => {
 
       expect(res.status).toBe(422);
       expect(res.body.error.code).toBe('FILE_INVALID');
+      expect(res.body.error.totalErrors).toBe(1);
+    });
+
+    it('nạp tệp .ics qua multipart/form-data (.attach) thành công', async () => {
+      const icsBuffer = Buffer.from(
+        [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'BEGIN:VEVENT',
+          'UID:multipart-test@hcmus.edu.vn',
+          'SUMMARY:Học qua multipart',
+          'DTSTART:20261120T073000Z',
+          'DTEND:20261120T093000Z',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n'),
+        'utf-8',
+      );
+
+      const res = await request(app)
+        .post('/api/events/import/ics')
+        .set('x-user-id', testUserId)
+        .attach('file', icsBuffer, 'schedule.ics');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.totalEvents).toBe(1);
+    });
+
+    it('nạp tệp .csv qua multipart/form-data (.attach) thành công', async () => {
+      const csvBuffer = Buffer.from(
+        '\uFEFFTên môn học,Thứ trong tuần,Ngày bắt đầu,Ngày kết thúc,Giờ bắt đầu,Giờ kết thúc,Phòng học\r\n' +
+          'Kiểm thử phần mềm,Hai,07/09/2026,07/09/2026,07:30,11:30,B42\r\n',
+        'utf-8',
+      );
+
+      const res = await request(app)
+        .post('/api/events/import/csv')
+        .set('x-user-id', testUserId)
+        .attach('file', csvBuffer, 'schedule.csv');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.totalEvents).toBe(1);
+    });
+
+    it('phát hiện cảnh báo trùng lịch nội bộ (self-conflict) trong cùng một tệp nạp', async () => {
+      const conflictIcs = Buffer.from(
+        [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'BEGIN:VEVENT',
+          'UID:conflict-1@hcmus.edu.vn',
+          'SUMMARY:Môn học 1',
+          'DTSTART:20261120T073000Z',
+          'DTEND:20261120T093000Z',
+          'END:VEVENT',
+          'BEGIN:VEVENT',
+          'UID:conflict-2@hcmus.edu.vn',
+          'SUMMARY:Môn học 2 trùng giờ',
+          'DTSTART:20261120T083000Z',
+          'DTEND:20261120T103000Z',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n'),
+        'utf-8',
+      );
+
+      const res = await request(app)
+        .post('/api/events/import/ics')
+        .set('x-user-id', testUserId)
+        .attach('file', conflictIcs, 'conflict.ics');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.totalEvents).toBe(2);
+      expect(res.body.warnings).toBeDefined();
+      expect(res.body.warnings[0].code).toBe('FIXED_EVENT_OVERLAP');
+      expect(res.body.warnings[0].details[0].issue).toContain('trong cùng tệp nạp');
     });
   });
 
@@ -403,6 +505,30 @@ describe('TV2 End-to-End API Integration', () => {
       expect(res.body.data.id).toBe(taskId);
     });
 
+    it('cập nhật durationMinutes thành null tự động gán lại mặc định 60 phút theo BR-04 và TC-118', async () => {
+      const taskId = '66666666-6666-4666-8666-666666666666';
+      tasksMap.set(taskId, {
+        id: taskId,
+        user_id: testUserId,
+        title: 'Task cập nhật thời lượng',
+        due_at: '2026-11-28T17:00:00.000Z',
+        priority: 'medium',
+        difficulty: 'easy',
+        duration_minutes: 120,
+        is_done: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const res = await request(app)
+        .patch(`/api/tasks/${taskId}`)
+        .set('x-user-id', testUserId)
+        .send({ durationMinutes: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.durationMinutes).toBe(60);
+    });
+
     it('xóa việc cần làm trả về 204 No Content', async () => {
       const taskId = '55555555-5555-4555-8555-555555555555';
       tasksMap.set(taskId, {
@@ -440,6 +566,22 @@ describe('TV2 End-to-End API Integration', () => {
       expect(Array.isArray(res.body.data.fixedEvents)).toBe(true);
       expect(Array.isArray(res.body.data.tasks)).toBe(true);
       expect(Array.isArray(res.body.data.studySlots)).toBe(true);
+    });
+
+    it('loại trừ hoàn toàn các khung giờ học đề xuất proposed khỏi lịch tuần theo BR-03 và TC-143', async () => {
+      const res = await request(app)
+        .get('/api/schedule/week?weekStart=2026-11-16T00:00:00.000Z')
+        .set('x-user-id', testUserId);
+
+      expect(res.status).toBe(200);
+      // Kiểm tra trong các lời gọi query của mockDb, truy vấn study_slots phải lọc status IN ('scheduled', 'studied', 'missed')
+      const studySlotQueryCall = vi
+        .mocked(mockDb.query)
+        .mock.calls.find(
+          (call) => typeof call[0] === 'string' && call[0].includes('FROM study_slots'),
+        );
+      expect(studySlotQueryCall).toBeDefined();
+      expect(studySlotQueryCall?.[0]).toContain("s.status IN ('scheduled', 'studied', 'missed')");
     });
   });
 });

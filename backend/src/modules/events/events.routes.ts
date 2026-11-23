@@ -10,10 +10,10 @@ export function createEventsRouter(
   const router = Router();
   const controller = new EventController(service, importService);
 
-  // Middleware đọc body nhị phân cho các endpoint nạp tệp (giới hạn 6MB để kiểm tra ranh giới 5MB của BR-05)
+  // Middleware đọc body nhị phân cho các endpoint nạp tệp (giới hạn 10MB để hỗ trợ tệp 5MB kèm multipart overhead)
   const rawFileParser = express.raw({
     type: ['text/calendar', 'text/csv', 'application/octet-stream', 'multipart/form-data', '*/*'],
-    limit: '6mb',
+    limit: '10mb',
   });
 
   // Endpoints nạp tệp (đặt trước /:eventId để tránh bắt nhầm param)

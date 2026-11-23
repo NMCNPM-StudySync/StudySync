@@ -57,11 +57,11 @@ export class CalendarImportService {
           ? `Phát hiện ${parseResult.totalErrors} lỗi trong tệp (đang hiển thị 20 lỗi đầu tiên)`
           : parseResult.errors[0]?.issue ||
             'Tệp không đúng định dạng hoặc chứa dữ liệu không hợp lệ';
-      throw new FileInvalidError(msg, parseResult.errors);
+      throw new FileInvalidError(msg, parseResult.errors, parseResult.totalErrors);
     }
 
     if (parseResult.events.length === 0) {
-      throw new FileInvalidError('Tệp lịch không chứa bất kỳ sự kiện nào');
+      throw new FileInvalidError('Tệp lịch không chứa bất kỳ sự kiện nào', undefined, 1);
     }
 
     // 3. Quét kiểm tra trùng lịch (Batch Conflict Detection) theo BR-01
@@ -96,11 +96,11 @@ export class CalendarImportService {
           ? `Phát hiện ${parseResult.totalErrors} lỗi trong tệp (đang hiển thị 20 lỗi đầu tiên)`
           : parseResult.errors[0]?.issue ||
             'Tệp không đúng định dạng hoặc chứa dữ liệu không hợp lệ';
-      throw new FileInvalidError(msg, parseResult.errors);
+      throw new FileInvalidError(msg, parseResult.errors, parseResult.totalErrors);
     }
 
     if (parseResult.events.length === 0) {
-      throw new FileInvalidError('Tệp không chứa bản ghi thời khóa biểu nào');
+      throw new FileInvalidError('Tệp không chứa bản ghi thời khóa biểu nào', undefined, 1);
     }
 
     // 3. Quét kiểm tra trùng lịch và lưu vào CSDL
@@ -148,9 +148,10 @@ export class CalendarImportService {
       this.db,
     );
 
-    // Phát hiện va chạm (BR-01): kiểm tra sự kiện mới với sự kiện trong CSDL
+    // Phát hiện va chạm (BR-01):
     const overlapWarningsDetails: Array<{ field?: string; issue: string }> = [];
 
+    // 1. Kiểm tra va chạm với sự kiện đã có trong CSDL (Cross-check against DB)
     for (let i = 0; i < extractedEvents.length; i++) {
       const e = extractedEvents[i] as (typeof extractedEvents)[0];
       const hasConflictWithDb = existingEvents.some((ex) =>
@@ -162,6 +163,36 @@ export class CalendarImportService {
           field: `events[${i}]`,
           issue: `Sự kiện '${e.title}' bị trùng với lịch hiện có vào ngày ${e.startsAt.toISOString().slice(0, 10)}`,
         });
+      }
+    }
+
+    // 2. Phát hiện tự xung đột nội bộ trong cùng tệp nạp (Self-Conflict Sweep-Line theo Mục 5.2.4 Bước 3)
+    const sorted = extractedEvents
+      .map((e, originalIndex) => ({ e, originalIndex }))
+      .sort((a, b) => a.e.startsAt.getTime() - b.e.startsAt.getTime());
+
+    for (let i = 0; i < sorted.length; i++) {
+      const cur = sorted[i]!;
+      for (let j = i + 1; j < sorted.length; j++) {
+        const next = sorted[j]!;
+        if (next.e.startsAt.getTime() >= cur.e.endsAt.getTime()) {
+          break; // Đã sắp xếp theo startsAt nên các sự kiện sau không thể giao nhau với cur
+        }
+        // Kiểm tra overlap thực sự (loại trừ trường hợp tiếp xúc mút)
+        const isOverlap =
+          cur.e.startsAt.getTime() < next.e.endsAt.getTime() &&
+          next.e.startsAt.getTime() < cur.e.endsAt.getTime();
+
+        if (isOverlap) {
+          overlapWarningsDetails.push({
+            field: `events[${cur.originalIndex}]`,
+            issue: `Sự kiện '${cur.e.title}' bị trùng thời gian với sự kiện '${next.e.title}' trong cùng tệp nạp`,
+          });
+          overlapWarningsDetails.push({
+            field: `events[${next.originalIndex}]`,
+            issue: `Sự kiện '${next.e.title}' bị trùng thời gian với sự kiện '${cur.e.title}' trong cùng tệp nạp`,
+          });
+        }
       }
     }
 
@@ -203,8 +234,7 @@ export class CalendarImportService {
     if (overlapWarningsDetails.length > 0) {
       warnings.push({
         code: 'FIXED_EVENT_OVERLAP',
-        message:
-          'Có sự kiện trong tệp nạp bị trùng thời gian với sự kiện cố định đã có trong lịch cá nhân',
+        message: 'Có sự kiện trong tệp nạp bị trùng thời gian (trong cùng tệp hoặc với lịch đã có)',
         details: overlapWarningsDetails,
       });
     }

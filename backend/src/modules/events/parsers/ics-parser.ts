@@ -98,6 +98,103 @@ function parseIcsDuration(durationStr: string): number | null {
 interface ParsedDateTime {
   date: Date;
   isAllDay: boolean;
+  dateKey: string;
+}
+
+const WINDOWS_TIMEZONE_MAP: Record<string, string> = {
+  'SE Asia Standard Time': 'Asia/Ho_Chi_Minh',
+  'Singapore Standard Time': 'Asia/Singapore',
+  'Tokyo Standard Time': 'Asia/Tokyo',
+  'China Standard Time': 'Asia/Shanghai',
+  'Korea Standard Time': 'Asia/Seoul',
+  'India Standard Time': 'Asia/Kolkata',
+  'W. Europe Standard Time': 'Europe/Berlin',
+  'Central European Standard Time': 'Europe/Warsaw',
+  'GMT Standard Time': 'Europe/London',
+  UTC: 'UTC',
+  'Eastern Standard Time': 'America/New_York',
+  'Central Standard Time': 'America/Chicago',
+  'Mountain Standard Time': 'America/Denver',
+  'Pacific Standard Time': 'America/Los_Angeles',
+  'US Eastern Standard Time': 'America/Indianapolis',
+};
+
+export function resolveTimezone(tzid?: string): {
+  success: boolean;
+  ianaTz?: string;
+  reason?: string;
+} {
+  if (!tzid) {
+    // Không có TZID: theo BR-07, mặc định Asia/Ho_Chi_Minh (UTC+7)
+    return { success: true, ianaTz: 'Asia/Ho_Chi_Minh' };
+  }
+  const clean = tzid.replace(/^["']|["']$/g, '').trim();
+  if (!clean) {
+    return { success: false, reason: 'Tham số múi giờ TZID không hợp lệ' };
+  }
+  if (clean.toUpperCase() === 'UTC' || clean.toUpperCase() === 'GMT') {
+    return { success: true, ianaTz: 'UTC' };
+  }
+  const mapped = WINDOWS_TIMEZONE_MAP[clean] || clean;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: mapped });
+    return { success: true, ianaTz: mapped };
+  } catch {
+    return {
+      success: false,
+      reason: `Múi giờ TZID không được hỗ trợ hoặc không nhận diện được: ${clean}`,
+    };
+  }
+}
+
+export function convertLocalToUtc(
+  y: number,
+  m: number,
+  d: number,
+  h: number,
+  min: number,
+  s: number,
+  timeZone: string,
+): Date {
+  if (timeZone === 'UTC') {
+    return new Date(Date.UTC(y, m - 1, d, h, min, s));
+  }
+  const initialUtc = Date.UTC(y, m - 1, d, h, min, s);
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  const parts = formatter.formatToParts(new Date(initialUtc));
+  const partMap: Record<string, number> = {};
+  for (const p of parts) {
+    if (p.type !== 'literal') {
+      partMap[p.type] = parseInt(p.value, 10);
+    }
+  }
+
+  const formattedAsLocal = Date.UTC(
+    partMap.year as number,
+    (partMap.month as number) - 1,
+    partMap.day as number,
+    partMap.hour as number,
+    partMap.minute as number,
+    partMap.second as number,
+  );
+  const offset = formattedAsLocal - initialUtc;
+  const actualUtcMs = initialUtc - offset;
+  return new Date(actualUtcMs);
+}
+
+export function toVietnamDateKey(date: Date): string {
+  const vnMs = date.getTime() + 7 * 60 * 60 * 1000;
+  return new Date(vnMs).toISOString().slice(0, 10);
 }
 
 /**
@@ -121,9 +218,14 @@ function parseIcsDateTimeString(
     if (!check.valid) {
       return { success: false, reason: `Chuỗi thời gian không hợp lệ: ${check.reason}` };
     }
+    const date = new Date(Date.UTC(y, m - 1, d, h, min, s));
     return {
       success: true,
-      value: { date: new Date(Date.UTC(y, m - 1, d, h, min, s)), isAllDay: false },
+      value: {
+        date,
+        isAllDay: false,
+        dateKey: toVietnamDateKey(date),
+      },
     };
   }
 
@@ -142,29 +244,14 @@ function parseIcsDateTimeString(
       return { success: false, reason: `Chuỗi thời gian không hợp lệ: ${check.reason}` };
     }
 
-    // Nếu không có TZID hoặc là Asia/Ho_Chi_Minh: Mặc định giờ Việt Nam (UTC+7) theo BR-07
-    // Trừ 7 giờ để đổi sang UTC
-    let offsetMinutes = 7 * 60; // Mặc định UTC+7 cho VN
-    if (tzid) {
-      const cleanTzid = tzid.replace(/^["']|["']$/g, '').trim();
-      if (!cleanTzid) {
-        return { success: false, reason: 'Tham số múi giờ TZID không hợp lệ' };
-      }
-      if (cleanTzid.toUpperCase() === 'UTC' || cleanTzid.toUpperCase() === 'GMT') {
-        offsetMinutes = 0;
-      } else if (
-        cleanTzid.includes('Ho_Chi_Minh') ||
-        cleanTzid.includes('Saigon') ||
-        cleanTzid.includes('Bangkok') ||
-        cleanTzid.includes('Hanoi')
-      ) {
-        offsetMinutes = 7 * 60;
-      }
+    const tzRes = resolveTimezone(tzid);
+    if (!tzRes.success) {
+      return { success: false, reason: tzRes.reason as string };
     }
 
-    const localMs = Date.UTC(y, m - 1, d, h, min, s);
-    const utcDate = new Date(localMs - offsetMinutes * 60 * 1000);
-    return { success: true, value: { date: utcDate, isAllDay: false } };
+    const utcDate = convertLocalToUtc(y, m, d, h, min, s, tzRes.ianaTz as string);
+    const dateKey = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    return { success: true, value: { date: utcDate, isAllDay: false, dateKey } };
   }
 
   // 3. Date only format: YYYYMMDD (VALUE=DATE)
@@ -178,10 +265,11 @@ function parseIcsDateTimeString(
     if (!check.valid) {
       return { success: false, reason: `Chuỗi thời gian không hợp lệ: ${check.reason}` };
     }
-    // Sự kiện cả ngày: tạo Date UTC tương ứng 00:00:00 VN (-7h = 17:00 ngày trước)
+    const dateKey = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // Mốc Date UTC tương ứng 00:00:00 VN (-7h = 17:00 ngày trước)
     const localMs = Date.UTC(y, m - 1, d, 0, 0, 0);
     const utcDate = new Date(localMs - 7 * 60 * 60 * 1000);
-    return { success: true, value: { date: utcDate, isAllDay: true } };
+    return { success: true, value: { date: utcDate, isAllDay: true, dateKey } };
   }
 
   return { success: false, reason: 'Chuỗi thời gian iCalendar không đúng định dạng' };
@@ -256,6 +344,8 @@ export class IcsParser {
     let subBlockName: string | null = null;
     let totalEventCount = 0;
     let rawErrorCount = 0;
+    let veventDepth = 0;
+    let currentEventHasNestedError = false;
 
     const recordError = (line: number | undefined, issue: string) => {
       rawErrorCount++;
@@ -273,21 +363,36 @@ export class IcsParser {
 
       if (lineStr === 'BEGIN:VEVENT') {
         totalEventCount++;
-        if (currentEventProperties !== null) {
+        if (veventDepth > 0) {
           recordError(physLine, 'Tệp lỗi cấu trúc: Sự kiện lồng nhau không hợp lệ');
+          currentEventHasNestedError = true;
+          veventDepth++;
           continue;
         }
+        veventDepth = 1;
         currentEventProperties = [];
         currentEventStartLine = physLine;
+        currentEventHasNestedError = false;
         subBlockName = null;
         continue;
       }
 
       if (lineStr === 'END:VEVENT') {
-        if (currentEventProperties === null) {
+        if (veventDepth === 0) {
           recordError(physLine, 'Tệp lỗi cú pháp: Gặp thẻ đóng END:VEVENT mồ côi');
           continue;
         }
+        veventDepth--;
+        if (currentEventHasNestedError) {
+          if (veventDepth === 0) {
+            currentEventProperties = null;
+            currentEventStartLine = null;
+            currentEventHasNestedError = false;
+            subBlockName = null;
+          }
+          continue;
+        }
+
         if (subBlockName !== null) {
           recordError(
             physLine,
@@ -296,12 +401,14 @@ export class IcsParser {
         }
 
         // Xử lý sự kiện vừa hoàn tất thu thập
-        this.processEventProperties(
-          currentEventProperties,
-          currentEventStartLine as number,
-          events,
-          recordError,
-        );
+        if (currentEventProperties) {
+          this.processEventProperties(
+            currentEventProperties,
+            currentEventStartLine as number,
+            events,
+            recordError,
+          );
+        }
 
         currentEventProperties = null;
         currentEventStartLine = null;
@@ -309,7 +416,7 @@ export class IcsParser {
         continue;
       }
 
-      if (currentEventProperties !== null) {
+      if (currentEventProperties !== null && !currentEventHasNestedError) {
         if (lineStr.startsWith('BEGIN:')) {
           subBlockName = lineStr.slice(6).trim();
           continue;
@@ -332,7 +439,7 @@ export class IcsParser {
       }
     }
 
-    if (currentEventProperties !== null) {
+    if (veventDepth > 0 && !currentEventHasNestedError) {
       recordError(
         currentEventStartLine ?? 1,
         'Tệp .ics bị cắt cụt: Sự kiện thiếu thẻ đóng END:VEVENT',
@@ -518,6 +625,7 @@ export class IcsParser {
       interval: number;
       count?: number;
       until?: Date;
+      byDays?: string[];
     } | null = null;
 
     if (rruleProp) {
@@ -557,6 +665,23 @@ export class IcsParser {
           return;
         }
         until = pUntil.value.date;
+        if (pUntil.value.isAllDay) {
+          // Date-only UNTIL (ví dụ UNTIL=20261120): bao gồm toàn bộ ngày đó đến hết ngày (23:59:59.999)
+          until = new Date(until.getTime() + 24 * 60 * 60 * 1000 - 1);
+        }
+      }
+
+      let byDays: string[] | undefined;
+      if (rMap.BYDAY) {
+        const VALID_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+        const rawDays = rMap.BYDAY.split(',').map((d) => d.trim().slice(-2).toUpperCase());
+        for (const d of rawDays) {
+          if (!VALID_DAYS.includes(d)) {
+            recordError(rruleProp.line, 'Quy tắc lặp RRULE không hợp lệ hoặc sai cú pháp');
+            return;
+          }
+        }
+        byDays = rawDays;
       }
 
       rruleConfig = {
@@ -564,6 +689,7 @@ export class IcsParser {
         interval,
         count,
         until,
+        byDays,
       };
     }
 
@@ -574,7 +700,7 @@ export class IcsParser {
       for (const dStr of dates) {
         const pEx = parseIcsDateTimeString(dStr.trim(), exp.params.TZID);
         if (pEx.success) {
-          exdateSet.add(pEx.value.date.toISOString().slice(0, 10));
+          exdateSet.add(pEx.value.dateKey);
         }
       }
     }
@@ -598,26 +724,80 @@ export class IcsParser {
       const MAX_SESSIONS = 150;
       const MAX_WEEKS = 24;
       const occurrences: Date[] = [];
-      let cur = new Date(startUtc.getTime());
       const maxEndDate = new Date(startUtc.getTime() + MAX_WEEKS * 7 * 86400 * 1000);
+      let totalCandidateCount = 0;
 
-      while (occurrences.length < MAX_SESSIONS) {
-        if (rruleConfig.count && occurrences.length >= rruleConfig.count) break;
-        if (rruleConfig.until && cur.getTime() > rruleConfig.until.getTime()) break;
-        if (cur.getTime() > maxEndDate.getTime()) break;
+      if (rruleConfig.freq === 'WEEKLY' && rruleConfig.byDays && rruleConfig.byDays.length > 1) {
+        // Hỗ trợ lặp hàng tuần với nhiều ngày (ví dụ BYDAY=MO,WE)
+        const DAY_MAP: Record<string, number> = {
+          SU: 0,
+          MO: 1,
+          TU: 2,
+          WE: 3,
+          TH: 4,
+          FR: 5,
+          SA: 6,
+        };
+        // Tìm mốc Chủ Nhật đầu tuần của startUtc theo múi giờ sự kiện
+        let currentWeekBase = new Date(startUtc.getTime());
+        currentWeekBase.setUTCDate(currentWeekBase.getUTCDate() - currentWeekBase.getUTCDay());
 
-        const dateKey = cur.toISOString().slice(0, 10);
-        if (!exdateSet.has(dateKey)) {
-          occurrences.push(new Date(cur.getTime()));
+        while (occurrences.length < MAX_SESSIONS) {
+          const sortedDays = [...rruleConfig.byDays].sort(
+            (a, b) => (DAY_MAP[a] ?? 0) - (DAY_MAP[b] ?? 0),
+          );
+
+          for (const dayCode of sortedDays) {
+            const targetDayNum = DAY_MAP[dayCode] as number;
+            const candidateDate = new Date(currentWeekBase.getTime());
+            candidateDate.setUTCDate(candidateDate.getUTCDate() + targetDayNum);
+
+            // Bỏ qua các ngày trước startUtc
+            if (candidateDate.getTime() < startUtc.getTime()) continue;
+
+            if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) break;
+            if (rruleConfig.until && candidateDate.getTime() > rruleConfig.until.getTime()) break;
+            if (candidateDate.getTime() > maxEndDate.getTime()) break;
+
+            totalCandidateCount++;
+            const dateKey = toVietnamDateKey(candidateDate);
+            if (!exdateSet.has(dateKey)) {
+              occurrences.push(new Date(candidateDate.getTime()));
+            }
+          }
+
+          if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) break;
+          if (rruleConfig.until && currentWeekBase.getTime() > rruleConfig.until.getTime()) break;
+          if (currentWeekBase.getTime() > maxEndDate.getTime()) break;
+
+          currentWeekBase = new Date(
+            currentWeekBase.getTime() + rruleConfig.interval * 7 * 86400 * 1000,
+          );
         }
+      } else {
+        // Tần suất thông thường (DAILY, WEEKLY 1 ngày, MONTHLY)
+        let cur = new Date(startUtc.getTime());
 
-        // Tăng ngày theo tần suất
-        if (rruleConfig.freq === 'DAILY') {
-          cur = new Date(cur.getTime() + rruleConfig.interval * 86400 * 1000);
-        } else if (rruleConfig.freq === 'WEEKLY') {
-          cur = new Date(cur.getTime() + rruleConfig.interval * 7 * 86400 * 1000);
-        } else {
-          cur.setUTCMonth(cur.getUTCMonth() + rruleConfig.interval);
+        while (occurrences.length < MAX_SESSIONS) {
+          if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) break;
+          if (rruleConfig.until && cur.getTime() > rruleConfig.until.getTime()) break;
+          if (cur.getTime() > maxEndDate.getTime()) break;
+
+          totalCandidateCount++;
+
+          const dateKey = toVietnamDateKey(cur);
+          if (!exdateSet.has(dateKey)) {
+            occurrences.push(new Date(cur.getTime()));
+          }
+
+          // Tăng ngày theo tần suất
+          if (rruleConfig.freq === 'DAILY') {
+            cur = new Date(cur.getTime() + rruleConfig.interval * 86400 * 1000);
+          } else if (rruleConfig.freq === 'WEEKLY') {
+            cur = new Date(cur.getTime() + rruleConfig.interval * 7 * 86400 * 1000);
+          } else {
+            cur.setUTCMonth(cur.getUTCMonth() + rruleConfig.interval);
+          }
         }
       }
 

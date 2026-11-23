@@ -57,7 +57,7 @@ export class WeekScheduleService {
     const rawTasks = await this.taskRepo.findTasksDueInRange(userId, weekStart, weekEnd, this.db);
     const tasks = rawTasks.map((t) => t.toResponseDto());
 
-    // 3. Lấy các khung giờ học đề xuất / đã xếp (study_slots) trong tuần
+    // 3. Lấy các khung giờ học đã xếp hoặc quá khứ (study_slots) trong tuần theo BR-03 (loại trừ 'proposed')
     const slotsRes = await this.db.query(
       `SELECT s.id, s.task_id, t.title as task_title, s.starts_at, s.ends_at, s.status
        FROM study_slots s
@@ -65,6 +65,7 @@ export class WeekScheduleService {
        WHERE s.user_id = $1
          AND s.starts_at < $3
          AND s.ends_at > $2
+         AND s.status IN ('scheduled', 'studied', 'missed')
        ORDER BY s.starts_at ASC, s.ends_at ASC, s.id ASC`,
       [userId, weekStart.toISOString(), weekEnd.toISOString()],
     );

@@ -15,14 +15,14 @@ describe('TV2 Parsers - iCalendar (.ics) and Spreadsheet (.csv)', () => {
   // iCalendar (.ics) Parser Tests
   // -------------------------------------------------------------------------
   describe('iCalendar Parser (RFC 5545)', () => {
-    it('bóc tách thành công tệp hợp lệ tiêu chuẩn 00_valid_standard.ics', () => {
+    it('bóc tách thành công tệp hợp lệ tiêu chuẩn 00_valid_standard.ics và sinh đúng 44 buổi học', () => {
       const filePath = path.join(SAMPLES_ICS_DIR, '00_valid_standard.ics');
       const content = fs.readFileSync(filePath, 'utf-8');
 
       const result = icsParser.parse(content);
       expect(result.errors).toHaveLength(0);
       expect(result.totalErrors).toBe(0);
-      expect(result.events.length).toBeGreaterThanOrEqual(7);
+      expect(result.events).toHaveLength(44);
 
       // Kiểm tra sự kiện đầu tiên
       const firstEvent = result.events[0];
@@ -150,6 +150,80 @@ describe('TV2 Parsers - iCalendar (.ics) and Spreadsheet (.csv)', () => {
       const result = icsParser.parse(content);
       expect(result.totalErrors).toBe(25);
       expect(result.errors).toHaveLength(20);
+    });
+
+    it('báo đúng 1 lỗi cấu trúc tại dòng 7 cho err_A2_nested_open_vevent.ics mà không bị lỗi dây chuyền', () => {
+      const filePath = path.join(SAMPLES_ICS_DIR, 'err_A2_nested_open_vevent.ics');
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      const result = icsParser.parse(content);
+      expect(result.totalErrors).toBe(1);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]?.line).toBe(7);
+      expect(result.errors[0]?.issue).toContain('Sự kiện lồng nhau không hợp lệ');
+    });
+
+    it('từ chối múi giờ TZID lạ không nhận diện được theo TC-23', () => {
+      const rawIcs = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:strange-tz@hcmus.edu.vn',
+        'SUMMARY:Học trên sao Hỏa',
+        'DTSTART;TZID="Mars/Phobos_Time":20261120T090000',
+        'DTEND;TZID="Mars/Phobos_Time":20261120T110000',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+
+      const result = icsParser.parse(rawIcs);
+      expect(result.totalErrors).toBeGreaterThanOrEqual(1);
+      expect(result.errors[0]?.issue).toContain('Múi giờ TZID không được hỗ trợ');
+    });
+
+    it('nhận diện múi giờ Windows theo TC-135 (SE Asia Standard Time)', () => {
+      const rawIcs = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:windows-tz@hcmus.edu.vn',
+        'SUMMARY:Lớp học xuất từ Outlook',
+        'DTSTART;TZID="SE Asia Standard Time":20261120T090000',
+        'DTEND;TZID="SE Asia Standard Time":20261120T110000',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+
+      const result = icsParser.parse(rawIcs);
+      expect(result.totalErrors).toBe(0);
+      expect(result.events).toHaveLength(1);
+      // 09:00 VN = 02:00Z UTC
+      expect(result.events[0]?.startsAt.toISOString()).toBe('2026-11-20T02:00:00.000Z');
+      expect(result.events[0]?.endsAt.toISOString()).toBe('2026-11-20T04:00:00.000Z');
+    });
+
+    it('bung lặp chính xác cho RRULE có nhiều ngày BYDAY (MO,WE)', () => {
+      const rawIcs = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:multi-byday@hcmus.edu.vn',
+        'SUMMARY:Học Thể Dục',
+        'DTSTART:20261019T070000Z',
+        'DTEND:20261019T090000Z',
+        'RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+
+      const result = icsParser.parse(rawIcs);
+      expect(result.totalErrors).toBe(0);
+      expect(result.events).toHaveLength(4);
+      // 4 buổi: Thứ 2 (19/10), Thứ 4 (21/10), Thứ 2 (26/10), Thứ 4 (28/10)
+      expect(result.events[0]?.startsAt.toISOString()).toBe('2026-10-19T07:00:00.000Z');
+      expect(result.events[1]?.startsAt.toISOString()).toBe('2026-10-21T07:00:00.000Z');
+      expect(result.events[2]?.startsAt.toISOString()).toBe('2026-10-26T07:00:00.000Z');
+      expect(result.events[3]?.startsAt.toISOString()).toBe('2026-10-28T07:00:00.000Z');
     });
   });
 

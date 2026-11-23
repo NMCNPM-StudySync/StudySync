@@ -151,6 +151,21 @@ export class FixedEventService {
       ]);
     }
 
+    if (input.location !== undefined && input.location !== null) {
+      if (typeof input.location !== 'string') {
+        throw new ValidationError('Địa điểm (location) phải là chuỗi ký tự', [
+          { field: 'location', issue: 'phải là chuỗi ký tự' },
+        ]);
+      }
+    }
+    if (input.notes !== undefined && input.notes !== null) {
+      if (typeof input.notes !== 'string') {
+        throw new ValidationError('Ghi chú (notes) phải là chuỗi ký tự', [
+          { field: 'notes', issue: 'phải là chuỗi ký tự' },
+        ]);
+      }
+    }
+
     const now = new Date();
     const newEvent = new FixedEvent({
       id: randomUUID(),
@@ -159,8 +174,8 @@ export class FixedEventService {
       kind,
       startsAt,
       endsAt,
-      location: input.location?.trim() ?? null,
-      notes: input.notes?.trim() ?? null,
+      location: typeof input.location === 'string' ? input.location.trim() || null : null,
+      notes: typeof input.notes === 'string' ? input.notes.trim() || null : null,
       source: input.source ?? 'manual',
       recurringRuleId: input.recurringRuleId ?? null,
       importedFileId: input.importedFileId ?? null,
@@ -253,9 +268,23 @@ export class FixedEventService {
 
     if (input.startsAt !== undefined) updateFields.startsAt = startsAt;
     if (input.endsAt !== undefined) updateFields.endsAt = endsAt;
-    if (input.location !== undefined)
-      updateFields.location = input.location ? input.location.trim() : null;
-    if (input.notes !== undefined) updateFields.notes = input.notes ? input.notes.trim() : null;
+    if (input.location !== undefined) {
+      if (input.location !== null && typeof input.location !== 'string') {
+        throw new ValidationError('Địa điểm (location) phải là chuỗi ký tự', [
+          { field: 'location', issue: 'phải là chuỗi ký tự' },
+        ]);
+      }
+      updateFields.location =
+        typeof input.location === 'string' ? input.location.trim() || null : null;
+    }
+    if (input.notes !== undefined) {
+      if (input.notes !== null && typeof input.notes !== 'string') {
+        throw new ValidationError('Ghi chú (notes) phải là chuỗi ký tự', [
+          { field: 'notes', issue: 'phải là chuỗi ký tự' },
+        ]);
+      }
+      updateFields.notes = typeof input.notes === 'string' ? input.notes.trim() || null : null;
+    }
 
     // Kiểm tra trùng lịch sau khi sửa (BR-01)
     const overlaps = await this.repo.findOverlapping(userId, startsAt, endsAt, eventId, this.db);
