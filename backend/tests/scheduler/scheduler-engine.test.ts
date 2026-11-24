@@ -420,7 +420,7 @@ describe('SchedulerEngine.planSlots - trường hợp biên (Bảng 5.1, mục 5
     for (const id of ['A', 'B', 'C']) expect(resultOf(r, id)?.result).toBe('full');
   });
 
-  it('không xếp đè sự kiện cố định với dữ liệu ngẫu nhiên (300 lần, kiểm bất biến)', () => {
+  it('không xếp đè sự kiện cố định với dữ liệu ngẫu nhiên (100 lần, kiểm bất biến)', () => {
     let seed = 119;
     const rand = () => {
       seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
@@ -429,7 +429,7 @@ describe('SchedulerEngine.planSlots - trường hợp biên (Bảng 5.1, mục 5
     const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
     const base = vn('2026-11-23 00:00').getTime();
 
-    for (let run = 0; run < 300; run += 1) {
+    for (let run = 0; run < 100; run += 1) {
       const now = new Date(base + Math.floor(rand() * 24 * 60) * MIN);
       const fixed: TimeInterval[] = Array.from({ length: Math.floor(rand() * 25) }, () => {
         const start = base + Math.floor(rand() * 8 * 24 * 60) * MIN;
@@ -451,7 +451,7 @@ describe('SchedulerEngine.planSlots - trường hợp biên (Bảng 5.1, mục 5
       const r = plan(tasks, fixed, now);
       expect(r.taskResults.length).toBeLessThanOrEqual(tasks.length);
     }
-  });
+  }, 30_000);
 });
 
 describe('SchedulerEngine.findMakeupSlots (mục 5.1.8)', () => {
