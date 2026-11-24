@@ -447,6 +447,33 @@ describe('TV2 End-to-End API Integration', () => {
       expect(res.body.warnings[0].code).toBe('FIXED_EVENT_OVERLAP');
       expect(res.body.warnings[0].details[0].issue).toContain('trong cùng tệp nạp');
     });
+
+    it('từ chối tệp có tên dài hơn 255 ký tự với mã lỗi 400 VALIDATION_ERROR', async () => {
+      const longName = 'a'.repeat(252) + '.ics'; // 256 ký tự
+      const validIcs = Buffer.from(
+        [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'BEGIN:VEVENT',
+          'UID:longname@hcmus.edu.vn',
+          'SUMMARY:Môn học tên tệp dài',
+          'DTSTART:20261120T070000Z',
+          'DTEND:20261120T090000Z',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n'),
+        'utf-8',
+      );
+
+      const res = await request(app)
+        .post('/api/events/import/ics')
+        .set('x-user-id', testUserId)
+        .attach('file', validIcs, longName);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.message).toContain('255 ký tự');
+    });
   });
 
   // -------------------------------------------------------------------------

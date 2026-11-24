@@ -67,6 +67,12 @@ export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'cs
       ]);
     }
 
+    if (fileName.length > 255) {
+      throw new ValidationError('Tên tệp không được vượt quá 255 ký tự', [
+        { field: 'file', issue: 'Tên tệp không được vượt quá 255 ký tự' },
+      ]);
+    }
+
     const contentStart = headerEnd + headerEndLen;
     const nextBoundary = bodyBuffer.indexOf(boundaryBuffer, contentStart);
     let contentEnd = bodyBuffer.length;
@@ -100,6 +106,12 @@ export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'cs
     const fileName =
       headerFileName || (expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv');
 
+    if (fileName.length > 255) {
+      throw new ValidationError('Tên tệp không được vượt quá 255 ký tự', [
+        { field: 'file', issue: 'Tên tệp không được vượt quá 255 ký tự' },
+      ]);
+    }
+
     return { buffer: req.body, fileName };
   }
 
@@ -114,6 +126,13 @@ export function extractUploadedFile(req: Request, expectedExtension: 'ics' | 'cs
 
     const fileName =
       headerFileName || (expectedExtension === 'ics' ? 'schedule.ics' : 'schedule.csv');
+
+    if (fileName.length > 255) {
+      throw new ValidationError('Tên tệp không được vượt quá 255 ký tự', [
+        { field: 'file', issue: 'Tên tệp không được vượt quá 255 ký tự' },
+      ]);
+    }
+
     return { buffer: Buffer.from(req.body, 'utf-8'), fileName };
   }
 

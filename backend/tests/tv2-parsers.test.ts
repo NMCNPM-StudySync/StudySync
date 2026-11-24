@@ -225,6 +225,31 @@ describe('TV2 Parsers - iCalendar (.ics) and Spreadsheet (.csv)', () => {
       expect(result.events[2]?.startsAt.toISOString()).toBe('2026-10-26T07:00:00.000Z');
       expect(result.events[3]?.startsAt.toISOString()).toBe('2026-10-28T07:00:00.000Z');
     });
+
+    it('bung lặp chính xác cho RRULE có nhiều ngày BYDAY trước 07:00 VN (lớp 06:30 sáng)', () => {
+      const rawIcs = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:early-morning-byday@hcmus.edu.vn',
+        'SUMMARY:Lớp Chạy bộ Buổi Sáng',
+        'DTSTART;TZID=Asia/Ho_Chi_Minh:20270104T063000',
+        'DTEND;TZID=Asia/Ho_Chi_Minh:20270104T080000',
+        'RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+
+      const result = icsParser.parse(rawIcs);
+      expect(result.totalErrors).toBe(0);
+      expect(result.events).toHaveLength(4);
+      // 4 buổi: Thứ Hai (04/01 06:30 VN = 03/01 23:30Z), Thứ Tư (06/01 06:30 VN = 05/01 23:30Z),
+      //          Thứ Hai (11/01 06:30 VN = 10/01 23:30Z), Thứ Tư (13/01 06:30 VN = 12/01 23:30Z)
+      expect(result.events[0]?.startsAt.toISOString()).toBe('2027-01-03T23:30:00.000Z');
+      expect(result.events[1]?.startsAt.toISOString()).toBe('2027-01-05T23:30:00.000Z');
+      expect(result.events[2]?.startsAt.toISOString()).toBe('2027-01-10T23:30:00.000Z');
+      expect(result.events[3]?.startsAt.toISOString()).toBe('2027-01-12T23:30:00.000Z');
+    });
   });
 
   // -------------------------------------------------------------------------

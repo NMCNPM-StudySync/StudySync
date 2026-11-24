@@ -99,6 +99,15 @@ interface ParsedDateTime {
   date: Date;
   isAllDay: boolean;
   dateKey: string;
+  localParts: {
+    y: number;
+    m: number;
+    d: number;
+    h: number;
+    min: number;
+    s: number;
+    timeZone: string;
+  };
 }
 
 const WINDOWS_TIMEZONE_MAP: Record<string, string> = {
@@ -225,6 +234,7 @@ function parseIcsDateTimeString(
         date,
         isAllDay: false,
         dateKey: toVietnamDateKey(date),
+        localParts: { y, m, d, h, min, s, timeZone: 'UTC' },
       },
     };
   }
@@ -251,7 +261,15 @@ function parseIcsDateTimeString(
 
     const utcDate = convertLocalToUtc(y, m, d, h, min, s, tzRes.ianaTz as string);
     const dateKey = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    return { success: true, value: { date: utcDate, isAllDay: false, dateKey } };
+    return {
+      success: true,
+      value: {
+        date: utcDate,
+        isAllDay: false,
+        dateKey,
+        localParts: { y, m, d, h, min, s, timeZone: tzRes.ianaTz as string },
+      },
+    };
   }
 
   // 3. Date only format: YYYYMMDD (VALUE=DATE)
@@ -269,7 +287,15 @@ function parseIcsDateTimeString(
     // Mốc Date UTC tương ứng 00:00:00 VN (-7h = 17:00 ngày trước)
     const localMs = Date.UTC(y, m - 1, d, 0, 0, 0);
     const utcDate = new Date(localMs - 7 * 60 * 60 * 1000);
-    return { success: true, value: { date: utcDate, isAllDay: true, dateKey } };
+    return {
+      success: true,
+      value: {
+        date: utcDate,
+        isAllDay: true,
+        dateKey,
+        localParts: { y, m, d, h: 0, min: 0, s: 0, timeZone: 'Asia/Ho_Chi_Minh' },
+      },
+    };
   }
 
   return { success: false, reason: 'Chuỗi thời gian iCalendar không đúng định dạng' };
@@ -727,8 +753,8 @@ export class IcsParser {
       const maxEndDate = new Date(startUtc.getTime() + MAX_WEEKS * 7 * 86400 * 1000);
       let totalCandidateCount = 0;
 
-      if (rruleConfig.freq === 'WEEKLY' && rruleConfig.byDays && rruleConfig.byDays.length > 1) {
-        // Hỗ trợ lặp hàng tuần với nhiều ngày (ví dụ BYDAY=MO,WE)
+      if (rruleConfig.freq === 'WEEKLY' && rruleConfig.byDays && rruleConfig.byDays.length >= 1) {
+        // Hỗ trợ lặp hàng tuần với danh sách ngày BYDAY (ví dụ BYDAY=MO hoặc BYDAY=MO,WE)
         const DAY_MAP: Record<string, number> = {
           SU: 0,
           MO: 1,
@@ -738,41 +764,79 @@ export class IcsParser {
           FR: 5,
           SA: 6,
         };
-        // Tìm mốc Chủ Nhật đầu tuần của startUtc theo múi giờ sự kiện
-        let currentWeekBase = new Date(startUtc.getTime());
-        currentWeekBase.setUTCDate(currentWeekBase.getUTCDate() - currentWeekBase.getUTCDay());
+        const local = parsedStart.value.localParts;
+        // Tính thứ của ngày bắt đầu theo lịch địa phương (0 = Chủ Nhật, 1 = Thứ Hai, ..., 6 = Thứ Bảy)
+        const startDayOfWeek = new Date(Date.UTC(local.y, local.m - 1, local.d)).getUTCDay();
+        // Mốc Chủ Nhật đầu tuần trên lịch địa phương (dùng UTC epoch làm mốc ngày nguyên vẹn)
+        let currentWeekSundayMs = Date.UTC(local.y, local.m - 1, local.d - startDayOfWeek);
+
+        const sortedDays = [...rruleConfig.byDays].sort(
+          (a, b) => (DAY_MAP[a] ?? 0) - (DAY_MAP[b] ?? 0),
+        );
 
         while (occurrences.length < MAX_SESSIONS) {
-          const sortedDays = [...rruleConfig.byDays].sort(
-            (a, b) => (DAY_MAP[a] ?? 0) - (DAY_MAP[b] ?? 0),
-          );
+          let stopped = false;
 
           for (const dayCode of sortedDays) {
             const targetDayNum = DAY_MAP[dayCode] as number;
-            const candidateDate = new Date(currentWeekBase.getTime());
-            candidateDate.setUTCDate(candidateDate.getUTCDate() + targetDayNum);
+            const candMs = currentWeekSundayMs + targetDayNum * 86400 * 1000;
+            const dObj = new Date(candMs);
+            const candY = dObj.getUTCFullYear();
+            const candM = dObj.getUTCMonth() + 1;
+            const candD = dObj.getUTCDate();
 
-            // Bỏ qua các ngày trước startUtc
+            // Chuyển ngày giờ ứng viên từ giờ địa phương sang UTC
+            const candidateDate = convertLocalToUtc(
+              candY,
+              candM,
+              candD,
+              local.h,
+              local.min,
+              local.s,
+              local.timeZone,
+            );
+
+            // Bỏ qua các ngày trước startUtc (ví dụ ngày trong tuần trước ngày bắt đầu sự kiện)
             if (candidateDate.getTime() < startUtc.getTime()) continue;
 
-            if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) break;
-            if (rruleConfig.until && candidateDate.getTime() > rruleConfig.until.getTime()) break;
-            if (candidateDate.getTime() > maxEndDate.getTime()) break;
+            if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) {
+              stopped = true;
+              break;
+            }
+            if (rruleConfig.until && candidateDate.getTime() > rruleConfig.until.getTime()) {
+              stopped = true;
+              break;
+            }
+            if (candidateDate.getTime() > maxEndDate.getTime()) {
+              stopped = true;
+              break;
+            }
 
             totalCandidateCount++;
             const dateKey = toVietnamDateKey(candidateDate);
             if (!exdateSet.has(dateKey)) {
-              occurrences.push(new Date(candidateDate.getTime()));
+              occurrences.push(candidateDate);
             }
           }
 
+          if (stopped) break;
           if (rruleConfig.count && totalCandidateCount >= rruleConfig.count) break;
-          if (rruleConfig.until && currentWeekBase.getTime() > rruleConfig.until.getTime()) break;
-          if (currentWeekBase.getTime() > maxEndDate.getTime()) break;
 
-          currentWeekBase = new Date(
-            currentWeekBase.getTime() + rruleConfig.interval * 7 * 86400 * 1000,
+          currentWeekSundayMs += rruleConfig.interval * 7 * 86400 * 1000;
+
+          // Kiểm tra chặn nếu tuần mới đã vượt quá UNTIL hoặc maxEndDate
+          const testSundayObj = new Date(currentWeekSundayMs);
+          const testSundayUtc = convertLocalToUtc(
+            testSundayObj.getUTCFullYear(),
+            testSundayObj.getUTCMonth() + 1,
+            testSundayObj.getUTCDate(),
+            local.h,
+            local.min,
+            local.s,
+            local.timeZone,
           );
+          if (rruleConfig.until && testSundayUtc.getTime() > rruleConfig.until.getTime()) break;
+          if (testSundayUtc.getTime() > maxEndDate.getTime()) break;
         }
       } else {
         // Tần suất thông thường (DAILY, WEEKLY 1 ngày, MONTHLY)

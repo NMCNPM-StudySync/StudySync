@@ -198,6 +198,7 @@ export class CalendarImportService {
 
     const importedFileId = randomUUID();
     const now = new Date();
+    const safeFileName = fileName.length > 255 ? fileName.slice(0, 255) : fileName;
 
     const entitiesToInsert = extractedEvents.map(
       (e) =>
@@ -224,7 +225,7 @@ export class CalendarImportService {
         `INSERT INTO imported_files (
            id, user_id, file_name, file_format, file_size_bytes, total_events, status, created_at, updated_at
          ) VALUES ($1, $2, $3, $4, $5, $6, 'success', now(), now())`,
-        [importedFileId, userId, fileName, fileFormat, fileSizeBytes, entitiesToInsert.length],
+        [importedFileId, userId, safeFileName, fileFormat, fileSizeBytes, entitiesToInsert.length],
       );
 
       await this.eventRepo.createMany(entitiesToInsert, txClient);
@@ -242,7 +243,7 @@ export class CalendarImportService {
     return {
       data: {
         importedFileId,
-        fileName,
+        fileName: safeFileName,
         totalEvents: entitiesToInsert.length,
         message: `Nạp lịch thành công ${entitiesToInsert.length} sự kiện`,
       },
