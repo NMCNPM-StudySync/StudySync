@@ -104,13 +104,16 @@ export class FileTooLargeError extends AppError {
 export class FileInvalidError extends AppError {
   public readonly statusCode = 422;
   public readonly code: string;
+  public readonly totalErrors?: number;
 
   constructor(
     message = 'Tệp không đúng định dạng hoặc chứa dữ liệu không hợp lệ (BR-06)',
     details?: ErrorDetail[],
+    totalErrors?: number,
     code = 'FILE_INVALID',
   ) {
     super(message, details);
     this.code = code;
+    this.totalErrors = totalErrors ?? details?.length ?? 0;
   }
 }
