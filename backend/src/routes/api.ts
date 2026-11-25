@@ -9,6 +9,11 @@ import {
   createMeetingRouter,
   type MeetingModuleServices,
 } from '../modules/meetings/meeting.routes';
+import { createAuthMiddleware } from '../middlewares/authenticate';
+import { createAuthRouter, createUserRouter } from '../modules/auth/auth.routes';
+import type { AuthService } from '../modules/auth/auth.service';
+import { createGroupRouter } from '../modules/groups/group.routes';
+import type { GroupService } from '../modules/groups/group.service';
 import { createSampleRouter } from '../modules/sample/sample.routes';
 import type { SampleService } from '../modules/sample/sample.service';
 import { createSchedulerRouter } from '../modules/scheduler/scheduler.routes';
@@ -23,6 +28,10 @@ import { createTasksRouter } from '../modules/tasks/tasks.routes';
 
 export interface ApiRouterOptions {
   sampleService?: SampleService;
+  /** Dịch vụ xác thực TV1; có thì mount `/api/auth` và `/api/users/me`. */
+  auth?: AuthService;
+  /** Dịch vụ nhóm TV1; có thì mount `/api/groups` (cần `authenticate` hoặc `auth` để dựng middleware). */
+  groups?: GroupService;
   eventsService?: FixedEventService;
   calendarImportService?: CalendarImportService;
   tasksService?: TaskService;
@@ -31,7 +40,7 @@ export interface ApiRouterOptions {
   statsService?: StatsService;
   /** Dịch vụ TV4; có thì mount các endpoint họp nhóm, lời mời, nhắc việc dưới `/api`. */
   meetings?: MeetingModuleServices;
-  /** Middleware xác thực JWT của TV1; mặc định chỉ kiểm tra `req.userId`. */
+  /** Middleware xác thực dùng chung cho mọi route cần đăng nhập; mặc định dựng từ `auth`. */
   authenticate?: RequestHandler;
   schedulerService?: SchedulerService;
 }
@@ -62,9 +71,25 @@ export function createApiRouter(options?: ApiRouterOptions): Router {
     router.use('/sample', createSampleRouter(options.sampleService));
   }
 
+  // Một middleware xác thực dùng chung: ưu tiên `options.authenticate` (ví dụ mock khi test),
+  // nếu không có thì dựng từ AuthService.
+  const authenticate =
+    options?.authenticate ??
+    (options?.auth ? createAuthMiddleware(options.auth.verifyToken.bind(options.auth)) : undefined);
+
+  // TV1: chỉ mount khi server truyền dịch vụ tương ứng; `groups` không phụ thuộc `auth`.
+  if (options?.auth && authenticate) {
+    router.use('/auth', createAuthRouter(options.auth));
+    router.use('/users', createUserRouter(authenticate, options.auth));
+  }
+
+  if (options?.groups && authenticate) {
+    router.use('/groups', createGroupRouter(authenticate, options.groups));
+  }
+
   // TV4 Modules: Họp nhóm, lời mời, nhắc việc (US-24 đến US-28)
   if (options?.meetings) {
-    router.use(createMeetingRouter(options.meetings, options.authenticate));
+    router.use(createMeetingRouter(options.meetings, authenticate));
   }
 
   // TV3 - Đề xuất khung giờ học (Issue #119)
