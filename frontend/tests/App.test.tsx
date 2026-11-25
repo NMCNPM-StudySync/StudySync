@@ -83,6 +83,21 @@ describe('App navigation and layout', () => {
       warnings: [],
     });
 
+    // Trang Nhóm gọi GET /groups khi mount; trả danh sách rỗng để không gọi mạng thật
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (/\/groups(\?|$)/.test(url)) {
+          return new Response(JSON.stringify({ data: { groups: [] } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return realFetch(input, init);
+      }),
+    );
     // Giả lập trạng thái đã đăng nhập để kiểm thử điều hướng và bố cục của ứng dụng chính
     const futureExpiry = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     tokenStorage.setAuth(
@@ -97,6 +112,7 @@ describe('App navigation and layout', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     localStorage.clear();
   });
 
@@ -135,7 +151,7 @@ describe('App navigation and layout', () => {
   it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', async () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
-      { route: '/groups', title: 'Nhóm (TV1)' },
+      { route: '/groups', title: 'Nhóm của tôi' },
       { route: '/scheduler', title: 'Xếp lịch (TV3)' },
       { route: '/meetings', title: 'TÌM GIỜ HỌP' },
       { route: '/groups/group-001/meetings', title: 'TÌM GIỜ HỌP' },
@@ -179,7 +195,7 @@ describe('App navigation and layout', () => {
     const groupsLink = within(nav).getByRole('link', { name: /^Nhóm$/i });
     fireEvent.click(groupsLink);
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Nhóm (TV1)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Nhóm của tôi' })).toBeInTheDocument();
   });
 
   it('hiển thị trang 404 Not Found khi truy cập đường dẫn lạ', () => {
