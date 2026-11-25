@@ -11,6 +11,8 @@ import {
 } from '../modules/meetings/meeting.routes';
 import { createSampleRouter } from '../modules/sample/sample.routes';
 import type { SampleService } from '../modules/sample/sample.service';
+import { createSchedulerRouter } from '../modules/scheduler/scheduler.routes';
+import type { SchedulerService } from '../modules/scheduler/scheduler.service';
 import type { WeekScheduleService } from '../modules/schedule/schedule.service';
 import { createScheduleRouter } from '../modules/schedule/schedule.routes';
 import { StatsController } from '../modules/stats/stats.controller';
@@ -31,6 +33,7 @@ export interface ApiRouterOptions {
   meetings?: MeetingModuleServices;
   /** Middleware xác thực JWT của TV1; mặc định chỉ kiểm tra `req.userId`. */
   authenticate?: RequestHandler;
+  schedulerService?: SchedulerService;
 }
 
 export function createApiRouter(options?: ApiRouterOptions): Router {
@@ -63,6 +66,9 @@ export function createApiRouter(options?: ApiRouterOptions): Router {
   if (options?.meetings) {
     router.use(createMeetingRouter(options.meetings, options.authenticate));
   }
+
+  // TV3 - Đề xuất khung giờ học (Issue #119)
+  router.use('/scheduler', createSchedulerRouter(options?.schedulerService));
 
   return router;
 }
