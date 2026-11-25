@@ -8,5 +8,8 @@ export function createGroupRouter(authenticate: RequestHandler, service?: GroupS
   const controller = new GroupController(service);
   router.post('/', authenticate, controller.create);
   router.get('/', authenticate, controller.list);
+  router.get('/:groupId', authenticate, controller.detail);
+  router.post('/:groupId/invite-link', authenticate, controller.inviteLink);
+  router.post('/:groupId/invite-link/regenerate', authenticate, controller.regenerateInviteLink);
   return router;
 }
