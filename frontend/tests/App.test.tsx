@@ -1,12 +1,23 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { tokenStorage } from '../src/services/tokenStorage';
 
 describe('App navigation and layout', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Trang Nhóm gọi GET /groups khi mount; trả danh sách rỗng để không gọi mạng thật
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: { groups: [] } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
     // Giả lập trạng thái đã đăng nhập để kiểm thử điều hướng và bố cục của ứng dụng chính
     const futureExpiry = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     tokenStorage.setAuth(
@@ -21,6 +32,7 @@ describe('App navigation and layout', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     localStorage.clear();
   });
 
@@ -59,7 +71,7 @@ describe('App navigation and layout', () => {
   it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
-      { route: '/groups', title: 'Nhóm (TV1)' },
+      { route: '/groups', title: 'Nhóm của tôi' },
       { route: '/scheduler', title: 'Xếp lịch (TV3)' },
       { route: '/meetings', title: 'Giờ chung (TV4)' },
       { route: '/kanban', title: 'Kanban (TV5)' },
@@ -93,7 +105,7 @@ describe('App navigation and layout', () => {
     const groupsLink = within(nav).getByRole('link', { name: /^Nhóm$/i });
     fireEvent.click(groupsLink);
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Nhóm (TV1)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Nhóm của tôi' })).toBeInTheDocument();
   });
 
   it('hiển thị trang 404 Not Found khi truy cập đường dẫn lạ', () => {
