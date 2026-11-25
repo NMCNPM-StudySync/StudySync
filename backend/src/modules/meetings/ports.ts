@@ -1,8 +1,9 @@
 /**
  * Cổng sang các module khác (TV1, TV2), theo bảng phụ thuộc chéo module của docs/architecture.md.
- * TV4 chỉ phụ thuộc vào các giao diện này. Bản cài đặt tạm bằng SQL ở `adapters.ts`
- * sẽ được thay bằng `MembershipService`, `GroupRepository`, `GroupMemberRepository` (TV1)
- * và `FixedEventRepository.findBusyIntervals` (TV2) khi #117, #118 merge.
+ * TV4 chỉ phụ thuộc vào các giao diện này. Phía TV1 đã cài đặt bằng `MembershipService`,
+ * `GroupRepository`, `GroupMemberRepository` (`modules/groups/`). Bản tạm bằng SQL ở `adapters.ts`
+ * còn lại cho cổng khoảng bận, sẽ thay bằng `FixedEventRepository.findBusyIntervals` (TV2)
+ * khi #118 merge.
  */
 import type { Queryable } from '../../shared/base-repository';
 

@@ -3,7 +3,10 @@
  * dựng router với đối tượng giả mà không phải nạp `config/db`.
  */
 import { pool, withTransaction } from '../../config/db';
-import { PgBusyIntervalGateway, PgGroupGateway, PgMembershipService } from './adapters';
+import { GroupMemberRepository } from '../groups/group-member.repository';
+import { GroupRepository } from '../groups/group.repository';
+import { MembershipService } from '../groups/membership.service';
+import { PgBusyIntervalGateway } from './adapters';
 import { systemClock, type Clock, type TransactionRunner } from './deps';
 import { MeetingInvitationRepository } from './meeting-invitation.repository';
 import { MeetingPermissionService } from './meeting-permission.service';
@@ -11,6 +14,7 @@ import { MeetingProposalRepository } from './meeting-proposal.repository';
 import { MeetingProposalService } from './meeting-proposal.service';
 import { MeetingSlotService } from './meeting-slot.service';
 import type { MeetingModuleServices } from './meeting.routes';
+import type { GroupGateway } from './ports';
 import { ReminderJob } from './reminder.job';
 import { ReminderRepository } from './reminder.repository';
 import { ReminderService } from './reminder.service';
@@ -23,8 +27,16 @@ export interface MeetingsModule {
 export function createMeetingsModule(clock: Clock = systemClock): MeetingsModule {
   const db = pool;
   const runTransaction: TransactionRunner = withTransaction;
-  const groups = new PgGroupGateway();
-  const membership = new PgMembershipService();
+  // Cổng nhóm/thành viên/phân quyền dùng lớp thật của TV1 (#117).
+  const groupRepo = new GroupRepository();
+  const memberRepo = new GroupMemberRepository();
+  const groups: GroupGateway = {
+    lockForUpdate: (groupId, client) => groupRepo.lockForUpdate(groupId, client),
+    listMembers: (groupId, client) => memberRepo.listMembers(groupId, client),
+    setMeetingPermission: (groupId, userId, enabled, client) =>
+      memberRepo.setMeetingPermission(groupId, userId, enabled, client),
+  };
+  const membership = new MembershipService(groupRepo, memberRepo);
   const busy = new PgBusyIntervalGateway();
 
   const reminders = new ReminderService({
