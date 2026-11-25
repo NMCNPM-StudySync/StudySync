@@ -2,20 +2,13 @@ import express, { type RequestHandler } from 'express';
 import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
-import type { AuthService } from './modules/auth/auth.service';
-import type { GroupService } from './modules/groups/group.service';
-import type { MeetingModuleServices } from './modules/meetings/meeting.routes';
-import type { SampleService } from './modules/sample/sample.service';
+import type { ApiRouterOptions } from './routes/api';
 import { createApiRouter } from './routes/api';
 import { healthRouter } from './routes/health';
 
-export interface AppOptions {
-  sampleService?: SampleService;
-  meetings?: MeetingModuleServices;
-  auth?: AuthService;
-  groups?: GroupService;
-  authenticate?: RequestHandler;
-}
+export type AppOptions = ApiRouterOptions & {
+  authMiddleware?: RequestHandler;
+};
 
 export function createApp(options?: AppOptions) {
   const app = express();
@@ -41,6 +34,11 @@ export function createApp(options?: AppOptions) {
 
   // Health check endpoint (outside /api prefix per docs/api.md convention)
   app.use('/health', healthRouter);
+
+  // Optional authentication middleware (e.g. for TV2 test harness)
+  if (options?.authMiddleware) {
+    app.use(options.authMiddleware);
+  }
 
   // Core API endpoints with /api prefix
   app.use('/api', createApiRouter(options));

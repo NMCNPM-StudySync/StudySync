@@ -1,0 +1,262 @@
+import type { PoolClient } from 'pg';
+import { describe, expect, it, vi } from 'vitest';
+import { FixedEvent, type FixedEventKind } from '../src/modules/events/events.entity';
+import { FixedEventRepository } from '../src/modules/events/events.repository';
+import { FixedEventService } from '../src/modules/events/events.service';
+import type { Queryable } from '../src/shared/base-repository';
+import { NotFoundError, ValidationError } from '../src/shared/errors';
+
+describe('TV2 Fixed Events Module', () => {
+  const mockUserId = '11111111-1111-4111-8111-111111111111';
+
+  // -------------------------------------------------------------------------
+  // 1. Entity Tests
+  // -------------------------------------------------------------------------
+  describe('FixedEvent Entity', () => {
+    it('chuyển đổi đúng sang TimeInterval nửa mở [startsAt, endsAt)', () => {
+      const start = new Date('2026-11-16T08:00:00.000Z');
+      const end = new Date('2026-11-16T10:00:00.000Z');
+
+      const event = new FixedEvent({
+        id: 'fe-1',
+        userId: mockUserId,
+        title: 'Công nghệ phần mềm',
+        kind: 'class',
+        startsAt: start,
+        endsAt: end,
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const interval = event.toInterval();
+      expect(interval.start).toEqual(start);
+      expect(interval.end).toEqual(end);
+    });
+
+    it('kiểm tra va chạm trùng lịch tuân thủ BR-01: tiếp xúc mút không tính là trùng', () => {
+      const e1 = new FixedEvent({
+        id: 'fe-1',
+        userId: mockUserId,
+        title: 'Tiết 1-2',
+        kind: 'class',
+        startsAt: new Date('2026-11-16T07:30:00.000Z'),
+        endsAt: new Date('2026-11-16T09:00:00.000Z'),
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const e2Adjacent = new FixedEvent({
+        id: 'fe-2',
+        userId: mockUserId,
+        title: 'Tiết 3-4 (Nối tiếp)',
+        kind: 'class',
+        startsAt: new Date('2026-11-16T09:00:00.000Z'),
+        endsAt: new Date('2026-11-16T10:30:00.000Z'),
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const e3Overlap = new FixedEvent({
+        id: 'fe-3',
+        userId: mockUserId,
+        title: 'Học bù (Trùng 30 phút)',
+        kind: 'class',
+        startsAt: new Date('2026-11-16T08:30:00.000Z'),
+        endsAt: new Date('2026-11-16T09:30:00.000Z'),
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Tiếp xúc mút: e1.endsAt === e2Adjacent.startsAt -> FALSE (BR-01)
+      expect(e1.overlaps(e2Adjacent)).toBe(false);
+      expect(e2Adjacent.overlaps(e1)).toBe(false);
+
+      // Giao nhau một phần: e1 và e3Overlap -> TRUE
+      expect(e1.overlaps(e3Overlap)).toBe(true);
+      expect(e3Overlap.overlaps(e1)).toBe(true);
+    });
+
+    it('chuyển đổi sang Response DTO đầy đủ thuộc tính ISO 8601 UTC Z', () => {
+      const event = new FixedEvent({
+        id: 'fe-1',
+        userId: mockUserId,
+        title: 'Toán rời rạc',
+        kind: 'exam',
+        startsAt: new Date('2026-11-20T01:00:00.000Z'),
+        endsAt: new Date('2026-11-20T03:00:00.000Z'),
+        location: 'Phòng F.102',
+        notes: 'Mang theo thẻ sinh viên',
+        source: 'manual',
+        createdAt: new Date('2026-11-10T00:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T00:00:00.000Z'),
+        hasOverlap: true,
+      });
+
+      const dto = event.toResponseDto();
+      expect(dto.id).toBe('fe-1');
+      expect(dto.title).toBe('Toán rời rạc');
+      expect(dto.kind).toBe('exam');
+      expect(dto.startsAt).toBe('2026-11-20T01:00:00.000Z');
+      expect(dto.endsAt).toBe('2026-11-20T03:00:00.000Z');
+      expect(dto.location).toBe('Phòng F.102');
+      expect(dto.hasOverlap).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 2. Service Validation & Business Rules Tests
+  // -------------------------------------------------------------------------
+  describe('FixedEventService Validation & Business Rules', () => {
+    const mockRepo = new FixedEventRepository();
+    const mockDb: Queryable = { query: vi.fn() };
+    const mockTxRunner = vi.fn(async (work) => work({} as unknown as PoolClient));
+    const service = new FixedEventService(mockRepo, mockDb, mockTxRunner);
+
+    it('từ chối khi tên sự kiện rỗng hoặc chỉ có khoảng trắng (BR-08)', async () => {
+      await expect(
+        service.createEvent(mockUserId, {
+          title: '   ',
+          startsAt: '2026-11-16T08:00:00.000Z',
+          endsAt: '2026-11-16T10:00:00.000Z',
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('từ chối khi tên sự kiện vượt quá 200 ký tự (BR-08)', async () => {
+      const longTitle = 'A'.repeat(201);
+      await expect(
+        service.createEvent(mockUserId, {
+          title: longTitle,
+          startsAt: '2026-11-16T08:00:00.000Z',
+          endsAt: '2026-11-16T10:00:00.000Z',
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('từ chối khi loại sự kiện kind không hợp lệ', async () => {
+      await expect(
+        service.createEvent(mockUserId, {
+          title: 'Đi chơi',
+          kind: 'party' as unknown as FixedEventKind,
+          startsAt: '2026-11-16T08:00:00.000Z',
+          endsAt: '2026-11-16T10:00:00.000Z',
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('từ chối chuỗi thời gian thiếu hậu tố Z (BR-07)', async () => {
+      await expect(
+        service.createEvent(mockUserId, {
+          title: 'Học mạng máy tính',
+          startsAt: '2026-11-16T08:00:00+07:00', // dùng offset thay vì Z
+          endsAt: '2026-11-16T10:00:00.000Z',
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('từ chối khi thời gian kết thúc trước thời gian bắt đầu (BR-01, BR-06)', async () => {
+      await expect(
+        service.createEvent(mockUserId, {
+          title: 'Lỗi giờ đảo ngược',
+          startsAt: '2026-11-16T10:00:00.000Z',
+          endsAt: '2026-11-16T08:00:00.000Z',
+        }),
+      ).rejects.toThrow('Thời gian kết thúc phải sau thời gian bắt đầu');
+    });
+
+    it('từ chối khi thời gian kết thúc bằng thời gian bắt đầu (thời lượng 0 phút)', async () => {
+      await expect(
+        service.createEvent(mockUserId, {
+          title: 'Thời lượng 0 phút',
+          startsAt: '2026-11-16T08:00:00.000Z',
+          endsAt: '2026-11-16T08:00:00.000Z',
+        }),
+      ).rejects.toThrow('Thời gian kết thúc phải sau thời gian bắt đầu');
+    });
+
+    it('cho phép lưu sự kiện trùng lịch và đính kèm cảnh báo FIXED_EVENT_OVERLAP (BR-01)', async () => {
+      const existing = new FixedEvent({
+        id: 'existing-fe-1',
+        userId: mockUserId,
+        title: 'Lập trình Web',
+        kind: 'class',
+        startsAt: new Date('2026-11-16T08:00:00.000Z'),
+        endsAt: new Date('2026-11-16T10:00:00.000Z'),
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      vi.spyOn(mockRepo, 'findOverlapping').mockResolvedValueOnce([existing]);
+      vi.spyOn(mockRepo, 'create').mockImplementationOnce(async (event) => event);
+
+      const result = await service.createEvent(mockUserId, {
+        title: 'Học bù Trí tuệ nhân tạo',
+        startsAt: '2026-11-16T09:00:00.000Z',
+        endsAt: '2026-11-16T11:00:00.000Z',
+      });
+
+      expect(result.data.title).toBe('Học bù Trí tuệ nhân tạo');
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings?.[0]?.code).toBe('FIXED_EVENT_OVERLAP');
+    });
+
+    it('lưu thành công không có cảnh báo khi sự kiện không bị trùng lịch', async () => {
+      vi.spyOn(mockRepo, 'findOverlapping').mockResolvedValueOnce([]);
+      vi.spyOn(mockRepo, 'create').mockImplementationOnce(async (event) => event);
+
+      const result = await service.createEvent(mockUserId, {
+        title: 'Học Tiếng Anh',
+        startsAt: '2026-11-16T14:00:00.000Z',
+        endsAt: '2026-11-16T16:00:00.000Z',
+      });
+
+      expect(result.data.title).toBe('Học Tiếng Anh');
+      expect(result.warnings).toBeUndefined();
+    });
+
+    it('ném lỗi NotFoundError khi truy vấn sự kiện không tồn tại', async () => {
+      vi.spyOn(mockRepo, 'findByIdAndUserId').mockResolvedValueOnce(null);
+
+      await expect(service.getEvent(mockUserId, 'non-existent-id')).rejects.toThrow(NotFoundError);
+    });
+
+    it('bảo vệ quyền riêng tư theo BR-02: findBusyIntervals chỉ trả 3 trường user_id, starts_at, ends_at', async () => {
+      const mockQueryRes = {
+        rows: [
+          {
+            user_id: mockUserId,
+            starts_at: '2026-11-16T08:00:00.000Z',
+            ends_at: '2026-11-16T10:00:00.000Z',
+          },
+        ],
+      };
+      const customDb: Queryable = { query: vi.fn().mockResolvedValueOnce(mockQueryRes) };
+
+      const intervals = await mockRepo.findBusyIntervals(
+        [mockUserId],
+        new Date('2026-11-16T00:00:00.000Z'),
+        new Date('2026-11-17T00:00:00.000Z'),
+        customDb,
+      );
+
+      expect(intervals).toHaveLength(1);
+      const first = intervals[0];
+      expect(first).toEqual({
+        userId: mockUserId,
+        startsAt: new Date('2026-11-16T08:00:00.000Z'),
+        endsAt: new Date('2026-11-16T10:00:00.000Z'),
+      });
+      // Đảm bảo không lộ thông tin tiêu đề, mô tả, phòng học
+      const record = first as unknown as Record<string, unknown>;
+      expect(record.title).toBeUndefined();
+      expect(record.location).toBeUndefined();
+      expect(record.notes).toBeUndefined();
+    });
+  });
+});

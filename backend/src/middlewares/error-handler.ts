@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env';
-import { AppError } from '../shared/errors';
+import { AppError, FileInvalidError } from '../shared/errors';
 import type { ApiErrorResponse } from '../shared/response';
 
 export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
@@ -17,6 +17,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, next: N
 
     if (err.details && err.details.length > 0) {
       errorBody.details = err.details;
+    }
+
+    if (err instanceof FileInvalidError && err.totalErrors !== undefined) {
+      errorBody.totalErrors = err.totalErrors;
     }
 
     res.status(err.statusCode).json({ error: errorBody });
