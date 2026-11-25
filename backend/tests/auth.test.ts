@@ -53,7 +53,7 @@ function createService() {
     jwtExpiresIn: '7d',
     bcryptCost: 4,
   });
-  return { service, users };
+  return { service, users, db };
 }
 
 const validInput = {
@@ -132,6 +132,64 @@ describe('AuthService', () => {
     }
   });
 
+  it.each([
+    ['email rỗng', { email: '', password: 'matkhau2026' }, ['email']],
+    ['email chỉ khoảng trắng', { email: '   ', password: 'matkhau2026' }, ['email']],
+    ['mật khẩu rỗng', { email: 'a@b.co', password: '' }, ['password']],
+    ['cả hai rỗng', { email: '', password: '' }, ['email', 'password']],
+  ])('đăng nhập: %s -> 400 VALIDATION_ERROR, không truy vấn DB', async (_l, input, fields) => {
+    const calls = (ctx.db.query as ReturnType<typeof vi.fn>).mock.calls.length;
+    await expect(ctx.service.login(input)).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      details: fields.map((field) => expect.objectContaining({ field })),
+    });
+    expect((ctx.db.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
+  });
+
+  it('getMe: tài khoản không còn tồn tại -> 401', async () => {
+    await expect(ctx.service.getMe('00000000-0000-4000-8000-0000000000ff')).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('BR-08 displayName: 100 ký tự hợp lệ, 101 bị từ chối, emoji đếm theo code point', async () => {
+    const ok = await ctx.service.register({ ...validInput, displayName: 'a'.repeat(100) });
+    expect(ok.user.displayName).toHaveLength(100);
+
+    const rejects = (displayName: string, email: string) =>
+      expect(ctx.service.register({ ...validInput, email, displayName })).rejects.toMatchObject({
+        statusCode: 400,
+        details: [expect.objectContaining({ field: 'displayName' })],
+      });
+    await rejects('a'.repeat(101), 'b1@example.com');
+
+    const emoji100 = await ctx.service.register({
+      ...validInput,
+      email: 'b2@example.com',
+      displayName: '😀'.repeat(100),
+    });
+    expect([...emoji100.user.displayName]).toHaveLength(100);
+    await rejects('😀'.repeat(101), 'b3@example.com');
+  });
+
+  it('BR-08 displayName: chuẩn hóa NFD -> NFC trước khi lưu', async () => {
+    const result = await ctx.service.register({
+      ...validInput,
+      displayName: 'Nguyễn Văn An'.normalize('NFD'),
+    });
+    expect(result.user.displayName).toBe('Nguyễn Văn An'.normalize('NFC'));
+    expect([...ctx.users.values()][0]!.display_name).toBe('Nguyễn Văn An'.normalize('NFC'));
+  });
+
+  it('BR-07: createdAt và expiresAt là ISO 8601 UTC có mili giây (.000Z)', async () => {
+    const result = await ctx.service.register(validInput);
+    const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    expect(result.user.createdAt).toBe('2026-11-05T13:00:00.000Z');
+    expect(result.expiresAt).toMatch(iso);
+  });
+
   it('đăng nhập thiếu trường -> 400', async () => {
     await expect(ctx.service.login({ email: 'a@b.co', password: undefined })).rejects.toMatchObject(
       {
@@ -187,15 +245,20 @@ describe('createAuthMiddleware', () => {
 });
 
 describe('API /api/auth, /api/users/me, /api/groups', () => {
+  let groupCalls: { text: string; params?: unknown[] }[] = [];
+
   function buildApp() {
     const { service } = createService();
     const groupRows: Record<string, unknown>[] = [];
+    groupCalls = [];
     const groupDb = {
-      query: vi.fn(async (text: string) => {
+      query: vi.fn(async (text: string, params?: unknown[]) => {
+        groupCalls.push({ text, params });
         if (text.includes('INSERT INTO groups')) {
+          // Lấy tên từ tham số thật gửi xuống DB để kiểm tra chuẩn hóa.
           const row = {
             id: 'g1',
-            name: 'Đồ án nhóm 04',
+            name: params?.[0],
             created_at: new Date('2026-11-05T13:00:00Z'),
           };
           groupRows.push(row);
@@ -272,5 +335,146 @@ describe('API /api/auth, /api/users/me, /api/groups', () => {
     const list = await request(app).get('/api/groups').set('Authorization', auth);
     expect(list.status).toBe(200);
     expect(list.body.data.groups).toHaveLength(1);
+  });
+
+  async function registerToken(app: ReturnType<typeof buildApp>): Promise<string> {
+    const reg = await request(app).post('/api/auth/register').send(validInput);
+    return `Bearer ${reg.body.data.token}`;
+  }
+
+  it('GET /api/groups khi chưa có nhóm nào -> 200 với groups: []', async () => {
+    const app = buildApp();
+    const auth = await registerToken(app);
+    const list = await request(app).get('/api/groups').set('Authorization', auth);
+    expect(list.status).toBe(200);
+    expect(list.body.data).toEqual({ groups: [] });
+  });
+
+  it('login thiếu hoặc rỗng email/mật khẩu -> 400 VALIDATION_ERROR, không truy vấn DB', async () => {
+    const app = buildApp();
+    for (const body of [
+      {},
+      { email: '', password: '' },
+      { email: '   ', password: 'matkhau2026' },
+      { email: 'an.nguyen@example.com', password: '' },
+    ]) {
+      const res = await request(app).post('/api/auth/login').send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.details.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('BR-08 tên nhóm: đúng 100 ký tự hợp lệ, 101 ký tự bị từ chối và không ghi DB', async () => {
+    const app = buildApp();
+    const auth = await registerToken(app);
+
+    const ok = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: 'a'.repeat(100) });
+    expect(ok.status).toBe(201);
+
+    groupCalls = [];
+    const tooLong = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: 'a'.repeat(101) });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.error.details).toEqual([expect.objectContaining({ field: 'name' })]);
+    expect(groupCalls).toHaveLength(0);
+  });
+
+  it('BR-08 tên nhóm: đếm theo code point (emoji) và chuẩn hóa NFC, cắt khoảng trắng', async () => {
+    const app = buildApp();
+    const auth = await registerToken(app);
+
+    // 100 emoji = 100 code point (200 đơn vị UTF-16) vẫn hợp lệ; 101 thì không.
+    const emoji100 = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: '😀'.repeat(100) });
+    expect(emoji100.status).toBe(201);
+    const emoji101 = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: '😀'.repeat(101) });
+    expect(emoji101.status).toBe(400);
+
+    const nfd = '  Đồ án nhóm 04  '.normalize('NFD');
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: nfd });
+    expect(res.status).toBe(201);
+    const insert = groupCalls.filter((c) => c.text.includes('INSERT INTO groups')).at(-1)!;
+    expect(insert.params).toEqual(['Đồ án nhóm 04'.normalize('NFC')]);
+    expect(res.body.data.name).toBe('Đồ án nhóm 04'.normalize('NFC'));
+  });
+
+  it('Trưởng nhóm được lưu can_organize_meetings mặc định (false), không ghi true', async () => {
+    const app = buildApp();
+    const auth = await registerToken(app);
+    await request(app).post('/api/groups').set('Authorization', auth).send({ name: 'Nhóm A' });
+    const insert = groupCalls.find((c) => c.text.includes('INSERT INTO group_members'))!;
+    expect(insert.text).not.toMatch(/can_organize_meetings/);
+    expect(insert.text).toContain(`'leader'`);
+  });
+
+  it('BR-07: createdAt và expiresAt theo ISO 8601 UTC có mili giây', async () => {
+    const app = buildApp();
+    const reg = await request(app).post('/api/auth/register').send(validInput);
+    const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    expect(reg.body.data.user.createdAt).toMatch(iso);
+    expect(reg.body.data.expiresAt).toMatch(iso);
+
+    const auth = `Bearer ${reg.body.data.token}`;
+    const group = await request(app)
+      .post('/api/groups')
+      .set('Authorization', auth)
+      .send({ name: 'N' });
+    expect(group.body.data.createdAt).toMatch(iso);
+  });
+});
+
+describe('createApiRouter: dùng chung options.authenticate', () => {
+  const stubGroups = {
+    create: vi.fn(async (userId: string, name: unknown) => ({
+      id: 'g1',
+      name: String(name),
+      myRole: 'leader',
+      memberCount: 1,
+      createdAt: userId,
+    })),
+    listMine: vi.fn(async () => ({ groups: [] })),
+  } as unknown as GroupService;
+
+  it('mount /api/groups chỉ với groups + authenticate (không cần AuthService)', async () => {
+    const authenticate = vi.fn((req: Request, _res: Response, next: NextFunction) => {
+      req.userId = 'mock-user';
+      next();
+    });
+    const app = createApp({ groups: stubGroups, authenticate });
+
+    const res = await request(app).post('/api/groups').send({ name: 'Nhóm mock' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.createdAt).toBe('mock-user');
+    expect(authenticate).toHaveBeenCalled();
+  });
+
+  it('không có authenticate lẫn auth thì không mount /api/groups (404)', async () => {
+    const app = createApp({ groups: stubGroups });
+    expect((await request(app).get('/api/groups')).status).toBe(404);
+  });
+
+  it('options.authenticate được ưu tiên hơn middleware dựng từ AuthService', async () => {
+    const { service } = createService();
+    const authenticate = vi.fn((_req: Request, _res: Response, next: NextFunction) =>
+      next(new UnauthorizedError('từ chối bởi mock')),
+    );
+    const app = createApp({ auth: service, authenticate });
+    const res = await request(app).get('/api/users/me');
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toBe('từ chối bởi mock');
   });
 });

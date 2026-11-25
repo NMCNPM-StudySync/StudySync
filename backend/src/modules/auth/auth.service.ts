@@ -107,16 +107,19 @@ export class AuthService {
   }
 
   public async login(input: { email: unknown; password: unknown }): Promise<AuthResult> {
-    if (typeof input.email !== 'string' || typeof input.password !== 'string') {
+    const emailMissing = typeof input.email !== 'string' || input.email.trim().length === 0;
+    const passwordMissing = typeof input.password !== 'string' || input.password.length === 0;
+    if (emailMissing || passwordMissing) {
       throw new ValidationError('Vui lòng nhập email và mật khẩu', [
-        ...(typeof input.email !== 'string' ? [{ field: 'email', issue: 'bắt buộc' }] : []),
-        ...(typeof input.password !== 'string' ? [{ field: 'password', issue: 'bắt buộc' }] : []),
+        ...(emailMissing ? [{ field: 'email', issue: 'bắt buộc' }] : []),
+        ...(passwordMissing ? [{ field: 'password', issue: 'bắt buộc' }] : []),
       ]);
     }
+    const { email, password } = input as { email: string; password: string };
 
-    const user = await this.repo.findByEmail(normalizeEmail(input.email), this.db);
+    const user = await this.repo.findByEmail(normalizeEmail(email), this.db);
     const hash = user ? user.passwordHash : await this.getDummyHash();
-    const matched = await bcrypt.compare(input.password, hash);
+    const matched = await bcrypt.compare(password, hash);
 
     if (!user || !matched) {
       throw new UnauthorizedError('Email hoặc mật khẩu không chính xác');
