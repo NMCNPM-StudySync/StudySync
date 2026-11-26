@@ -88,9 +88,9 @@ export function formatDurationHoursMinutes(minutes: number): string {
  */
 export function formatAveragePerDay(totalMinutes: number): string {
   if (totalMinutes <= 0) return '0g 00';
-  const avgMinutes = totalMinutes / 7;
-  const hours = Math.floor(avgMinutes / 60);
-  const mins = Math.round(avgMinutes % 60);
+  const totalRounded = Math.round(totalMinutes / 7);
+  const hours = Math.floor(totalRounded / 60);
+  const mins = totalRounded % 60;
   return `${hours}g ${mins < 10 ? '0' : ''}${mins}`;
 }
 
@@ -121,7 +121,7 @@ export function getPeakDays(days: DayStudyStat[]): {
  * Lấy số tuần trong năm (ISO Week Number) theo mốc Thứ Hai giờ Việt Nam.
  */
 export function getIsoWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   // Đặt về ngày thứ Năm gần nhất
   const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);

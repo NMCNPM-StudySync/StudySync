@@ -38,16 +38,16 @@ export function StatsHeader({
           </h1>
         </div>
 
-        {/* Bộ điều hướng chọn tuần */}
+        {/* Bộ điều hướng chọn tuần thống nhất */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onWeekChange(weekOffset - 1)}
-            disabled={isLoading || weekOffset <= -4}
+            disabled={isLoading}
             className={[
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold',
               'border border-brand-borderDefault bg-white text-brand-slate shadow-sm',
-              'hover:bg-brand-surface/40 hover:border-brand-primary/60 transition-colors',
+              'hover:bg-brand-surface/40 hover:border-brand-primary/60 transition-colors cursor-pointer',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             ].join(' ')}
             aria-label="Xem tuần trước"
@@ -69,34 +69,21 @@ export function StatsHeader({
             Tuần trước
           </button>
 
-          <div className="flex rounded-lg border border-brand-borderDefault bg-white p-0.5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => onWeekChange(-1)}
-              disabled={isLoading}
-              className={[
-                'px-3 py-1 text-xs font-semibold rounded-md transition-colors',
-                weekOffset === -1
-                  ? 'bg-brand-surface text-brand-primary'
-                  : 'text-brand-slate hover:text-brand-navy',
-              ].join(' ')}
-            >
-              Tuần trước
-            </button>
-            <button
-              type="button"
-              onClick={() => onWeekChange(0)}
-              disabled={isLoading}
-              className={[
-                'px-3 py-1 text-xs font-semibold rounded-md transition-colors',
-                weekOffset === 0
-                  ? 'bg-brand-surface text-brand-primary'
-                  : 'text-brand-slate hover:text-brand-navy',
-              ].join(' ')}
-            >
-              Tuần hiện tại
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onWeekChange(0)}
+            disabled={isCurrentWeek || isLoading}
+            className={[
+              'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors shadow-sm',
+              isCurrentWeek
+                ? 'bg-brand-surface border-brand-primary/30 text-brand-primary cursor-default'
+                : 'bg-white border-brand-borderDefault text-brand-slate hover:bg-brand-surface/40 hover:border-brand-primary/60 hover:text-brand-primary cursor-pointer',
+              'disabled:opacity-90',
+            ].join(' ')}
+            aria-label={isCurrentWeek ? 'Đang xem tuần hiện tại' : 'Quay về tuần hiện tại'}
+          >
+            {isCurrentWeek ? 'Tuần hiện tại' : 'Về tuần hiện tại'}
+          </button>
 
           <button
             type="button"
@@ -107,7 +94,7 @@ export function StatsHeader({
               'border border-brand-borderDefault bg-white text-brand-slate shadow-sm',
               isCurrentWeek
                 ? 'opacity-40 cursor-not-allowed bg-brand-disabled/50 text-brand-muted'
-                : 'hover:bg-brand-surface/40 hover:border-brand-primary/60 transition-colors',
+                : 'hover:bg-brand-surface/40 hover:border-brand-primary/60 transition-colors cursor-pointer',
             ].join(' ')}
             aria-label="Xem tuần sau"
             title={isCurrentWeek ? 'Không thể xem tuần tương lai' : 'Xem tuần sau'}

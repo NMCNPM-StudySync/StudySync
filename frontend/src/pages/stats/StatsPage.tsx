@@ -28,15 +28,13 @@ export function StatsPage() {
   useEffect(() => {
     let isCancelled = false;
 
-    const request =
-      weekOffset === 0
-        ? apiClient.get<WeeklyStudyStatsResponse>('/statistics/weekly')
-        : apiClient.get<WeeklyStudyStatsResponse>('/statistics/weekly', {
-            params: {
-              from: getWeekBoundsWithOffset(weekOffset).from.toISOString(),
-              to: getWeekBoundsWithOffset(weekOffset).to.toISOString(),
-            },
-          });
+    const { from, to } = getWeekBoundsWithOffset(weekOffset);
+    const request = apiClient.get<WeeklyStudyStatsResponse>('/statistics/weekly', {
+      params: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+      },
+    });
 
     request
       .then((response) => {
@@ -73,6 +71,7 @@ export function StatsPage() {
     // Không cho phép xem tuần tương lai (newOffset > 0) theo U045 và TC-137
     if (newOffset > 0) return;
     setLoading(true);
+    setError(null);
     setWeekOffset(newOffset);
   };
 
@@ -95,7 +94,7 @@ export function StatsPage() {
       />
 
       {/* Hiển thị lỗi kết nối nếu có */}
-      {error && (
+      {!loading && error && (
         <div
           role="alert"
           className="flex items-center justify-between p-4 rounded-xl border border-brand-alert bg-brand-alert/40 text-brand-alertText shadow-sm"

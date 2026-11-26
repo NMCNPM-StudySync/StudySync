@@ -89,7 +89,7 @@ export function WeeklyStudyBarChart({ days, weekLabel = '' }: WeeklyStudyBarChar
                       isPeak
                         ? 'bg-brand-primary shadow-sm ring-2 ring-brand-primary/20'
                         : day.minutes > 0
-                          ? 'bg-indigo-600 group-hover:bg-indigo-500'
+                          ? 'bg-brand-slate group-hover:bg-brand-muted'
                           : 'bg-brand-borderDefault/60',
                     ].join(' ')}
                   />
