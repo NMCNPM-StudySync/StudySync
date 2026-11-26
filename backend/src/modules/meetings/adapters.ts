@@ -1,123 +1,13 @@
 /**
- * Bản cài đặt tạm của các cổng ở `ports.ts` bằng SQL trực tiếp, để TV4 chạy được trước khi
- * TV1 (#117) và TV2 (#118) merge. Chỉ chọn đúng các cột cần thiết.
+ * Bản cài đặt tạm bằng SQL trực tiếp cho cổng của TV2 ở `ports.ts`, để TV4 chạy được trước khi
+ * TV2 (#118) merge. Các cổng của TV1 (nhóm, thành viên, phân quyền) đã được thay bằng
+ * `GroupRepository`, `GroupMemberRepository` và `MembershipService` trong `modules/groups/`.
  */
 import type { Queryable } from '../../shared/base-repository';
-import { ForbiddenError, NotFoundError } from '../../shared/errors';
-import type {
-  BusyIntervalGateway,
-  BusyRow,
-  GroupGateway,
-  GroupMemberInfo,
-  GroupRole,
-  MembershipPort,
-} from './ports';
+import type { BusyIntervalGateway, BusyRow } from './ports';
 
 function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(String(value));
-}
-
-function toMemberInfo(row: Record<string, unknown>): GroupMemberInfo {
-  return {
-    userId: String(row.user_id),
-    displayName: String(row.display_name),
-    role: String(row.role) as GroupRole,
-    canOrganizeMeetings: Boolean(row.can_organize_meetings),
-    joinedAt: toDate(row.joined_at),
-  };
-}
-
-const MEMBER_COLUMNS = `gm.user_id, u.display_name, gm.role, gm.can_organize_meetings, gm.joined_at`;
-
-export class PgGroupGateway implements GroupGateway {
-  public async lockForUpdate(groupId: string, db: Queryable): Promise<boolean> {
-    const res = await db.query('SELECT id FROM groups WHERE id = $1 FOR UPDATE', [groupId]);
-    return res.rows.length > 0;
-  }
-
-  public async listMembers(groupId: string, db: Queryable): Promise<GroupMemberInfo[]> {
-    const res = await db.query(
-      `SELECT ${MEMBER_COLUMNS}
-         FROM group_members gm
-         JOIN users u ON u.id = gm.user_id
-        WHERE gm.group_id = $1
-        ORDER BY gm.joined_at ASC, gm.user_id ASC`,
-      [groupId],
-    );
-    return res.rows.map((row) => toMemberInfo(row as Record<string, unknown>));
-  }
-
-  public async setMeetingPermission(
-    groupId: string,
-    userId: string,
-    enabled: boolean,
-    db: Queryable,
-  ): Promise<GroupMemberInfo | null> {
-    const res = await db.query(
-      `WITH updated AS (
-         UPDATE group_members
-            SET can_organize_meetings = $3
-          WHERE group_id = $1 AND user_id = $2 AND role = 'member'
-        RETURNING user_id, role, can_organize_meetings, joined_at
-       )
-       SELECT up.user_id, u.display_name, up.role, up.can_organize_meetings, up.joined_at
-         FROM updated up
-         JOIN users u ON u.id = up.user_id`,
-      [groupId, userId, enabled],
-    );
-    const row = res.rows[0];
-    return row ? toMemberInfo(row as Record<string, unknown>) : null;
-  }
-}
-
-/** Kiểm tra quyền động: mỗi lần gọi đọc lại dòng `group_members` của người gọi. */
-export class PgMembershipService implements MembershipPort {
-  public async requireMember(
-    groupId: string,
-    userId: string,
-    db: Queryable,
-  ): Promise<GroupMemberInfo> {
-    const group = await db.query('SELECT id FROM groups WHERE id = $1', [groupId]);
-    if (group.rows.length === 0) {
-      throw new NotFoundError('Không tìm thấy nhóm');
-    }
-    const res = await db.query(
-      `SELECT ${MEMBER_COLUMNS}
-         FROM group_members gm
-         JOIN users u ON u.id = gm.user_id
-        WHERE gm.group_id = $1 AND gm.user_id = $2`,
-      [groupId, userId],
-    );
-    const row = res.rows[0];
-    if (!row) {
-      throw new ForbiddenError('Bạn không thuộc nhóm này');
-    }
-    return toMemberInfo(row as Record<string, unknown>);
-  }
-
-  public async requireLeader(
-    groupId: string,
-    userId: string,
-    db: Queryable,
-  ): Promise<GroupMemberInfo> {
-    const member = await this.requireMember(groupId, userId, db);
-    if (member.role !== 'leader') {
-      throw new ForbiddenError('Chỉ Trưởng nhóm mới thực hiện được thao tác này');
-    }
-    return member;
-  }
-
-  public async requireOrganizer(
-    groupId: string,
-    userId: string,
-    db: Queryable,
-  ): Promise<GroupMemberInfo> {
-    const member = await this.requireMember(groupId, userId, db);
-    if (member.role !== 'leader' && !member.canOrganizeMeetings) {
-      throw new ForbiddenError('Bạn chưa được ủy quyền tổ chức họp trong nhóm này');
-    }
-    return member;
-  }
 }
 
 /**
