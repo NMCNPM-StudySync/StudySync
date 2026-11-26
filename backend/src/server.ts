@@ -1,10 +1,20 @@
 import { createApp } from './app';
 import { closePool } from './config/db';
 import { env } from './config/env';
+import { createAuthMiddleware } from './middlewares/authenticate';
+import { AuthService } from './modules/auth/auth.service';
+import { GroupService } from './modules/groups/group.service';
 import { createMeetingsModule } from './modules/meetings/meetings.module';
 
 const meetings = createMeetingsModule();
-const app = createApp({ meetings: meetings.services });
+const auth = new AuthService();
+const groups = new GroupService();
+const app = createApp({
+  auth,
+  groups,
+  meetings: meetings.services,
+  authenticate: createAuthMiddleware(auth.verifyToken.bind(auth)),
+});
 meetings.reminderJob.start();
 
 const server = app.listen(env.port, () => {

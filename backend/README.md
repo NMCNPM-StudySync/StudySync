@@ -69,6 +69,33 @@ Bảng danh mục các biến môi trường được quản lý tập trung qua
 > - Tuyệt đối **KHÔNG commit tệp `.env`** hoặc bất kỳ chuỗi kết nối chứa mật khẩu thật lên GitHub repository.
 > - Tệp `.env` đã được cấu hình trong `.gitignore` để ngăn chặn rò rỉ mã nguồn.
 
+#### Tạo và cấu hình khóa bí mật `JWT_SECRET` (Local Secret)
+
+Backend dùng `JWT_SECRET` để ký và xác thực Access Token (JWT Bearer, thuật toán HS256). Mỗi thành viên **tự sinh một khóa riêng** cho máy local, không dùng chung khóa với môi trường production.
+
+1. Sinh chuỗi ngẫu nhiên 64 ký tự hex (32 byte):
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+   Nếu máy Windows chưa có `openssl`, dùng Node.js:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. Dán kết quả vào tệp `backend/.env` (sao chép từ `.env.example` nếu chưa có):
+
+   ```dotenv
+   JWT_SECRET=<chuỗi vừa sinh>
+   JWT_EXPIRES_IN=7d
+   ```
+
+3. Khởi động lại backend (`npm run dev`) để nhận khóa mới. Đổi khóa sẽ làm mọi token cũ mất hiệu lực, người dùng cần đăng nhập lại.
+
+> **Lưu ý:** Không hardcode khóa trong mã nguồn, không commit `.env`, không gửi khóa qua kênh công khai. Production bắt buộc có khóa tối thiểu 32 ký tự, nếu thiếu backend sẽ từ chối khởi động. Ở `development`/`test`, khi thiếu khóa backend dùng khóa dự phòng không an toàn chỉ để chạy thử.
+
 ### 2.3. Quản lý Cơ sở dữ liệu Đám mây Supabase
 
 - **Độ trễ và khu vực:** Dự án CSDL đặt tại Singapore (`ap-southeast-1`), độ trễ kết nối từ Việt Nam `< 50ms`.
