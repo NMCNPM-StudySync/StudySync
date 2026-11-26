@@ -53,7 +53,7 @@ export function CreateProposalModal({
   defaultDurationMinutes,
   onSubmit,
 }: CreateProposalModalProps) {
-  const defaults = getInitialDateTime(initialSlot, defaultDurationMinutes);
+  const [defaults] = useState(() => getInitialDateTime(initialSlot, defaultDurationMinutes));
 
   const [title, setTitle] = useState('');
   const [dateKey, setDateKey] = useState(defaults.dateKey);
@@ -69,16 +69,34 @@ export function CreateProposalModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const invitees = members.filter((m) => m.userId !== currentUserId);
-  const busyNameSet = new Set((initialSlot?.busyMembers ?? []).map((b) => b.displayName));
-  const busyCount = initialSlot?.busyMembers.length ?? 0;
+  const currentStartsAt = vnDateTimeToUtcIso(dateKey, startTime);
+  const currentEndsAt = vnDateTimeToUtcIso(dateKey, endTime);
+
+  // Chỉ dùng trạng thái Rảnh/Bận từ initialSlot khi ngày giờ đang nhập khớp đúng khung đã chọn
+  const matchesInitialSlot =
+    initialSlot !== null &&
+    currentStartsAt !== null &&
+    currentEndsAt !== null &&
+    new Date(currentStartsAt).getTime() === new Date(initialSlot.startsAt).getTime() &&
+    new Date(currentEndsAt).getTime() === new Date(initialSlot.endsAt).getTime();
+
+  const busyNameSet = new Set(
+    matchesInitialSlot ? initialSlot.busyMembers.map((b) => b.displayName) : [],
+  );
+  const busyCount = matchesInitialSlot ? initialSlot.busyMembers.length : 0;
 
   const titleCheck = validateMeetingTitle(title);
 
+  const summaryTimeLabel =
+    currentStartsAt && currentEndsAt
+      ? formatSlotTimeVn(currentStartsAt, currentEndsAt)
+      : `${startTime || '--:--'} - ${endTime || '--:--'} · ${dateKey || 'Chưa chọn ngày'}`;
+
   const durationLabel = (() => {
-    const startIso = vnDateTimeToUtcIso(dateKey, startTime);
-    const endIso = vnDateTimeToUtcIso(dateKey, endTime);
-    if (!startIso || !endIso) return null;
-    const mins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60_000);
+    if (!currentStartsAt || !currentEndsAt) return null;
+    const mins = Math.round(
+      (new Date(currentEndsAt).getTime() - new Date(currentStartsAt).getTime()) / 60_000,
+    );
     return mins > 0 ? `${mins} phút` : null;
   })();
 
@@ -94,17 +112,15 @@ export function CreateProposalModal({
       return;
     }
 
-    const startsAt = vnDateTimeToUtcIso(dateKey, startTime);
-    const endsAt = vnDateTimeToUtcIso(dateKey, endTime);
-    if (!startsAt || !endsAt) {
+    if (!currentStartsAt || !currentEndsAt) {
       setTimeError('Vui lòng chọn đầy đủ ngày, giờ bắt đầu và giờ kết thúc hợp lệ');
       return;
     }
-    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    if (new Date(currentEndsAt).getTime() <= new Date(currentStartsAt).getTime()) {
       setTimeError('Giờ kết thúc phải sau giờ bắt đầu');
       return;
     }
-    if (new Date(startsAt).getTime() <= Date.now()) {
+    if (new Date(currentStartsAt).getTime() <= Date.now()) {
       setTimeError('Khung giờ đã qua');
       return;
     }
@@ -117,8 +133,8 @@ export function CreateProposalModal({
     try {
       await onSubmit({
         title: validatedTitle.normalized,
-        startsAt,
-        endsAt,
+        startsAt: currentStartsAt,
+        endsAt: currentEndsAt,
         location: location.trim() ? location.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
       });
@@ -162,14 +178,10 @@ export function CreateProposalModal({
       }
     >
       <form id="create-proposal-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {/* Hộp tóm tắt khung giờ đang chọn (khớp Figma Gửi lời mời họp) */}
+        {/* Hộp tóm tắt khung giờ đang nhập (luôn khớp ngày giờ hiện tại trong form) */}
         <div className="rounded-xl border border-brand-borderDefault bg-brand-bg/60 p-4">
           <p className="text-sm font-bold text-brand-navy">{groupName}</p>
-          <p className="mt-1 text-sm font-bold text-brand-primary">
-            {initialSlot
-              ? formatSlotTimeVn(initialSlot.startsAt, initialSlot.endsAt)
-              : `${startTime} - ${endTime} · ${dateKey}`}
-          </p>
+          <p className="mt-1 text-sm font-bold text-brand-primary">{summaryTimeLabel}</p>
           {durationLabel && (
             <p className="mt-1 text-xs text-brand-muted">Thời lượng: {durationLabel} (UTC+7)</p>
           )}
@@ -214,6 +226,7 @@ export function CreateProposalModal({
             onChange={(e) => {
               setDateKey(e.target.value);
               setTimeError(undefined);
+              setSubmitError(null);
             }}
             required
           />
@@ -225,6 +238,7 @@ export function CreateProposalModal({
             onChange={(e) => {
               setStartTime(e.target.value);
               setTimeError(undefined);
+              setSubmitError(null);
             }}
             required
           />
@@ -236,6 +250,7 @@ export function CreateProposalModal({
             onChange={(e) => {
               setEndTime(e.target.value);
               setTimeError(undefined);
+              setSubmitError(null);
             }}
             required
           />
@@ -268,12 +283,17 @@ export function CreateProposalModal({
           />
         </div>
 
-        {/* Danh sách nhận lời mời (toàn bộ thành viên còn lại của nhóm, chỉ hiện displayName & trạng thái Rảnh/Bận theo BR-02) */}
+        {/* Danh sách nhận lời mời (chỉ hiện Rảnh/Bận khi khớp khung đã tìm, BR-02) */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-brand-navy">Danh sách nhận lời mời</span>
             <span className="text-xs text-brand-muted">{invitees.length} thành viên</span>
           </div>
+          {!matchesInitialSlot && (
+            <p className="text-xs text-brand-muted">
+              Khung giờ tùy chọn — chưa kiểm tra trạng thái bận/rảnh của từng thành viên.
+            </p>
+          )}
           <ul className="divide-y divide-brand-borderDefault/50 rounded-xl border border-brand-borderDefault/70 bg-white">
             {invitees.map((member) => {
               const isBusy = busyNameSet.has(member.displayName);
@@ -288,17 +308,19 @@ export function CreateProposalModal({
                     </span>
                     <span className="font-medium text-brand-navy">{member.displayName}</span>
                   </div>
-                  <Badge variant={isBusy ? 'warning' : 'success'}>
-                    {isBusy ? 'Bận' : 'Lịch trống'}
-                  </Badge>
+                  {matchesInitialSlot && (
+                    <Badge variant={isBusy ? 'neutral' : 'success'}>
+                      {isBusy ? 'Bận' : 'Lịch trống'}
+                    </Badge>
+                  )}
                 </li>
               );
             })}
           </ul>
         </div>
 
-        {/* Cảnh báo khung có thành viên bận (U032 3c) */}
-        {busyCount > 0 && (
+        {/* Cảnh báo khung có thành viên bận (U032 3c — chỉ hiện khi khớp khung đã tìm có người bận) */}
+        {matchesInitialSlot && busyCount > 0 && (
           <div className="rounded-xl border border-brand-warningText/25 bg-brand-warning p-3 text-xs text-brand-warningText">
             <p className="font-semibold">
               Lưu ý: {busyCount} thành viên có thể bị trùng lịch cá nhân trong khung giờ này.

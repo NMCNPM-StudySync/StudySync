@@ -20,6 +20,7 @@ export interface ProposalDetailModalProps {
   detail: ProposalDetail | null;
   isLoading: boolean;
   error: string | null;
+  respondError?: string | null;
   currentUserId: string;
   isOrganizer: boolean;
   onChooseOtherSlot: () => void;
@@ -69,17 +70,21 @@ export function ProposalDetailModal({
   detail,
   isLoading,
   error,
+  respondError = null,
   currentUserId,
   isOrganizer,
   onChooseOtherSlot,
   onRespond,
   isResponding = false,
 }: ProposalDetailModalProps) {
+  const [nowMs] = useState(() => Date.now());
+
   const myMemberRow: ProposalMember | undefined = detail?.members.find(
     (m) => m.userId === currentUserId && !m.isOrganizer && m.invitationId !== null,
   );
 
-  const [nowMs] = useState(() => Date.now());
+  const isReplacedAndNotFull =
+    detail !== null && detail.replacedByProposalId !== null && detail.summary?.state !== 'full';
 
   const canRespondSelf =
     detail !== null &&
@@ -87,6 +92,7 @@ export function ProposalDetailModal({
     myMemberRow.invitationId !== null &&
     myMemberRow.status !== 'superseded' &&
     detail.status === 'open' &&
+    !isReplacedAndNotFull &&
     new Date(detail.startsAt).getTime() > nowMs;
 
   const stateMeta = detail?.summary
@@ -159,6 +165,15 @@ export function ProposalDetailModal({
         </div>
       ) : !detail ? null : (
         <div className="space-y-4">
+          {respondError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-brand-alertText/30 bg-brand-alert px-3.5 py-2.5 text-xs font-medium text-brand-alertText"
+            >
+              {respondError}
+            </div>
+          )}
+
           {/* Thông tin thời gian & địa điểm (khớp Figma Node 183:1592) */}
           <div className="space-y-1.5 text-sm">
             <p className="font-semibold text-brand-primary">
