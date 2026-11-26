@@ -134,6 +134,58 @@ Hai điểm bảo mật bắt buộc theo `api.md`:
 
 Đăng nhập sai không khóa tài khoản trong v0.1. Giới hạn số lần thử (rate limit) là đề xuất ngoài phạm vi, ghi ở 4.1.8.
 
+
+#### 4.1.3.3. Sơ đồ tuần tự (Hình 4.1 trong Báo cáo M3)
+
+Đồng bộ với mục 4.1 của `docs/m3/0-M3-StudySync.md`. JWT chỉ chứa `sub`, `iat`, `exp` (quyết định 3 ở 4.1.0); khi không có người dùng vẫn so khớp với `DUMMY_HASH`.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+autonumber
+actor ND as Sinh viên
+participant FE as Frontend
+participant API as API
+participant SVC as AuthService
+participant DB as CSDL
+ND->>FE: Nhập email, mật khẩu và bấm Đăng nhập
+FE->>FE: Kiểm tra sơ bộ email hợp lệ và mật khẩu không rỗng
+FE->>API: POST /api/auth/login (email, password)
+activate API
+API->>API: Kiểm tra định dạng chuỗi của email và password
+alt Thiếu email hoặc mật khẩu, hoặc email sai định dạng
+API-->>FE: 400 VALIDATION_ERROR
+FE-->>ND: Báo lỗi yêu cầu nhập đầy đủ email và mật khẩu hợp lệ
+else Dữ liệu đầu vào hợp lệ
+API->>SVC: Yêu cầu đăng nhập (email, password)
+activate SVC
+Note over SVC: Chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
+SVC->>DB: SELECT id, email, password_hash, display_name, created_at FROM users WHERE email = lower(btrim($1))
+activate DB
+DB-->>SVC: Bản ghi người dùng (hoặc null nếu không tìm thấy)
+deactivate DB
+alt Email không tồn tại hoặc mật khẩu sai
+Note over SVC: Không có user thì so khớp với DUMMY_HASH (cost 10); bcrypt.compare() luôn chạy nên thời gian xử lý tương đương
+SVC-->>API: Lỗi xác thực người dùng (UNAUTHORIZED)
+deactivate SVC
+API-->>FE: 401 UNAUTHORIZED { message: "Email hoặc mật khẩu không chính xác" }
+FE-->>ND: Hiển thị thông báo Email hoặc mật khẩu không chính xác
+else Thông tin đăng nhập chính xác
+activate SVC
+Note over SVC: bcrypt.compare() khớp, tạo JWT hiệu lực 7 ngày, expiresAt theo UTC (BR-07)
+SVC->>SVC: Ký JWT HS256 chứa sub (userId), iat, exp bằng JWT_SECRET (không chứa email)
+SVC-->>API: Dữ liệu token, expiresAt và thông tin user
+deactivate SVC
+API-->>FE: 200 OK { data: { token, expiresAt, user } }
+FE->>FE: Lưu token vào storage trình duyệt và cập nhật trạng thái đăng nhập
+FE-->>ND: Chuyển hướng người dùng vào màn hình chính
+end
+end
+deactivate API
+```
+
+Hình 4.1: Sơ đồ tuần tự đăng nhập (U002)
+
 ---
 
 ### 4.1.4. Thuật toán sinh và kiểm tra JWT, bảo vệ private route
@@ -354,6 +406,111 @@ flowchart TD
 - **Idempotent**: mở liên kết nhiều lần chỉ có một dòng thành viên nhờ `ON CONFLICT DO NOTHING` và `uq_group_members_group_id_user_id`. Người đã là Trưởng nhóm mở lại liên kết **không bị hạ** thành `member`.
 - **Khóa `FOR SHARE`** trên `groups`: nếu thành viên cuối vừa rời và nhóm bị xóa, trả 404 thay vì lỗi khóa ngoại 500.
 - Tham gia nhóm không làm lộ lịch riêng tư: API nhóm chỉ trả khoảng bận/rảnh (BR-02).
+
+#### 4.1.6.3b. Sơ đồ tuần tự (Hình 4.2 trong Báo cáo M3)
+
+Đồng bộ với mục 4.1 của `docs/m3/0-M3-StudySync.md`. Giai đoạn xác nhận dùng `FOR SHARE` trên `groups` và `INSERT ... ON CONFLICT DO NOTHING` như lưu đồ ở trên.
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+sequenceDiagram
+autonumber
+actor ND as Sinh viên
+participant FE as Frontend
+participant API as API
+participant SVC as GroupService
+participant DB as CSDL
+Note over ND,DB: Giai đoạn 1 - Xem thông tin nhóm trước khi tham gia (Công khai)
+ND->>FE: Mở liên kết mời chứa mã token trên trình duyệt
+FE->>API: GET /api/invitations/{token}
+activate API
+API->>SVC: Yêu cầu kiểm tra liên kết mời (token)
+activate SVC
+SVC->>DB: SELECT g.id AS group_id, g.name AS group_name, i.expires_at FROM invitation_links i JOIN groups g ON g.id = i.group_id WHERE i.token = $1 AND i.expires_at > now()
+activate DB
+DB-->>SVC: Thông tin nhóm và hạn liên kết (hoặc null nếu hết hạn/không tồn tại)
+deactivate DB
+alt Mã mời không tồn tại hoặc đã quá hạn 7 ngày
+SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
+deactivate SVC
+API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+deactivate API
+FE-->>ND: Hiển thị thông báo liên kết không tồn tại hoặc đã hết hạn
+else Mã mời hợp lệ và còn hiệu lực
+activate API
+activate SVC
+SVC-->>API: Trả về groupName và expiresAt (không để lộ thành viên)
+deactivate SVC
+API-->>FE: 200 OK { data: { groupName, expiresAt } }
+deactivate API
+FE-->>ND: Hiển thị trang xác nhận tham gia nhóm (Tên nhóm, Hạn liên kết)
+end
+Note over ND,DB: Giai đoạn 2 - Xác nhận tham gia nhóm (Đã đăng nhập)
+ND->>FE: Bấm nút Tham gia nhóm trên giao diện
+FE->>API: POST /api/invitations/{token}/join (Authorization: Bearer <token>)
+activate API
+API->>API: Xác thực JWT token của người dùng
+alt Người dùng chưa đăng nhập hoặc token không hợp lệ
+API-->>FE: 401 UNAUTHORIZED
+deactivate API
+FE-->>ND: Yêu cầu đăng nhập trước khi tiếp tục
+else Đã xác thực thành công (lấy được currentUserId)
+activate API
+API->>SVC: Xử lý tham gia nhóm (token, currentUserId)
+activate SVC
+SVC->>DB: SELECT g.id AS group_id, g.name AS group_name, i.expires_at FROM invitation_links i JOIN groups g ON g.id = i.group_id WHERE i.token = $1 AND i.expires_at > now()
+activate DB
+DB-->>SVC: Thông tin nhóm (hoặc null nếu liên kết đã hết hạn)
+deactivate DB
+alt Liên kết vừa hết hạn hoặc không còn hiệu lực
+SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
+deactivate SVC
+API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+deactivate API
+FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
+else Liên kết còn hiệu lực
+activate API
+activate SVC
+SVC->>DB: SELECT id FROM groups WHERE id = $1 FOR SHARE
+activate DB
+DB-->>SVC: Dòng nhóm (hoặc null nếu nhóm vừa bị xóa)
+deactivate DB
+alt Nhóm vừa bị xóa
+SVC-->>API: Lỗi nhóm không còn (NOT_FOUND)
+deactivate SVC
+API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+deactivate API
+FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
+else Nhóm còn tồn tại
+activate API
+activate SVC
+Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
+SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now()) ON CONFLICT (group_id, user_id) DO NOTHING RETURNING user_id
+activate DB
+DB-->>SVC: Dòng mới (hoặc rỗng nếu đã là thành viên)
+deactivate DB
+alt Không chèn được dòng mới (đã là thành viên từ trước)
+Note over SVC,API: Giữ nguyên vai trò (kể cả Trưởng nhóm), báo thành công kèm cờ alreadyMember
+SVC-->>API: Thông tin nhóm và alreadyMember = true
+deactivate SVC
+API-->>FE: 200 OK { data: { group, alreadyMember: true } }
+deactivate API
+FE-->>ND: Hiển thị Bạn đã là thành viên của nhóm này và mở nhóm
+else Chèn được dòng thành viên mới
+activate API
+activate SVC
+SVC-->>API: Thông tin nhóm và alreadyMember = false
+deactivate SVC
+API-->>FE: 201 CREATED { data: { group, alreadyMember: false } }
+deactivate API
+FE-->>ND: Thông báo tham gia thành công và mở không gian làm việc của nhóm
+end
+end
+end
+end
+```
+
+Hình 4.2: Sơ đồ tuần tự tham gia nhóm bằng liên kết mời (U005)
 
 #### 4.1.6.4. Chuyển quyền và rời nhóm (US-07)
 
