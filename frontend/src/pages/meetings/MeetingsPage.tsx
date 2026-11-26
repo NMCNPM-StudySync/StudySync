@@ -41,6 +41,13 @@ import {
 } from '../../utils/meetings-helpers';
 import { formatVietnamDateTime } from '../../utils/vietnam-time';
 
+function formatReminderLeadLabel(leadMinutes: number): string {
+  if (leadMinutes >= 60 && leadMinutes % 60 === 0) {
+    return `Nhắc trước ${leadMinutes / 60} giờ`;
+  }
+  return `Nhắc trước ${leadMinutes} phút`;
+}
+
 export function MeetingsPage() {
   const { id: routeGroupId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -83,6 +90,7 @@ export function MeetingsPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [respondError, setRespondError] = useState<string | null>(null);
   const [isRespondingDetail, setIsRespondingDetail] = useState(false);
   const [respondingInvitation, setRespondingInvitation] = useState<MyInvitation | null>(null);
   const [toastMessage, setToastMessage] = useState<{
@@ -167,9 +175,9 @@ export function MeetingsPage() {
         setProposals(proposalsRes.data.proposals);
         setMyInvitations(invitationsRes.data.invitations);
 
-        // Nhắc việc cá nhân (không chặn hiển thị trang chính nếu lỗi)
+        // Nhắc việc cá nhân đã gửi theo bảng thông báo U035 trong docs/api.md
         meetingsApi
-          .listMyReminders({ limit: 5 })
+          .listMyReminders({ isSent: true, limit: 5 })
           .then((remRes) => setReminders(remRes.data.reminders))
           .catch(() => setReminders([]));
 
@@ -274,16 +282,23 @@ export function MeetingsPage() {
   const handleCreateProposal = async (payload: CreateProposalRequest) => {
     if (!resolvedGroupId) return;
     const res = await meetingsApi.createMeetingProposal(resolvedGroupId, payload);
-    setToastMessage({
-      type: 'success',
-      text: `Đã tạo đề xuất "${res.data.title}" và gửi lời mời đến ${res.data.invitationsSent} thành viên.`,
-    });
-    const [proposalsRes, invitationsRes] = await Promise.all([
-      meetingsApi.listMeetingProposals(resolvedGroupId, 50),
-      meetingsApi.listMyMeetingInvitations(),
-    ]);
-    setProposals(proposalsRes.data.proposals);
-    setMyInvitations(invitationsRes.data.invitations);
+    try {
+      const [proposalsRes, invitationsRes] = await Promise.all([
+        meetingsApi.listMeetingProposals(resolvedGroupId, 50),
+        meetingsApi.listMyMeetingInvitations(),
+      ]);
+      setProposals(proposalsRes.data.proposals);
+      setMyInvitations(invitationsRes.data.invitations);
+      setToastMessage({
+        type: 'success',
+        text: `Đã tạo đề xuất "${res.data.title}" và gửi lời mời đến ${res.data.invitationsSent} thành viên.`,
+      });
+    } catch {
+      setToastMessage({
+        type: 'error',
+        text: `Đã tạo đề xuất "${res.data.title}" (${res.data.invitationsSent} lời mời), nhưng chưa tải lại được danh sách cuộc họp. Vui lòng tải lại trang.`,
+      });
+    }
   };
 
   const handleOpenProposalDetail = async (proposalId: string) => {
@@ -291,6 +306,7 @@ export function MeetingsPage() {
     setIsDetailModalOpen(true);
     setIsLoadingDetail(true);
     setDetailError(null);
+    setRespondError(null);
     setActiveProposalDetail(null);
     try {
       const res = await meetingsApi.getMeetingProposalDetail(resolvedGroupId, proposalId);
@@ -308,6 +324,7 @@ export function MeetingsPage() {
     response: InvitationResponse,
   ) => {
     if (!resolvedGroupId) return;
+    setRespondError(null);
     setIsRespondingDetail(true);
     try {
       await meetingsApi.respondMeetingInvitation(
@@ -321,16 +338,22 @@ export function MeetingsPage() {
         text:
           response === 'accepted' ? 'Đã xác nhận tham gia buổi họp.' : 'Đã từ chối lời mời họp.',
       });
-      const [detailRes, proposalsRes, invitationsRes] = await Promise.all([
-        meetingsApi.getMeetingProposalDetail(resolvedGroupId, proposalId),
-        meetingsApi.listMeetingProposals(resolvedGroupId, 50),
-        meetingsApi.listMyMeetingInvitations(),
-      ]);
-      setActiveProposalDetail(detailRes.data);
-      setProposals(proposalsRes.data.proposals);
-      setMyInvitations(invitationsRes.data.invitations);
+      try {
+        const [detailRes, proposalsRes, invitationsRes] = await Promise.all([
+          meetingsApi.getMeetingProposalDetail(resolvedGroupId, proposalId),
+          meetingsApi.listMeetingProposals(resolvedGroupId, 50),
+          meetingsApi.listMyMeetingInvitations(),
+        ]);
+        setActiveProposalDetail(detailRes.data);
+        setProposals(proposalsRes.data.proposals);
+        setMyInvitations(invitationsRes.data.invitations);
+      } catch {
+        setRespondError(
+          'Đã ghi nhận phản hồi, nhưng chưa tải lại được dữ liệu mới nhất. Vui lòng đóng và mở lại.',
+        );
+      }
     } catch (err: unknown) {
-      setDetailError(err instanceof ApiError ? err.message : 'Không thể cập nhật phản hồi');
+      setRespondError(err instanceof ApiError ? err.message : 'Không thể cập nhật phản hồi');
     } finally {
       setIsRespondingDetail(false);
     }
@@ -1061,7 +1084,7 @@ export function MeetingsPage() {
                           </span>
                           <span className="font-medium text-brand-navy">{member.displayName}</span>
                         </div>
-                        <Badge variant={isBusy ? 'warning' : 'success'}>
+                        <Badge variant={isBusy ? 'neutral' : 'success'}>
                           {isBusy ? 'Bận' : 'Rảnh'}
                         </Badge>
                       </li>
@@ -1166,8 +1189,8 @@ export function MeetingsPage() {
             </div>
             {reminders.length === 0 ? (
               <p className="mt-2 text-xs text-brand-muted">
-                Không có nhắc việc cá nhân nào trong 7 ngày tới. Hệ thống tự nhắc trước 24 giờ và 1
-                giờ hạn chót.
+                Chưa có thông báo nhắc việc nào được gửi trong 7 ngày qua. Hệ thống tự nhắc trước 24
+                giờ và 1 giờ hạn chót.
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
@@ -1179,7 +1202,7 @@ export function MeetingsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-bold text-brand-navy">{rem.taskTitle}</p>
                       <Badge variant={rem.leadMinutes <= 60 ? 'danger' : 'warning'}>
-                        {rem.leadMinutes <= 60 ? 'Còn 1 giờ' : 'Còn 24 giờ'}
+                        {formatReminderLeadLabel(rem.leadMinutes)}
                       </Badge>
                     </div>
                     <p className="mt-1 text-[11px] text-brand-muted">
@@ -1215,6 +1238,7 @@ export function MeetingsPage() {
           detail={activeProposalDetail}
           isLoading={isLoadingDetail}
           error={detailError}
+          respondError={respondError}
           currentUserId={user?.id ?? ''}
           isOrganizer={isOrganizer}
           onChooseOtherSlot={() => {

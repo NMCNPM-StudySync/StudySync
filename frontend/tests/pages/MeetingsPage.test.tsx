@@ -1,3 +1,4 @@
+import { AvailabilityHeatmap } from '../../src/components/meetings/AvailabilityHeatmap';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -400,5 +401,303 @@ describe('MeetingsPage (TV4)', () => {
     renderMeetingsPage();
     expect(await screen.findByText('Không thể tải dữ liệu họp nhóm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+  });
+
+  it('đổi giờ trong modal Gửi lời mời: cập nhật giờ tóm tắt, ẩn nhãn Rảnh/Bận và bỏ yêu cầu xác nhận bận', async () => {
+    mockedApi.searchMeetingSlots.mockResolvedValueOnce({
+      data: {
+        allFreeSlots: [],
+        partialSlots: [
+          {
+            startsAt: futureIso(2, 9), // 16:00 VN
+            endsAt: futureIso(2, 10), // 17:00 VN
+            availableCount: 2,
+            totalMembers: 3,
+            busyMembers: [{ displayName: 'Huỳnh Nhi' }],
+            score: 72.5,
+            rank: 1,
+          },
+        ],
+      },
+      warnings: [],
+    });
+    mockedApi.createMeetingProposal.mockResolvedValueOnce({
+      data: {
+        id: 'p-custom-time',
+        groupId: GROUP_ID,
+        organizerUserId: LEADER_ID,
+        title: 'Họp đổi giờ',
+        startsAt: futureIso(2, 12),
+        endsAt: futureIso(2, 13),
+        status: 'open',
+        location: null,
+        notes: null,
+        invitationsSent: 2,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      warnings: [],
+    });
+
+    renderMeetingsPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Gửi lời mời họp' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('16:00 - 17:00', { exact: false })).toBeInTheDocument();
+    expect(within(dialog).getByText('Bận')).toBeInTheDocument();
+    expect(within(dialog).getByText('Lịch trống')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/1 thành viên có thể bị trùng lịch cá nhân/i),
+    ).toBeInTheDocument();
+
+    // Sửa sang 19:00–20:00 VN
+    fireEvent.change(within(dialog).getByLabelText(/Giờ bắt đầu/i), { target: { value: '19:00' } });
+    fireEvent.change(within(dialog).getByLabelText(/Giờ kết thúc/i), {
+      target: { value: '20:00' },
+    });
+
+    expect(within(dialog).getByText('19:00 - 20:00', { exact: false })).toBeInTheDocument();
+    expect(within(dialog).queryByText('Bận')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Lịch trống')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/có thể bị trùng lịch cá nhân/i)).not.toBeInTheDocument();
+
+    // Có thể gửi ngay không cần tích xác nhận bận
+    fireEvent.change(within(dialog).getByLabelText(/Tiêu đề/i), {
+      target: { value: 'Họp đổi giờ' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận gửi lời mời' }));
+
+    await waitFor(() => {
+      expect(mockedApi.createMeetingProposal).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('mở Tạo cuộc họp tùy chọn (không có khung): không hiện nhãn Lịch trống cho thành viên', async () => {
+    mockedApi.searchMeetingSlots.mockResolvedValueOnce({
+      data: { allFreeSlots: [], partialSlots: [] },
+      warnings: [],
+    });
+
+    renderMeetingsPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo cuộc họp tùy chọn' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByText('Lịch trống')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Bận')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/chưa kiểm tra trạng thái bận\/rảnh/i)).toBeInTheDocument();
+  });
+
+  it('POST tạo đề xuất 201 nhưng tải lại danh sách lỗi: vẫn đóng modal và không báo lỗi gửi', async () => {
+    mockedApi.createMeetingProposal.mockResolvedValueOnce({
+      data: {
+        id: 'p-created',
+        groupId: GROUP_ID,
+        organizerUserId: LEADER_ID,
+        title: 'Họp Sprint 2',
+        startsAt: futureIso(2, 2),
+        endsAt: futureIso(2, 3),
+        status: 'open',
+        location: null,
+        notes: null,
+        invitationsSent: 2,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      warnings: [],
+    });
+
+    renderMeetingsPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Gửi lời mời họp' }));
+
+    // Lần reload sau khi POST thành công bị lỗi mạng
+    mockedApi.listMeetingProposals.mockRejectedValueOnce(
+      new ApiError('Mất kết nối tạm thời', 500, 'INTERNAL_ERROR'),
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(/Tiêu đề/i), {
+      target: { value: 'Họp Sprint 2' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận gửi lời mời' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(
+      await screen.findByText(/Đã tạo đề xuất "Họp Sprint 2".*chưa tải lại được danh sách/i),
+    ).toBeInTheDocument();
+  });
+
+  it('phản hồi trong modal chi tiết bị 409: vẫn giữ nguyên thông tin buổi họp và danh sách thành viên', async () => {
+    const proposalItem: ProposalListItem = {
+      id: 'p-409',
+      organizerUserId: LEADER_ID,
+      organizerDisplayName: 'Trung Kiên',
+      title: 'Họp rà soát API',
+      startsAt: futureIso(3, 12),
+      endsAt: futureIso(3, 13),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+      replacedByProposalId: null,
+      viewScope: 'self',
+      summary: null,
+      declinedMembers: null,
+    };
+    const detail: ProposalDetail = {
+      ...proposalItem,
+      groupId: GROUP_ID,
+      location: 'Phòng C42',
+      notes: null,
+      updatedAt: new Date().toISOString(),
+      members: [
+        {
+          userId: MEMBER_ID,
+          displayName: 'Huỳnh Nhi',
+          isOrganizer: false,
+          invitationId: 'inv-409',
+          status: 'pending',
+          respondedAt: null,
+        },
+      ],
+    };
+
+    mockedApi.getGroupDetail.mockResolvedValueOnce({
+      data: { ...sampleGroupDetail, myRole: 'member' },
+      warnings: [],
+    });
+    mockedApi.listMeetingProposals.mockResolvedValueOnce({
+      data: { proposals: [proposalItem] },
+      warnings: [],
+    });
+    mockedApi.getMeetingProposalDetail.mockResolvedValueOnce({
+      data: detail,
+      warnings: [],
+    });
+    mockedApi.respondMeetingInvitation.mockRejectedValueOnce(
+      new ApiError('Lời mời đã hết hiệu lực', 409, 'CONFLICT'),
+    );
+
+    renderMeetingsPage(`/groups/${GROUP_ID}/meetings`, MEMBER_ID);
+    const viewButtons = await screen.findAllByRole('button', { name: /Xem phản hồi/i });
+    fireEvent.click(viewButtons[0]!);
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận tham gia' }));
+
+    expect(await within(dialog).findByText('Lời mời đã hết hiệu lực')).toBeInTheDocument();
+    // Thông tin buổi họp và thành viên vẫn còn nguyên, không bị detailError che mất
+    expect(within(dialog).getByText('Phòng C42')).toBeInTheDocument();
+    expect(within(dialog).getByText('Huỳnh Nhi')).toBeInTheDocument();
+  });
+
+  it('ẩn nút phản hồi trong modal chi tiết khi đề xuất đã bị thay thế mà chưa Đủ người', async () => {
+    const proposalItem: ProposalListItem = {
+      id: 'p-old',
+      organizerUserId: LEADER_ID,
+      organizerDisplayName: 'Trung Kiên',
+      title: 'Họp cũ đã bị thay',
+      startsAt: futureIso(3, 12),
+      endsAt: futureIso(3, 13),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+      replacedByProposalId: 'p-new',
+      viewScope: 'self',
+      summary: null,
+      declinedMembers: null,
+    };
+    const detail: ProposalDetail = {
+      ...proposalItem,
+      groupId: GROUP_ID,
+      location: null,
+      notes: null,
+      updatedAt: new Date().toISOString(),
+      members: [
+        {
+          userId: MEMBER_ID,
+          displayName: 'Huỳnh Nhi',
+          isOrganizer: false,
+          invitationId: 'inv-old',
+          status: 'accepted',
+          respondedAt: new Date().toISOString(),
+        },
+      ],
+    };
+
+    mockedApi.getGroupDetail.mockResolvedValueOnce({
+      data: { ...sampleGroupDetail, myRole: 'member' },
+      warnings: [],
+    });
+    mockedApi.listMeetingProposals.mockResolvedValueOnce({
+      data: { proposals: [proposalItem] },
+      warnings: [],
+    });
+    mockedApi.getMeetingProposalDetail.mockResolvedValueOnce({
+      data: detail,
+      warnings: [],
+    });
+
+    renderMeetingsPage(`/groups/${GROUP_ID}/meetings`, MEMBER_ID);
+    const viewButtons = await screen.findAllByRole('button', { name: /Xem phản hồi/i });
+    fireEvent.click(viewButtons[0]!);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Huỳnh Nhi')).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('button', { name: 'Xác nhận tham gia' }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Từ chối' })).not.toBeInTheDocument();
+  });
+
+  it('gọi nhắc việc với isSent=true, hiển thị nhãn Nhắc trước và vẽ đủ 20 cột ngày trên Heatmap', async () => {
+    mockedApi.listMyReminders.mockResolvedValueOnce({
+      data: {
+        reminders: [
+          {
+            id: 'rem-1',
+            taskId: 't-1',
+            taskTitle: 'Nộp báo cáo M3',
+            taskDueAt: futureIso(2, 10),
+            remindAt: futureIso(1, 10),
+            isSent: true,
+            leadMinutes: 1440,
+          },
+        ],
+      },
+      warnings: [],
+    });
+
+    const { unmount } = renderMeetingsPage();
+    expect(await screen.findByText('Nhắc trước 24 giờ')).toBeInTheDocument();
+    expect(mockedApi.listMyReminders).toHaveBeenCalledWith({ isSent: true, limit: 5 });
+    unmount();
+
+    render(
+      <AvailabilityHeatmap
+        fromDateKey="2026-11-01"
+        toDateKey="2026-11-20"
+        totalMembers={3}
+        allFreeSlots={[
+          {
+            startsAt: '2026-11-18T02:00:00.000Z',
+            endsAt: '2026-11-18T03:00:00.000Z',
+            availableCount: 3,
+            totalMembers: 3,
+            busyMembers: [],
+            score: 95,
+            rank: 1,
+          },
+        ]}
+        partialSlots={[]}
+        selectedSlot={null}
+        onSelectSlot={vi.fn()}
+      />,
+    );
+
+    const table = screen.getByRole('table', { name: /Bản đồ nhiệt giờ rảnh chung của nhóm/i });
+    // 1 cột Giờ + 20 cột ngày (01/11 -> 20/11)
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(21);
+    expect(
+      within(table).getByRole('button', { name: /18\/11 lúc 09:00, 3\/3 thành viên rảnh/i }),
+    ).toBeInTheDocument();
   });
 });
