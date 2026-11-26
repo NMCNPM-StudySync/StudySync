@@ -15,4 +15,5 @@
 - [Chiến lược kiểm thử hệ thống](./testing/strategy.md) - Phạm vi, phân tầng, công cụ, ma trận kiểm thử BR-01 đến BR-08 và kịch bản tích hợp liên module (M3 / M5).
 - [Thiết kế giải thuật xếp lịch TV3 (Scheduler Engine)](./scheduler-algorithm.md)
 - [Thiết kế giải thuật tìm giờ họp chung và nhắc việc TV4 (Meeting Slot Finder)](./meeting-slot-algorithm.md)
+- [Báo cáo M3 - Phân tích thiết kế hệ thống](./m3/0-M3-StudySync.md) - Bản đầy đủ chuyển từ Gist (issue #125), ảnh mục 6 ở `m3/images/`.
 
