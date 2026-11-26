@@ -18,6 +18,7 @@ export interface CreateFixedEventDto {
   source?: FixedEventSource;
   recurringRuleId?: string | null;
   importedFileId?: string | null;
+  isRecurring?: boolean;
 }
 
 export interface UpdateFixedEventDto {
@@ -27,11 +28,61 @@ export interface UpdateFixedEventDto {
   endsAt?: Date | string;
   location?: string | null;
   notes?: string | null;
+  isRecurring?: boolean;
+}
+
+const VN_WEEKDAY_CODES: Record<string, string> = {
+  Sun: 'SU',
+  Mon: 'MO',
+  Tue: 'TU',
+  Wed: 'WE',
+  Thu: 'TH',
+  Fri: 'FR',
+  Sat: 'SA',
+};
+
+function getVietnamWeekdayCode(date: Date): string {
+  const shortDay = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    weekday: 'short',
+  }).format(date);
+  return VN_WEEKDAY_CODES[shortDay] ?? 'MO';
 }
 
 export type TransactionRunner = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
 
 const VALID_KINDS: readonly FixedEventKind[] = ['class', 'exam', 'work_shift', 'other'];
+const WEEKLY_OCCURRENCE_COUNT = 12;
+const WEEK_MS = 7 * 86400 * 1000;
+
+function buildWeeklyFollowUpEvents(
+  baseEvent: FixedEvent,
+  ruleId: string,
+  count: number = WEEKLY_OCCURRENCE_COUNT,
+): FixedEvent[] {
+  const events: FixedEvent[] = [];
+  for (let weekIndex = 1; weekIndex < count; weekIndex++) {
+    const offsetMs = weekIndex * WEEK_MS;
+    events.push(
+      new FixedEvent({
+        id: randomUUID(),
+        userId: baseEvent.userId,
+        title: baseEvent.title,
+        kind: baseEvent.kind,
+        startsAt: new Date(baseEvent.startsAt.getTime() + offsetMs),
+        endsAt: new Date(baseEvent.endsAt.getTime() + offsetMs),
+        location: baseEvent.location,
+        notes: baseEvent.notes,
+        source: baseEvent.source,
+        recurringRuleId: ruleId,
+        importedFileId: baseEvent.importedFileId,
+        createdAt: baseEvent.createdAt,
+        updatedAt: baseEvent.updatedAt,
+      }),
+    );
+  }
+  return events;
+}
 
 function parseUtcDate(value: unknown, fieldName: string): Date {
   if (value instanceof Date) {
@@ -165,8 +216,16 @@ export class FixedEventService {
         ]);
       }
     }
+    if (input.isRecurring !== undefined && typeof input.isRecurring !== 'boolean') {
+      throw new ValidationError('Trường isRecurring phải là kiểu boolean (true/false)', [
+        { field: 'isRecurring', issue: 'phải là boolean' },
+      ]);
+    }
 
+    const shouldCreateWeeklyRule = input.isRecurring === true && !input.recurringRuleId;
     const now = new Date();
+    const initialRuleId = shouldCreateWeeklyRule ? randomUUID() : (input.recurringRuleId ?? null);
+
     const newEvent = new FixedEvent({
       id: randomUUID(),
       userId,
@@ -177,7 +236,7 @@ export class FixedEventService {
       location: typeof input.location === 'string' ? input.location.trim() || null : null,
       notes: typeof input.notes === 'string' ? input.notes.trim() || null : null,
       source: input.source ?? 'manual',
-      recurringRuleId: input.recurringRuleId ?? null,
+      recurringRuleId: initialRuleId,
       importedFileId: input.importedFileId ?? null,
       createdAt: now,
       updatedAt: now,
@@ -201,8 +260,20 @@ export class FixedEventService {
       });
     }
 
-    // 6. Lưu vào CSDL
-    const saved = await this.repo.create(newEvent, this.db);
+    // 6. Lưu vào CSDL (nếu bật lặp hằng tuần thì tạo quy tắc lặp và sinh 12 tuần liên tiếp trong cùng transaction)
+    const saved = shouldCreateWeeklyRule
+      ? await this.runTransaction(async (txClient) => {
+          const ruleId = initialRuleId as string;
+          await txClient.query(
+            `INSERT INTO recurring_rules (id, user_id, frequency, interval_value, by_weekday, count)
+             VALUES ($1, $2, 'weekly', 1, $3, $4)`,
+            [ruleId, userId, getVietnamWeekdayCode(startsAt), WEEKLY_OCCURRENCE_COUNT],
+          );
+          const followUps = buildWeeklyFollowUpEvents(newEvent, ruleId);
+          const createdEvents = await this.repo.createMany([newEvent, ...followUps], txClient);
+          return createdEvents[0] ?? newEvent;
+        })
+      : await this.repo.create(newEvent, this.db);
 
     return {
       data: saved,
@@ -285,6 +356,11 @@ export class FixedEventService {
       }
       updateFields.notes = typeof input.notes === 'string' ? input.notes.trim() || null : null;
     }
+    if (input.isRecurring !== undefined && typeof input.isRecurring !== 'boolean') {
+      throw new ValidationError('Trường isRecurring phải là kiểu boolean (true/false)', [
+        { field: 'isRecurring', issue: 'phải là boolean' },
+      ]);
+    }
 
     // Kiểm tra trùng lịch sau khi sửa (BR-01)
     const overlaps = await this.repo.findOverlapping(userId, startsAt, endsAt, eventId, this.db);
@@ -305,7 +381,48 @@ export class FixedEventService {
       });
     }
 
-    const updated = await this.repo.update(eventId, userId, updateFields, this.db);
+    const enableWeeklyRule = input.isRecurring === true && !existing.recurringRuleId;
+    const disableWeeklyRule = input.isRecurring === false && Boolean(existing.recurringRuleId);
+
+    let updated: FixedEvent | null;
+    if (enableWeeklyRule) {
+      const newRuleId = randomUUID();
+      updateFields.recurringRuleId = newRuleId;
+      updated = await this.runTransaction(async (txClient) => {
+        await txClient.query(
+          `INSERT INTO recurring_rules (id, user_id, frequency, interval_value, by_weekday, count)
+           VALUES ($1, $2, 'weekly', 1, $3, $4)`,
+          [newRuleId, userId, getVietnamWeekdayCode(startsAt), WEEKLY_OCCURRENCE_COUNT],
+        );
+        const updatedBase = await this.repo.update(eventId, userId, updateFields, txClient);
+        if (updatedBase) {
+          const followUps = buildWeeklyFollowUpEvents(updatedBase, newRuleId);
+          await this.repo.createMany(followUps, txClient);
+        }
+        return updatedBase;
+      });
+    } else if (disableWeeklyRule) {
+      const oldRuleId = existing.recurringRuleId as string;
+      updateFields.recurringRuleId = null;
+      updated = await this.runTransaction(async (txClient) => {
+        await txClient.query(
+          `DELETE FROM fixed_events
+           WHERE recurring_rule_id = $1 AND user_id = $2 AND starts_at > $3`,
+          [oldRuleId, userId, existing.startsAt.toISOString()],
+        );
+        const res = await this.repo.update(eventId, userId, updateFields, txClient);
+        await txClient.query(
+          `DELETE FROM recurring_rules r
+           WHERE r.id = $1 AND r.user_id = $2
+             AND NOT EXISTS (SELECT 1 FROM fixed_events f WHERE f.recurring_rule_id = r.id)`,
+          [oldRuleId, userId],
+        );
+        return res;
+      });
+    } else {
+      updated = await this.repo.update(eventId, userId, updateFields, this.db);
+    }
+
     if (!updated) {
       throw new NotFoundError(`Không tìm thấy sự kiện để cập nhật với mã: "${eventId}"`);
     }

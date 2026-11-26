@@ -1260,6 +1260,7 @@ Không có.
 | `endsAt` | string (ISO 8601 UTC) | Có | Thời điểm kết thúc sự kiện, bắt buộc sau `startsAt` (BR-01, BR-07) |
 | `location` | string | Không | Địa điểm hoặc phòng học |
 | `notes` | string | Không | Ghi chú thêm cho sự kiện |
+| `isRecurring` | boolean | Không | `true` để tạo quy tắc lặp hằng tuần (`weekly`) và tự sinh sự kiện cho 12 tuần liên tiếp; mặc định `false` |
 
 ```json
 {
@@ -1416,6 +1417,7 @@ Quyền: Chủ tài khoản sở hữu sự kiện.
 | `endsAt` | string (ISO 8601 UTC) | Không | Thời điểm kết thúc mới, bắt buộc sau `startsAt` (BR-01, BR-07) |
 | `location` | string | Không | Địa điểm hoặc phòng học (cho phép gửi `null` để xóa) |
 | `notes` | string | Không | Ghi chú thêm (cho phép gửi `null` để xóa) |
+| `isRecurring` | boolean | Không | `true` để bật lặp hằng tuần và sinh thêm 11 tuần tiếp theo; `false` để tắt lặp (gỡ rule khỏi sự kiện hiện tại và xóa các buổi lặp kế tiếp) |
 
 ```json
 {

@@ -4,16 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 interface NavItem {
   to: string;
   label: string;
-  icon: (active: boolean) => React.ReactNode;
+  icon: () => React.ReactNode;
 }
 
 const navItems: NavItem[] = [
   {
     to: '/calendar',
     label: 'Lịch',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -34,9 +34,9 @@ const navItems: NavItem[] = [
   {
     to: '/groups',
     label: 'Nhóm',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -52,11 +52,11 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    to: '/scheduler',
-    label: 'Xếp lịch',
-    icon: (active: boolean) => (
+    to: '/meetings',
+    label: 'Giờ chung',
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -70,11 +70,11 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    to: '/meetings',
-    label: 'Giờ chung',
-    icon: (active: boolean) => (
+    to: '/scheduler',
+    label: 'Việc học',
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -91,9 +91,9 @@ const navItems: NavItem[] = [
   {
     to: '/kanban',
     label: 'Kanban',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -110,9 +110,9 @@ const navItems: NavItem[] = [
   {
     to: '/stats',
     label: 'Thống kê',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg
-        className={`h-5 w-5 shrink-0 transition-colors ${active ? 'text-brand-primary' : 'text-brand-muted'}`}
+        className="h-5 w-5 shrink-0 transition-colors"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -128,12 +128,32 @@ const navItems: NavItem[] = [
   },
 ];
 
+function getSearchPlaceholder(pathname: string): string {
+  if (pathname === '/' || pathname.startsWith('/calendar')) {
+    return 'Tìm sự kiện, việc, thành viên';
+  }
+  if (pathname.startsWith('/groups') || pathname.startsWith('/meetings')) {
+    return 'Tìm nhóm, thành viên';
+  }
+  if (pathname.startsWith('/scheduler')) {
+    return 'Tìm việc, khung giờ';
+  }
+  if (pathname.startsWith('/kanban')) {
+    return 'Tìm thẻ, người thực hiện';
+  }
+  if (pathname.startsWith('/stats')) {
+    return 'Tìm tuần';
+  }
+  return 'Tìm kiếm...';
+}
+
 export function Header() {
   const location = useLocation();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isInitialMount, setIsInitialMount] = useState(true);
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const navRef = useRef<HTMLElement | null>(null);
+  const searchPlaceholder = getSearchPlaceholder(location.pathname);
 
   // Xác định tab đang active dựa trên pathname hiện tại (hỗ trợ cả route con của cả 6 tab)
   const activeIndex = navItems.findIndex((item) => {
@@ -146,13 +166,34 @@ export function Header() {
     return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
   });
 
-  const targetIndex = hoveredIndex !== null ? hoveredIndex : activeIndex;
+  const targetIndex = activeIndex;
 
   const [pillStyle, setPillStyle] = useState<{
     left: number;
     width: number;
     opacity: number;
   }>({ left: 0, width: 0, opacity: 0 });
+  const [hoverPillStyle, setHoverPillStyle] = useState<{
+    left: number;
+    width: number;
+    opacity: number;
+  }>({ left: 0, width: 0, opacity: 0 });
+
+  const handleHoverChange = (index: number | null) => {
+    setHoveredIndex(index);
+    if (index === null || index === activeIndex) {
+      setHoverPillStyle((prev) => ({ ...prev, opacity: 0 }));
+      return;
+    }
+    const el = itemRefs.current[index];
+    if (el) {
+      setHoverPillStyle({
+        left: el.offsetLeft,
+        width: el.offsetWidth,
+        opacity: 1,
+      });
+    }
+  };
 
   useEffect(() => {
     let isCancelled = false;
@@ -233,7 +274,7 @@ export function Header() {
   }, [targetIndex]);
 
   return (
-    <header className="relative md:sticky md:top-0 z-50 w-full px-3 pt-3 md:px-6 md:pt-5 lg:px-8">
+    <header className="relative md:sticky md:top-0 z-50 w-full px-3 pt-3 md:px-0 md:pt-5">
       {/* 1. GIAO DIỆN HEADER TRÊN MOBILE (Chuẩn Prototype Figma node 74:3) */}
       <div className="block md:hidden mx-auto max-w-md rounded-3xl border border-brand-surface bg-white/95 p-3.5 shadow-prototype backdrop-blur-md">
         {/* Hàng 1: Logo StudySync + Chuông thông báo + Avatar TK */}
@@ -296,11 +337,11 @@ export function Header() {
                 to={item.to}
                 className={`flex h-10 items-center justify-center space-x-1.5 rounded-xl px-1 transition-all duration-200 focus:outline-none ${
                   isActive
-                    ? 'bg-brand-surface text-brand-primary font-semibold shadow-sm'
+                    ? 'bg-brand-primary text-white font-semibold shadow-sm'
                     : 'text-brand-navy/80 hover:bg-brand-surface/40 hover:text-brand-primary'
                 }`}
               >
-                <span className="shrink-0">{item.icon(isActive)}</span>
+                <span className="shrink-0">{item.icon()}</span>
                 <span className="font-sans text-[13px] font-semibold whitespace-nowrap">
                   {item.label}
                 </span>
@@ -343,13 +384,16 @@ export function Header() {
         <input
           type="text"
           aria-label="Tìm kiếm trên di động"
-          placeholder="Tìm môn học, tuần, thành viên"
-          className="h-10 w-full rounded-2xl border border-brand-surface bg-white pl-10 pr-4 font-sans text-[13px] text-brand-navy placeholder-brand-muted/70 shadow-sm focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+          placeholder={searchPlaceholder}
+          className="h-10 w-full rounded-xl border border-brand-borderDefault/85 bg-white pl-10 pr-4 font-sans text-[13px] text-brand-navy placeholder-brand-slate/75 shadow-sm focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
         />
       </div>
 
-      {/* 2. GIAO DIỆN HEADER TRÊN DESKTOP (Thanh nổi 76px + Viên thuốc Stripe lướt mượt mà) */}
-      <div className="hidden md:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-4 lg:px-6 shadow-prototype backdrop-blur-md">
+      {/* 2. GIAO DIỆN HEADER TRÊN DESKTOP (Thanh nổi 76px rộng 80% trên màn hình lớn, tự co giãn an toàn ở 768-1280px) */}
+      <div
+        style={{ width: 'max(80%, min(96%, 1040px))' }}
+        className="hidden md:flex mx-auto h-[76px] items-center justify-between gap-2 rounded-2xl border border-brand-surface bg-white/95 px-4 lg:px-5 shadow-prototype backdrop-blur-md"
+      >
         {/* Brand / Logo 3D sạch, không sọc, kích thước 42×42px với phông Zalando Sans Expanded */}
         <NavLink
           to="/calendar"
@@ -369,13 +413,24 @@ export function Header() {
         <nav
           ref={navRef}
           aria-label="Thanh điều hướng chính"
-          onMouseLeave={() => setHoveredIndex(null)}
+          onMouseLeave={() => handleHoverChange(null)}
           className="relative flex items-center space-x-1 lg:space-x-1.5 shrink-0"
         >
-          {/* Vệt màu viên thuốc lướt theo khi rê chuột */}
+          {/* Vệt màu viên thuốc mờ di chuyển theo con trỏ khi di chuột sang tab khác */}
           <div
             aria-hidden="true"
-            className={`pointer-events-none absolute top-0 left-0 h-10 rounded-xl bg-brand-surface shadow-sm ${
+            className="pointer-events-none absolute top-0 left-0 h-10 rounded-xl bg-brand-surface/85 transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+            style={{
+              transform: `translateX(${hoverPillStyle.left}px)`,
+              width: `${hoverPillStyle.width}px`,
+              opacity: hoverPillStyle.opacity,
+            }}
+          />
+
+          {/* Vệt màu viên thuốc đậm giữ nguyên tại trang hiện tại */}
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-0 left-0 h-10 rounded-xl bg-brand-primary shadow-sm ${
               isInitialMount ? '' : 'transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]'
             }`}
             style={{
@@ -387,7 +442,7 @@ export function Header() {
 
           {navItems.map((item, index) => {
             const isActive = activeIndex === index;
-            const isPillTarget = targetIndex === index;
+            const isHovered = hoveredIndex === index && !isActive;
 
             return (
               <NavLink
@@ -398,22 +453,22 @@ export function Header() {
                 to={item.to}
                 aria-label={item.label}
                 title={item.label}
-                onMouseEnter={() => setHoveredIndex(index)}
-                onFocus={() => setHoveredIndex(index)}
-                onBlur={() => setHoveredIndex(null)}
-                className={`group relative z-10 flex h-10 items-center justify-center rounded-xl px-2 sm:px-2.5 lg:px-3 transition-colors duration-200 focus:outline-none ${
-                  isActive && !isPillTarget
-                    ? 'bg-brand-surface/40 text-brand-primary font-semibold'
-                    : isPillTarget
-                      ? 'text-brand-primary font-semibold'
+                onMouseEnter={() => handleHoverChange(index)}
+                onFocus={() => handleHoverChange(index)}
+                onBlur={() => handleHoverChange(null)}
+                className={`group relative z-10 flex h-10 items-center justify-center rounded-xl px-3 lg:px-3.5 transition-colors duration-200 focus:outline-none ${
+                  isActive
+                    ? 'text-white font-semibold'
+                    : isHovered
+                      ? 'text-brand-primary'
                       : 'text-brand-muted hover:text-brand-primary'
                 }`}
               >
                 <span className="shrink-0 transition-transform duration-200 group-hover:scale-105">
-                  {item.icon(isPillTarget || isActive)}
+                  {item.icon()}
                 </span>
                 {isActive && (
-                  <span className="ml-1.5 lg:ml-2 font-sans text-[13px] lg:text-[14px] font-semibold text-brand-primary whitespace-nowrap">
+                  <span className="ml-1.5 lg:ml-2 font-sans text-[13px] lg:text-[14px] font-semibold whitespace-nowrap text-white">
                     {item.label}
                   </span>
                 )}
@@ -422,15 +477,15 @@ export function Header() {
           })}
         </nav>
 
-        {/* Cụm công cụ bên phải: Ô tìm kiếm, Chuông thông báo, Hồ sơ người dùng */}
-        <div className="flex items-center space-x-2 sm:space-x-2.5 lg:space-x-4 shrink-0">
-          {/* Ô tìm kiếm: "Tìm môn, tuần" */}
+        {/* Cụm công cụ bên phải: Ô tìm kiếm theo từng trang, Chuông thông báo, Hồ sơ người dùng */}
+        <div className="flex items-center space-x-2 lg:space-x-2.5 xl:space-x-3 shrink-0">
+          {/* Ô tìm kiếm bo góc nhẹ giống prototype */}
           <div className="relative">
             <input
               type="text"
-              aria-label="Tìm kiếm môn học, tuần"
-              placeholder="Tìm môn, tuần"
-              className="h-10 w-28 sm:w-32 md:w-36 lg:w-44 xl:w-52 rounded-full border border-brand-surface bg-brand-bg/70 px-3.5 lg:px-4 font-sans text-[13px] lg:text-[14px] text-brand-navy placeholder-brand-muted/70 transition-all duration-200 focus:w-40 sm:focus:w-48 lg:focus:w-56 focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+              aria-label={searchPlaceholder}
+              placeholder={searchPlaceholder}
+              className="h-10 w-32 sm:w-36 md:w-36 lg:w-40 xl:w-48 2xl:w-56 rounded-xl border border-brand-borderDefault/90 bg-brand-bg/70 px-3 lg:px-3.5 font-sans text-[13px] lg:text-[14px] text-brand-navy placeholder:text-center placeholder:text-brand-slate/80 transition-all duration-200 focus:w-40 sm:focus:w-44 lg:focus:w-48 xl:focus:w-56 focus:text-left focus:placeholder:text-left focus:border-brand-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
             />
           </div>
 
