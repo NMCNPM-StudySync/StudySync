@@ -60,8 +60,7 @@ export function AvailabilityHeatmap({
 
   const dayColumns = useMemo(() => {
     const keys = enumerateDateKeys(fromDateKey, toDateKey);
-    // Giới hạn hiển thị mượt trên 1 lưới tối đa 7 ngày nếu người dùng chọn khoảng quá rộng
-    return keys.slice(0, 14).map((dateKey) => {
+    return keys.map((dateKey) => {
       const parts = toVnParts(`${dateKey}T00:00:00+07:00`);
       return {
         dateKey,
@@ -174,7 +173,7 @@ export function AvailabilityHeatmap({
                   Giờ
                 </th>
                 {dayColumns.map((col) => (
-                  <th key={col.dateKey} className="py-1 text-center font-sans">
+                  <th key={col.dateKey} className="min-w-[60px] py-1 text-center font-sans">
                     <div className="text-[11px] font-semibold text-brand-muted">
                       {col.weekdayShort}
                     </div>
@@ -238,8 +237,15 @@ export function AvailabilityHeatmap({
         </div>
       )}
 
+      {allFreeSlots.length > 0 && (
+        <p className="mt-3 text-[11px] text-brand-slate">
+          Khi đã có khung giờ 100% thành viên cùng rảnh, hệ thống chỉ hiển thị các khung này thay vì
+          khung rảnh một phần.
+        </p>
+      )}
+
       {/* Ghi chú bảo mật BR-02 và múi giờ BR-07 (khớp Figma Node 15:2) */}
-      <p className="mt-3 text-[11px] text-brand-muted">
+      <p className="mt-2 text-[11px] text-brand-muted">
         Nhóm chỉ thấy trạng thái bận hoặc rảnh, không thấy tên sự kiện riêng tư của từng người. Mọi
         giờ tính theo UTC+7.
       </p>
