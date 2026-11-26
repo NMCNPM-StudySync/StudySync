@@ -131,7 +131,7 @@ export function CardModal({
 
   // Cảnh báo nếu hạn chót đã qua
   const isOverdueWarning = Boolean(
-    dueAtLocal && new Date(`${dueAtLocal}:00+07:00`).getTime() < currentTime,
+    dueAtLocal && new Date(datetimeLocalVnToIsoUtc(dueAtLocal)).getTime() < currentTime,
   );
 
   const handleSubmit = async (e: FormEvent) => {
@@ -174,6 +174,9 @@ export function CardModal({
       setIsSubmitting(true);
       await onStatusChange(card.id, newStatus);
       setStatus(newStatus);
+    } catch {
+      // Hoàn tác về trạng thái cũ trên dropdown nếu thao tác thất bại
+      setStatus(card.status);
     } finally {
       setIsSubmitting(false);
     }
@@ -186,6 +189,9 @@ export function CardModal({
       const targetUserId = newAssigneeId ? newAssigneeId : null;
       await onAssign(card.id, targetUserId);
       setAssigneeId(newAssigneeId);
+    } catch {
+      // Hoàn tác về người phụ trách cũ trên dropdown nếu thao tác thất bại
+      setAssigneeId(card.assignedToUserId || '');
     } finally {
       setIsSubmitting(false);
     }
@@ -220,8 +226,7 @@ export function CardModal({
             {(!isEditing || canEditOrDelete) && (
               <Button
                 variant="primary"
-                type="submit"
-                form="kanban-card-form"
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   void handleSubmit(e);

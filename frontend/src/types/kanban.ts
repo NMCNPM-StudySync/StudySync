@@ -53,9 +53,18 @@ export interface GroupMemberSummary {
   role: 'leader' | 'member';
 }
 
+export interface GroupSummary {
+  id: string;
+  name: string;
+  myRole?: 'leader' | 'member';
+  memberCount?: number;
+  createdAt?: string;
+}
+
 export interface GroupDetailResponse {
   id: string;
   name: string;
+  myRole?: 'leader' | 'member';
   role?: 'leader' | 'member';
   members?: GroupMemberSummary[];
 }

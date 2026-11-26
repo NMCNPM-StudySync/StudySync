@@ -11,7 +11,6 @@ import { KanbanColumn } from './KanbanColumn';
 interface KanbanBoardProps {
   cards: KanbanCard[];
   currentUserId?: string;
-  isLeader?: boolean;
   onCardClick: (card: KanbanCard) => void;
   onStatusChange: (cardId: string, newStatus: KanbanStatus) => void;
   onDropCard: (cardId: string, targetStatus: KanbanStatus) => void;
@@ -21,7 +20,6 @@ interface KanbanBoardProps {
 export function KanbanBoard({
   cards,
   currentUserId,
-  isLeader,
   onCardClick,
   onStatusChange,
   onDropCard,
@@ -43,7 +41,6 @@ export function KanbanBoard({
         title="Cần làm"
         cards={todoCards}
         currentUserId={currentUserId}
-        isLeader={isLeader}
         onCardClick={onCardClick}
         onStatusChange={onStatusChange}
         onDropCard={onDropCard}
@@ -56,7 +53,6 @@ export function KanbanBoard({
         title="Đang làm"
         cards={inProgressCards}
         currentUserId={currentUserId}
-        isLeader={isLeader}
         onCardClick={onCardClick}
         onStatusChange={onStatusChange}
         onDropCard={onDropCard}
@@ -68,7 +64,6 @@ export function KanbanBoard({
         title="Đã xong"
         cards={doneCards}
         currentUserId={currentUserId}
-        isLeader={isLeader}
         onCardClick={onCardClick}
         onStatusChange={onStatusChange}
         onDropCard={onDropCard}

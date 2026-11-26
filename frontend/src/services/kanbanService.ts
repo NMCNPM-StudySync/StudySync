@@ -13,6 +13,7 @@ import type {
   UpdateCardPayload,
   KanbanStatus,
   GroupDetailResponse,
+  GroupSummary,
 } from '../types/kanban';
 
 export const kanbanService = {
@@ -85,14 +86,34 @@ export const kanbanService = {
   },
 
   /**
-   * Lấy thông tin nhóm và danh sách thành viên (phục vụ bộ lọc và phân quyền)
+   * Lấy danh sách nhóm của người dùng (GET /api/groups)
    */
-  async getGroupDetails(groupId: string): Promise<GroupDetailResponse | null> {
+  async getUserGroups(): Promise<ApiResponse<{ groups: GroupSummary[] }>> {
+    return apiClient.get<{ groups: GroupSummary[] }>('/groups');
+  },
+
+  /**
+   * Lấy thông tin nhóm và danh sách thành viên (phục vụ bộ lọc và phân quyền)
+   * Thử gọi GET /api/groups/:groupId, nếu 404 thì fallback sang GET /api/groups tìm theo groupId
+   */
+  async getGroupDetails(groupId: string): Promise<GroupDetailResponse> {
     try {
       const res = await apiClient.get<GroupDetailResponse>(`/groups/${groupId}`);
       return res.data;
     } catch {
-      return null;
+      // Fallback sang GET /api/groups nếu backend chưa có route chi tiết nhóm (A3)
+      const groupsRes = await apiClient.get<{ groups: GroupSummary[] }>('/groups');
+      const found = groupsRes.data.groups.find((g) => g.id === groupId);
+      if (found) {
+        return {
+          id: found.id,
+          name: found.name,
+          myRole: found.myRole,
+          role: found.myRole,
+          members: [],
+        };
+      }
+      throw new Error('Không tìm thấy thông tin nhóm học tập');
     }
   },
 };

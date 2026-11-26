@@ -16,6 +16,7 @@ vi.mock('../../src/services/kanbanService', () => ({
     assignCard: vi.fn(),
     deleteCard: vi.fn(),
     getGroupDetails: vi.fn(),
+    getUserGroups: vi.fn(),
   },
 }));
 
@@ -110,6 +111,18 @@ describe('KanbanPage Integration Tests', () => {
     });
 
     vi.mocked(kanbanService.getGroupDetails).mockResolvedValue(mockGroupDetails);
+
+    vi.mocked(kanbanService.getUserGroups).mockResolvedValue({
+      data: {
+        groups: [
+          {
+            id: 'test-group',
+            name: 'Nhóm Phát Triển Phần Mềm',
+            myRole: 'leader',
+          },
+        ],
+      },
+    });
   });
 
   afterEach(() => {
@@ -299,6 +312,46 @@ describe('KanbanPage Integration Tests', () => {
     await waitFor(() => {
       expect(kanbanService.deleteCard).toHaveBeenCalledWith('test-group', 'card-1');
       expect(screen.queryByText('Viết tài liệu kiến trúc')).not.toBeInTheDocument();
+    });
+  });
+
+  it('TC-KB-08: Hiển thị trạng thái Error State và có nút Thử lại khi tải danh sách thẻ thất bại', async () => {
+    vi.mocked(kanbanService.getCards).mockRejectedValueOnce(new Error('Lỗi máy chủ nội bộ 500'));
+
+    renderKanbanPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-error-state')).toBeInTheDocument();
+      expect(screen.getByText('Không thể tải dữ liệu bảng Kanban')).toBeInTheDocument();
+      expect(screen.getByText('Lỗi máy chủ nội bộ 500')).toBeInTheDocument();
+    });
+
+    // Bấm nút Thử lại
+    vi.mocked(kanbanService.getCards).mockResolvedValueOnce({
+      data: { cards: mockCards },
+    });
+
+    const retryBtn = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Viết tài liệu kiến trúc')).toBeInTheDocument();
+    });
+  });
+
+  it('TC-KB-09: Hiển thị trạng thái chưa có nhóm khi truy cập /kanban và danh sách nhóm rỗng', async () => {
+    vi.mocked(kanbanService.getUserGroups).mockResolvedValueOnce({
+      data: { groups: [] },
+    });
+
+    renderKanbanPage('/kanban');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-no-group-state')).toBeInTheDocument();
+      expect(screen.getByText('Bạn chưa tham gia nhóm học tập nào')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đi đến trang Nhóm' })).toBeInTheDocument();
     });
   });
 });

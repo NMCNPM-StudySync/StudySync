@@ -117,4 +117,30 @@ describe('kanbanService', () => {
     await kanbanService.getGroupDetails(groupId);
     expect(apiClient.get).toHaveBeenCalledWith('/groups/test-group-123');
   });
+
+  it('gọi đúng API getUserGroups và xử lý fallback khi getGroupDetails 404', async () => {
+    // 1. Kiểm tra getUserGroups
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        groups: [{ id: groupId, name: 'Nhóm 5', myRole: 'leader' }],
+      },
+    });
+
+    const userGroupsRes = await kanbanService.getUserGroups();
+    expect(apiClient.get).toHaveBeenCalledWith('/groups');
+    expect(userGroupsRes.data.groups).toHaveLength(1);
+
+    // 2. Kiểm tra fallback getGroupDetails khi gọi /groups/:id thất bại
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('404 Not Found'));
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        groups: [{ id: groupId, name: 'Nhóm 5', myRole: 'leader' }],
+      },
+    });
+
+    const groupDetails = await kanbanService.getGroupDetails(groupId);
+    expect(groupDetails.id).toBe(groupId);
+    expect(groupDetails.name).toBe('Nhóm 5');
+    expect(groupDetails.myRole).toBe('leader');
+  });
 });

@@ -6,8 +6,8 @@
  * Issue #142 — Người viết: Kiên (tkien-ngdinh)
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 import { kanbanService } from '../../services/kanbanService';
 import { ApiError } from '../../services/apiClient';
@@ -19,15 +19,14 @@ import type {
   CreateCardPayload,
   UpdateCardPayload,
 } from '../../types/kanban';
+import { Button } from '../../components/ui/Button';
 import { KanbanHeader } from './components/KanbanHeader';
 import { KanbanFilterBar } from './components/KanbanFilterBar';
 import { KanbanBoard } from './components/KanbanBoard';
 import { KanbanSkeleton } from './components/KanbanSkeleton';
+import { KanbanErrorState } from './components/KanbanErrorState';
 import { CardModal } from './components/CardModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
-
-// Nhóm mặc định khi truy cập trực tiếp từ menu /kanban
-const DEFAULT_GROUP_ID = '7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33';
 
 interface ToastMessage {
   id: string;
@@ -37,21 +36,28 @@ interface ToastMessage {
 
 export function KanbanPage() {
   const { groupId: paramGroupId } = useParams<{ groupId?: string }>();
-  const groupId = paramGroupId || DEFAULT_GROUP_ID;
+  const navigate = useNavigate();
 
   const { user } = useAuth();
   const currentUserId = user?.id;
 
+  // Quản lý groupId và trạng thái nhóm
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(paramGroupId || null);
+  const [hasNoGroups, setHasNoGroups] = useState(false);
+  const [reloadCounter, setReloadCounter] = useState(0);
+
   // Dữ liệu chính
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [members, setMembers] = useState<GroupMemberSummary[]>([]);
-  const [groupName, setGroupName] = useState<string>('Nhóm Sản phẩm số');
-  const [isLeader, setIsLeader] = useState<boolean>(true);
+  const [groupName, setGroupName] = useState<string>('');
+  const [isLeader, setIsLeader] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Bộ lọc
   const [filterType, setFilterType] = useState<KanbanFilterType>('all');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
+  const filterReqIdRef = useRef(0);
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -59,23 +65,39 @@ export function KanbanPage() {
   const [cardToDelete, setCardToDelete] = useState<KanbanCard | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Toast notifications
+  // Toast notifications & cleanup timeout (B4)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const showToast = useCallback(
     (message: string, type: 'success' | 'warning' | 'error' = 'success') => {
       const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       setToasts((prev) => [...prev, { id, type, message }]);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
+        toastTimeoutsRef.current.delete(id);
       }, 4000);
+      toastTimeoutsRef.current.set(id, timer);
     },
     [],
   );
 
   const removeToast = (id: string) => {
+    const timer = toastTimeoutsRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimeoutsRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  useEffect(() => {
+    const activeTimeouts = toastTimeoutsRef.current;
+    return () => {
+      activeTimeouts.forEach((timer) => clearTimeout(timer));
+      activeTimeouts.clear();
+    };
+  }, []);
 
   // Sắp xếp các thẻ trong từng cột theo đúng đặc tả: dueAt ASC, createdAt ASC, id ASC
   const sortCardsDeterministically = useCallback((cardsToSort: KanbanCard[]): KanbanCard[] => {
@@ -92,15 +114,60 @@ export function KanbanPage() {
     });
   }, []);
 
-  // Khởi chạy khi groupId thay đổi
+  // Xác định groupId và tải dữ liệu chính (A1, A2, A3, A4)
   useEffect(() => {
     let ignore = false;
 
-    async function loadData() {
+    async function initializeAndLoad() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      let targetGroupId = paramGroupId;
+
+      // Xử lý truy cập route /kanban không kèm groupId (A2)
+      if (!targetGroupId) {
+        try {
+          const userGroupsRes = await kanbanService.getUserGroups();
+          const userGroups = userGroupsRes.data?.groups || [];
+
+          if (userGroups.length === 0) {
+            if (!ignore) {
+              setHasNoGroups(true);
+              setIsLoading(false);
+            }
+            return;
+          }
+
+          const firstGroup = userGroups[0];
+          if (!firstGroup) return;
+          targetGroupId = firstGroup.id;
+          if (!ignore) {
+            setActiveGroupId(targetGroupId);
+            setHasNoGroups(false);
+            navigate(`/groups/${targetGroupId}/kanban`, { replace: true });
+          }
+        } catch (err: unknown) {
+          if (!ignore) {
+            const message =
+              err instanceof ApiError ? err.message : 'Không thể tải danh sách nhóm học tập';
+            setErrorMessage(message);
+            setIsLoading(false);
+          }
+          return;
+        }
+      } else {
+        if (!ignore) {
+          setActiveGroupId(targetGroupId);
+          setHasNoGroups(false);
+        }
+      }
+
+      if (!targetGroupId) return;
+
       try {
         const [cardsRes, groupData] = await Promise.all([
-          kanbanService.getCards(groupId),
-          kanbanService.getGroupDetails(groupId),
+          kanbanService.getCards(targetGroupId),
+          kanbanService.getGroupDetails(targetGroupId).catch(() => null),
         ]);
 
         if (!ignore) {
@@ -109,7 +176,7 @@ export function KanbanPage() {
 
           if (groupData) {
             if (groupData.name) setGroupName(groupData.name);
-            if (groupData.role) setIsLeader(groupData.role === 'leader');
+            setIsLeader(Boolean(groupData.myRole === 'leader' || groupData.role === 'leader'));
             if (groupData.members && groupData.members.length > 0) {
               setMembers(groupData.members);
             }
@@ -118,8 +185,12 @@ export function KanbanPage() {
       } catch (err: unknown) {
         if (!ignore) {
           const message =
-            err instanceof ApiError ? err.message : 'Không thể tải danh sách thẻ việc';
-          showToast(message, 'error');
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : 'Không thể tải danh sách thẻ việc của nhóm';
+          setErrorMessage(message);
         }
       } finally {
         if (!ignore) {
@@ -128,12 +199,14 @@ export function KanbanPage() {
       }
     }
 
-    void loadData();
+    void initializeAndLoad();
 
     return () => {
       ignore = true;
     };
-  }, [groupId, sortCardsDeterministically, showToast]);
+  }, [paramGroupId, reloadCounter, navigate, sortCardsDeterministically]);
+
+  const effectiveGroupId = activeGroupId || paramGroupId || '';
 
   // Tổng hợp danh sách thành viên từ thẻ nếu API group chưa có
   const displayMembers = useMemo(() => {
@@ -168,29 +241,42 @@ export function KanbanPage() {
     return Array.from(memberMap.values());
   }, [members, cards, currentUserId, user, isLeader]);
 
-  // Xử lý bộ lọc thẻ
+  // Xử lý bộ lọc thẻ tránh race condition (B2)
   const handleAssigneeFilterChange = async (newAssigneeId: string) => {
     setSelectedAssigneeId(newAssigneeId);
     setFilterType('all');
+    if (!effectiveGroupId) return;
+
+    const reqId = ++filterReqIdRef.current;
     try {
-      const res = await kanbanService.getCards(groupId, newAssigneeId || undefined);
-      setCards(sortCardsDeterministically(res.data.cards || []));
+      const res = await kanbanService.getCards(effectiveGroupId, newAssigneeId || undefined);
+      if (reqId === filterReqIdRef.current) {
+        setCards(sortCardsDeterministically(res.data.cards || []));
+      }
     } catch (err: unknown) {
-      const message = err instanceof ApiError ? err.message : 'Không thể tải danh sách thẻ việc';
-      showToast(message, 'error');
+      if (reqId === filterReqIdRef.current) {
+        const message = err instanceof ApiError ? err.message : 'Không thể tải danh sách thẻ việc';
+        showToast(message, 'error');
+      }
     }
   };
 
   const handleQuickFilterChange = async (newFilter: KanbanFilterType) => {
     setFilterType(newFilter);
-    if (selectedAssigneeId) {
+    if (selectedAssigneeId && effectiveGroupId) {
       setSelectedAssigneeId('');
+      const reqId = ++filterReqIdRef.current;
       try {
-        const res = await kanbanService.getCards(groupId);
-        setCards(sortCardsDeterministically(res.data.cards || []));
+        const res = await kanbanService.getCards(effectiveGroupId);
+        if (reqId === filterReqIdRef.current) {
+          setCards(sortCardsDeterministically(res.data.cards || []));
+        }
       } catch (err: unknown) {
-        const message = err instanceof ApiError ? err.message : 'Không thể tải danh sách thẻ việc';
-        showToast(message, 'error');
+        if (reqId === filterReqIdRef.current) {
+          const message =
+            err instanceof ApiError ? err.message : 'Không thể tải danh sách thẻ việc';
+          showToast(message, 'error');
+        }
       }
     }
   };
@@ -225,8 +311,9 @@ export function KanbanPage() {
 
   // Tạo thẻ mới (US-29, U041)
   const handleCreateCard = async (payload: CreateCardPayload) => {
+    if (!effectiveGroupId) return;
     try {
-      const res = await kanbanService.createCard(groupId, payload);
+      const res = await kanbanService.createCard(effectiveGroupId, payload);
       const newCard = res.data;
 
       setCards((prev) => sortCardsDeterministically([newCard, ...prev]));
@@ -249,8 +336,9 @@ export function KanbanPage() {
 
   // Cập nhật tên và hạn chót thẻ (US-34, U046)
   const handleUpdateCard = async (cardId: string, payload: UpdateCardPayload) => {
+    if (!effectiveGroupId) return;
     try {
-      const res = await kanbanService.updateCard(groupId, cardId, payload);
+      const res = await kanbanService.updateCard(effectiveGroupId, cardId, payload);
       const updatedCard = res.data;
 
       setCards((prev) =>
@@ -270,12 +358,13 @@ export function KanbanPage() {
     }
   };
 
-  // Chuyển cột trạng thái thẻ với OPTIMISTIC UI (US-30, U042)
+  // Chuyển cột trạng thái thẻ với OPTIMISTIC UI và Rollback riêng thẻ lỗi (B1)
   const handleStatusChange = async (cardId: string, targetStatus: KanbanStatus) => {
+    if (!effectiveGroupId) return;
     const targetCard = cards.find((c) => c.id === cardId);
     if (!targetCard || targetCard.status === targetStatus) return;
 
-    const previousCards = [...cards];
+    const previousStatus = targetCard.status;
 
     // Cập nhật ngay lập tức giao diện (Optimistic Update)
     setCards((prev) =>
@@ -287,7 +376,7 @@ export function KanbanPage() {
     );
 
     try {
-      const res = await kanbanService.updateStatus(groupId, cardId, targetStatus);
+      const res = await kanbanService.updateStatus(effectiveGroupId, cardId, targetStatus);
       // Đồng bộ lại với dữ liệu chính thức từ server
       setCards((prev) =>
         sortCardsDeterministically(prev.map((c) => (c.id === cardId ? res.data : c))),
@@ -303,32 +392,44 @@ export function KanbanPage() {
         'success',
       );
     } catch (err: unknown) {
-      // Hoàn tác về trạng thái cũ nếu lỗi mạng / server (U042 3a)
-      setCards(previousCards);
+      // Hoàn tác cục bộ đúng thẻ bị lỗi mà không làm ảnh hưởng các thẻ khác (B1)
+      setCards((prev) =>
+        sortCardsDeterministically(
+          prev.map((c) => (c.id === cardId ? { ...c, status: previousStatus } : c)),
+        ),
+      );
       const message =
         err instanceof ApiError ? err.message : 'Không thể chuyển trạng thái thẻ. Vui lòng thử lại';
       showToast(message, 'error');
+      throw err;
     }
   };
 
   // Phân công thẻ (US-31, U043)
   const handleAssignCard = async (cardId: string, targetUserId: string | null) => {
-    const res = await kanbanService.assignCard(groupId, cardId, targetUserId);
-    const updatedCard = res.data;
+    if (!effectiveGroupId) return;
+    try {
+      const res = await kanbanService.assignCard(effectiveGroupId, cardId, targetUserId);
+      const updatedCard = res.data;
 
-    setCards((prev) => prev.map((c) => (c.id === cardId ? updatedCard : c)));
-    showToast(
-      targetUserId ? `Đã giao thẻ cho ${updatedCard.assignedToDisplayName}` : 'Đã bỏ giao thẻ',
-      'success',
-    );
+      setCards((prev) => prev.map((c) => (c.id === cardId ? updatedCard : c)));
+      showToast(
+        targetUserId ? `Đã giao thẻ cho ${updatedCard.assignedToDisplayName}` : 'Đã bỏ giao thẻ',
+        'success',
+      );
+    } catch (err: unknown) {
+      const message = err instanceof ApiError ? err.message : 'Không thể phân công thẻ';
+      showToast(message, 'error');
+      throw err;
+    }
   };
 
   // Xóa thẻ (US-34, U046)
   const handleConfirmDelete = async () => {
-    if (!cardToDelete) return;
+    if (!cardToDelete || !effectiveGroupId) return;
     try {
       setIsDeleting(true);
-      await kanbanService.deleteCard(groupId, cardToDelete.id);
+      await kanbanService.deleteCard(effectiveGroupId, cardToDelete.id);
       setCards((prev) => prev.filter((c) => c.id !== cardToDelete.id));
       showToast(`Đã xóa vĩnh viễn thẻ "${cardToDelete.title}"`, 'success');
       setCardToDelete(null);
@@ -366,7 +467,7 @@ export function KanbanPage() {
             <button
               type="button"
               onClick={() => removeToast(toast.id)}
-              className="text-current opacity-70 hover:opacity-100 p-1"
+              className="text-current opacity-70 hover:opacity-100 p-1 cursor-pointer"
               aria-label="Đóng thông báo"
             >
               ✕
@@ -377,13 +478,41 @@ export function KanbanPage() {
 
       {/* Header Bảng Kanban */}
       <KanbanHeader
-        groupName={groupName}
+        groupName={groupName || 'Nhóm học tập'}
         memberCount={displayMembers.length}
         totalCards={cards.length}
         onOpenCreateModal={() => setIsCreateModalOpen(true)}
       />
 
-      {isLoading ? (
+      {/* Khối hiển thị nội dung chính: No Group / Error / Loading / Content */}
+      {hasNoGroups ? (
+        <div
+          role="region"
+          aria-label="Chưa có nhóm"
+          className="flex flex-col items-center justify-center p-8 sm:p-12 rounded-2xl border border-brand-borderDefault bg-white text-center max-w-xl mx-auto my-8 shadow-sm"
+          data-testid="kanban-no-group-state"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-surface text-brand-primary mb-4 text-2xl font-bold">
+            👥
+          </div>
+          <h2 className="font-heading font-bold text-lg text-brand-navy mb-2">
+            Bạn chưa tham gia nhóm học tập nào
+          </h2>
+          <p className="text-sm text-brand-muted mb-6 max-w-md">
+            Bảng Kanban gắn liền với từng nhóm học tập cụ thể. Vui lòng tạo nhóm mới hoặc tham gia
+            nhóm để bắt đầu quản lý công việc chung.
+          </p>
+          <Button variant="primary" type="button" onClick={() => navigate('/groups')}>
+            Đi đến trang Nhóm
+          </Button>
+        </div>
+      ) : errorMessage ? (
+        <KanbanErrorState
+          message={errorMessage}
+          onRetry={() => setReloadCounter((c) => c + 1)}
+          onGoBack={() => navigate('/groups')}
+        />
+      ) : isLoading ? (
         <KanbanSkeleton />
       ) : (
         <>
@@ -403,7 +532,6 @@ export function KanbanPage() {
           <KanbanBoard
             cards={filteredCards}
             currentUserId={currentUserId}
-            isLeader={isLeader}
             onCardClick={(c) => setSelectedCardForEdit(c)}
             onStatusChange={handleStatusChange}
             onDropCard={handleStatusChange}

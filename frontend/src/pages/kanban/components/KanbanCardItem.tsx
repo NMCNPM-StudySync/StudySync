@@ -12,7 +12,6 @@ import { formatVietnamDateTime } from '../../../utils/vietnam-time';
 interface KanbanCardItemProps {
   card: KanbanCard;
   currentUserId?: string;
-  isLeader?: boolean;
   onCardClick: (card: KanbanCard) => void;
   onStatusChange: (cardId: string, newStatus: KanbanStatus) => void;
   onDragStart?: (card: KanbanCard) => void;
@@ -57,7 +56,7 @@ export function KanbanCardItem({
       }}
       onDragEnd={() => onDragEnd?.()}
       onClick={() => onCardClick(card)}
-      className="group relative flex flex-col gap-2 rounded-[11px] border border-[#C4D4EB] bg-[#F8FBFF] p-3 shadow-sm hover:shadow-md hover:border-brand-primary/50 transition-all cursor-pointer active:cursor-grabbing"
+      className="group relative flex flex-col gap-2 rounded-[11px] border border-brand-borderDefault bg-white p-3 shadow-sm hover:shadow-md hover:border-brand-primary/50 transition-all cursor-pointer active:cursor-grabbing"
       data-testid={`kanban-card-${card.id}`}
     >
       {/* Tiêu đề thẻ (BR-08: tối đa 200 ký tự) */}
@@ -91,7 +90,7 @@ export function KanbanCardItem({
                   type="button"
                   onClick={() => {
                     setIsMenuOpen(false);
-                    onStatusChange(card.id, status);
+                    Promise.resolve(onStatusChange(card.id, status)).catch(() => {});
                   }}
                   className="w-full text-left px-3 py-1.5 hover:bg-brand-surface hover:text-brand-primary font-medium"
                 >
@@ -130,7 +129,7 @@ export function KanbanCardItem({
               className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold border ${
                 isAssignedToMe
                   ? 'bg-brand-primary text-white border-brand-primary'
-                  : 'bg-[#DCE8FA] text-brand-slate border-[#C4D5EF]'
+                  : 'bg-brand-surface text-brand-slate border-brand-borderDefault'
               }`}
             >
               {getInitials(card.assignedToDisplayName)}
