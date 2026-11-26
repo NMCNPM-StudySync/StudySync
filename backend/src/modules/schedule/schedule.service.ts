@@ -46,11 +46,44 @@ export class WeekScheduleService {
       this.db,
     );
 
-    // Tính toán trường động hasOverlap cho từng sự kiện (BR-01)
+    const ruleIds = Array.from(
+      new Set(
+        rawEvents
+          .map((e) => e.recurringRuleId)
+          .filter((ruleId): ruleId is string => Boolean(ruleId)),
+      ),
+    );
+    const ruleStartTimesByRule = new Map<string, number[]>();
+    if (ruleIds.length > 0) {
+      const ruleRes = await this.db.query(
+        `SELECT recurring_rule_id, starts_at
+         FROM fixed_events
+         WHERE user_id = $1 AND recurring_rule_id = ANY($2::uuid[])`,
+        [userId, ruleIds],
+      );
+      for (const row of ruleRes?.rows ?? []) {
+        const ruleId = String(row.recurring_rule_id);
+        const startMs = new Date(row.starts_at as string | Date).getTime();
+        const existingList = ruleStartTimesByRule.get(ruleId) ?? [];
+        existingList.push(startMs);
+        ruleStartTimesByRule.set(ruleId, existingList);
+      }
+    }
+
+    // Tính toán trường động hasOverlap cho từng sự kiện (BR-01) và số buổi thuộc chuỗi lặp
     const fixedEvents = rawEvents.map((e) => {
       const hasConflict = rawEvents.some((other) => other.id !== e.id && e.overlaps(other));
       e.hasOverlap = hasConflict;
-      return e.toResponseDto();
+      const dto = e.toResponseDto();
+      if (e.recurringRuleId) {
+        const startsList = ruleStartTimesByRule.get(e.recurringRuleId);
+        if (startsList && startsList.length > 0) {
+          const currentMs = e.startsAt.getTime();
+          dto.recurringTotalCount = startsList.length;
+          dto.recurringFollowingCount = startsList.filter((ms) => ms > currentMs).length;
+        }
+      }
+      return dto;
     });
 
     // 2. Lấy danh sách việc cần làm có hạn chót trong tuần (US-10)

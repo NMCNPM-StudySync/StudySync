@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -23,6 +23,8 @@ vi.mock('../src/services/meetingsApi', () => ({
 const mockedMeetingsApi = vi.mocked(meetingsApi);
 
 describe('App navigation and layout', () => {
+  const originalFetch = globalThis.fetch;
+
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -94,10 +96,27 @@ describe('App navigation and layout', () => {
       },
       futureExpiry,
     );
+
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            weekStart: '2026-11-22T17:00:00.000Z',
+            weekEnd: '2026-11-29T17:00:00.000Z',
+            fixedEvents: [],
+            tasks: [],
+            studySlots: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
   });
 
   afterEach(() => {
     localStorage.clear();
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
   });
 
   it('hiển thị đầy đủ thương hiệu StudySync và các mục điều hướng module', () => {
@@ -120,21 +139,21 @@ describe('App navigation and layout', () => {
     expect(within(nav).getByRole('link', { name: /^Thống kê$/i })).toBeInTheDocument();
   });
 
-  it('tự động chuyển hướng từ / sang /calendar', () => {
+  it('tự động chuyển hướng từ / sang /calendar', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Lịch cá nhân (TV2)' }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'LỊCH CỦA TÔI' })).toBeInTheDocument();
+    });
   });
 
   it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', async () => {
     const testCases = [
-      { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
+      { route: '/calendar', title: 'LỊCH CỦA TÔI' },
       { route: '/groups', title: 'Nhóm (TV1)' },
       { route: '/scheduler', title: 'Xếp lịch (TV3)' },
       { route: '/meetings', title: 'TÌM GIỜ HỌP' },
@@ -164,16 +183,16 @@ describe('App navigation and layout', () => {
     }
   });
 
-  it('chuyển đổi trang khi người dùng bấm vào các mục trên thanh điều hướng', () => {
+  it('chuyển đổi trang khi người dùng bấm vào các mục trên thanh điều hướng', async () => {
     render(
       <MemoryRouter initialEntries={['/calendar']}>
         <App />
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Lịch cá nhân (TV2)' }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'LỊCH CỦA TÔI' })).toBeInTheDocument();
+    });
 
     const nav = screen.getByRole('navigation', { name: 'Thanh điều hướng chính' });
     const groupsLink = within(nav).getByRole('link', { name: /^Nhóm$/i });
@@ -202,12 +221,16 @@ describe('App navigation and layout', () => {
     expect(activeTabLabels.length).toBe(0);
   });
 
-  it('hiển thị chân trang với bản quyền và không chứa thông tin MSSV', () => {
+  it('hiển thị chân trang với bản quyền và không chứa thông tin MSSV', async () => {
     render(
       <MemoryRouter initialEntries={['/calendar']}>
         <App />
       </MemoryRouter>,
     );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'LỊCH CỦA TÔI' })).toBeInTheDocument();
+    });
 
     const footer = screen.getByRole('contentinfo');
     expect(footer).toBeInTheDocument();

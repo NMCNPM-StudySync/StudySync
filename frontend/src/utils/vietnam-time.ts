@@ -118,6 +118,58 @@ export function formatVietnamFull(isoUtcString: string): string {
 export function toVietnamMidnight(isoUtcString: string): Date {
   const date = parseIsoUtc(isoUtcString);
   const { year, month, day } = getVnParts(date);
-  // Xây dựng lại bằng cách parse "YYYY-MM-DDT00:00:00+07:00"
-  return new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+  return new Date(`${year}-${month}-${day}T00:00:00.000+07:00`);
+}
+
+/**
+ * Chuyển cặp ngày "dd/mm/yyyy" và giờ "hh:mm" theo giờ Việt Nam (UTC+7) thành chuỗi ISO 8601 UTC ('Z').
+ * Trả về null nếu ngày hoặc giờ không hợp lệ (ví dụ 30/02/2026 hoặc 25:00).
+ */
+export function parseVietnamDateTimeToIsoUtc(dateStr: string, timeStr: string): string | null {
+  const dateMatch = dateStr.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const timeMatch = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!dateMatch || !timeMatch) return null;
+
+  const day = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const year = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  const shifted = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+  if (
+    shifted.getUTCFullYear() !== year ||
+    shifted.getUTCMonth() !== month - 1 ||
+    shifted.getUTCDate() !== day ||
+    shifted.getUTCHours() !== hour ||
+    shifted.getUTCMinutes() !== minute
+  ) {
+    return null;
+  }
+
+  return new Date(shifted.getTime() - 7 * 3600 * 1000).toISOString();
+}
+
+/**
+ * Parse chuỗi hạn chót dạng "dd/mm/yyyy · hh:mm" (hoặc "dd/mm/yyyy hh:mm") theo giờ Việt Nam thành ISO UTC.
+ */
+export function parseVietnamDeadlineTextToIsoUtc(deadlineText: string): string | null {
+  const match = deadlineText
+    .trim()
+    .match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s*[·,\-\s]\s*(\d{1,2}:\d{2})$/);
+  if (!match || !match[1] || !match[2]) return null;
+  return parseVietnamDateTimeToIsoUtc(match[1], match[2]);
 }

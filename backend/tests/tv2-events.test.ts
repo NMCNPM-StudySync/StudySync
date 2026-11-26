@@ -220,6 +220,134 @@ describe('TV2 Fixed Events Module', () => {
       expect(result.warnings).toBeUndefined();
     });
 
+    it('tạo quy tắc lặp hằng tuần khi isRecurring = true và bật/tắt lặp khi cập nhật', async () => {
+      const txQueries: Array<{ sql: string; params?: unknown[] }> = [];
+      const txClient = {
+        query: vi.fn(async (sql: string, params?: unknown[]) => {
+          txQueries.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
+          return { rows: [], rowCount: 1 };
+        }),
+      } as unknown as PoolClient;
+      const customTxRunner = vi.fn(async (work: (c: PoolClient) => Promise<unknown>) =>
+        work(txClient),
+      );
+      const localRepo = new FixedEventRepository();
+      const localService = new FixedEventService(localRepo, mockDb, customTxRunner as never);
+
+      vi.spyOn(localRepo, 'findOverlapping').mockResolvedValue([]);
+      const createManySpy = vi
+        .spyOn(localRepo, 'createMany')
+        .mockImplementation(async (events) => events);
+
+      // 1. Tạo mới sự kiện lặp hằng tuần -> sinh đủ 12 tuần liên tiếp
+      const created = await localService.createEvent(mockUserId, {
+        title: 'Họp đồng bộ hằng tuần',
+        kind: 'other',
+        startsAt: '2026-11-24T13:00:00.000Z',
+        endsAt: '2026-11-24T14:00:00.000Z',
+        isRecurring: true,
+      });
+
+      expect(created.data.recurringRuleId).toBeTruthy();
+      expect(txQueries[0]?.sql).toContain('INSERT INTO recurring_rules');
+      expect(txQueries[0]?.params?.[2]).toBe('TU');
+      expect(createManySpy).toHaveBeenCalledTimes(1);
+      expect(createManySpy.mock.calls[0]?.[0]).toHaveLength(12);
+
+      // 2. Tắt lặp lại khi cập nhật sự kiện -> xóa các buổi lặp phía sau và gỡ rule ở buổi hiện tại
+      vi.spyOn(localRepo, 'findByIdAndUserId').mockResolvedValueOnce(created.data);
+      vi.spyOn(localRepo, 'update').mockImplementationOnce(async (_id, _uid, fields) => {
+        return new FixedEvent({
+          id: created.data.id,
+          userId: mockUserId,
+          title: created.data.title,
+          kind: created.data.kind,
+          startsAt: created.data.startsAt,
+          endsAt: created.data.endsAt,
+          source: 'manual',
+          recurringRuleId: fields.recurringRuleId ?? null,
+          createdAt: created.data.createdAt,
+          updatedAt: new Date(),
+        });
+      });
+
+      const updated = await localService.updateEvent(mockUserId, created.data.id, {
+        isRecurring: false,
+      });
+      expect(updated.data.recurringRuleId).toBeNull();
+      expect(txQueries.some((q) => q.sql.includes('DELETE FROM fixed_events'))).toBe(true);
+      expect(txQueries.some((q) => q.sql.includes('DELETE FROM recurring_rules'))).toBe(true);
+
+      // 3. Bật lặp lại từ sự kiện đơn lẻ -> sinh thêm 11 buổi lặp cho các tuần tiếp theo
+      vi.spyOn(localRepo, 'findByIdAndUserId').mockResolvedValueOnce(updated.data);
+      vi.spyOn(localRepo, 'update').mockImplementationOnce(async (_id, _uid, fields) => {
+        return new FixedEvent({
+          id: updated.data.id,
+          userId: mockUserId,
+          title: updated.data.title,
+          kind: updated.data.kind,
+          startsAt: updated.data.startsAt,
+          endsAt: updated.data.endsAt,
+          source: 'manual',
+          recurringRuleId: fields.recurringRuleId ?? null,
+          createdAt: updated.data.createdAt,
+          updatedAt: new Date(),
+        });
+      });
+
+      const reEnabled = await localService.updateEvent(mockUserId, updated.data.id, {
+        isRecurring: true,
+      });
+      expect(reEnabled.data.recurringRuleId).toBeTruthy();
+      expect(createManySpy).toHaveBeenCalledTimes(2);
+      expect(createManySpy.mock.calls[1]?.[0]).toHaveLength(11);
+    });
+
+    it('kiểm tra trùng lịch (BR-01) trên cả các buổi lặp theo sau khi tạo sự kiện hằng tuần', async () => {
+      const txClient = {
+        query: vi.fn(async () => ({ rows: [], rowCount: 1 })),
+      } as unknown as PoolClient;
+      const customTxRunner = vi.fn(async (work: (c: PoolClient) => Promise<unknown>) =>
+        work(txClient),
+      );
+      const localRepo = new FixedEventRepository();
+      const localService = new FixedEventService(localRepo, mockDb, customTxRunner as never);
+
+      const week2Conflict = new FixedEvent({
+        id: 'existing-week2',
+        userId: mockUserId,
+        title: 'Họp tổng kết giữa kỳ',
+        kind: 'other',
+        startsAt: new Date('2026-12-08T13:00:00.000Z'),
+        endsAt: new Date('2026-12-08T14:00:00.000Z'),
+        source: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Buổi đầu (week 0) và buổi thứ 2 (week 1) không trùng, nhưng buổi thứ 3 (week 2) bị trùng
+      vi.spyOn(localRepo, 'findOverlapping').mockImplementation(async (_uid, startsAt) => {
+        if (startsAt.toISOString() === '2026-12-08T13:00:00.000Z') {
+          return [week2Conflict];
+        }
+        return [];
+      });
+      vi.spyOn(localRepo, 'createMany').mockImplementation(async (events) => events);
+
+      const created = await localService.createEvent(mockUserId, {
+        title: 'Lớp thực hành tối',
+        kind: 'class',
+        startsAt: '2026-11-24T13:00:00.000Z',
+        endsAt: '2026-11-24T14:00:00.000Z',
+        isRecurring: true,
+      });
+
+      expect(created.warnings).toHaveLength(1);
+      expect(created.warnings?.[0]?.code).toBe('FIXED_EVENT_OVERLAP');
+      expect(created.warnings?.[0]?.message).toContain('1/12 buổi lặp bị trùng');
+      expect(created.warnings?.[0]?.details?.[0]?.issue).toContain('Họp tổng kết giữa kỳ');
+    });
+
     it('ném lỗi NotFoundError khi truy vấn sự kiện không tồn tại', async () => {
       vi.spyOn(mockRepo, 'findByIdAndUserId').mockResolvedValueOnce(null);
 
