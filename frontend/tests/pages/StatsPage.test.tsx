@@ -99,7 +99,9 @@ describe('StatsPage — Giao diện Thống kê học tập tuần TV5 (Issue #1
     );
 
     await waitFor(() => {
-      // Banner thông báo thân thiện chuẩn Mục 6.3.1 M3
+      // Banner thông báo thân thiện chuẩn Mục 6.3.1 M3 và aria-live="polite" (W-05)
+      const statusBanner = screen.getByRole('status');
+      expect(statusBanner).toHaveAttribute('aria-live', 'polite');
       expect(screen.getByText('Chưa có dữ liệu học tập cho tuần này')).toBeInTheDocument();
       expect(
         screen.getByText('Hãy đánh dấu hoàn thành các buổi học trên Lịch để ghi nhận thống kê.'),
@@ -113,7 +115,7 @@ describe('StatsPage — Giao diện Thống kê học tập tuần TV5 (Issue #1
     expect(screen.getByText('Chưa có')).toBeInTheDocument();
   });
 
-  it('TC-UI-03: Điều hướng sang tuần trước khi bấm nút "Tuần trước"', async () => {
+  it('TC-UI-03: Luôn gửi cặp from/to cho cả tuần hiện tại và tuần trước khi điều hướng (B-01, B-02)', async () => {
     const getSpy = vi
       .spyOn(apiClient, 'get')
       .mockResolvedValueOnce({
@@ -140,22 +142,24 @@ describe('StatsPage — Giao diện Thống kê học tập tuần TV5 (Issue #1
       expect(screen.getByText('12 giờ 30 phút')).toBeInTheDocument();
     });
 
+    // Lần gọi đầu (tuần hiện tại) cũng phải gửi đúng cặp from/to dài 7 ngày
+    const firstCallParams = getSpy.mock.calls[0]?.[1]?.params as { from: string; to: string };
+    expect(firstCallParams?.from).toBeTruthy();
+    expect(firstCallParams?.to).toBeTruthy();
+    const diff1 = new Date(firstCallParams.to).getTime() - new Date(firstCallParams.from).getTime();
+    expect(diff1).toBe(7 * 24 * 60 * 60 * 1000);
+
     // Nhấn nút "Tuần trước"
     const prevWeekBtn = screen.getByRole('button', { name: 'Xem tuần trước' });
     fireEvent.click(prevWeekBtn);
 
     await waitFor(() => {
       expect(getSpy).toHaveBeenCalledTimes(2);
-      // Lần gọi thứ 2 phải có params from và to
-      expect(getSpy).toHaveBeenLastCalledWith(
-        '/statistics/weekly',
-        expect.objectContaining({
-          params: expect.objectContaining({
-            from: expect.any(String),
-            to: expect.any(String),
-          }),
-        }),
-      );
+      const secondCallParams = getSpy.mock.calls[1]?.[1]?.params as { from: string; to: string };
+      expect(secondCallParams.to).toBe(firstCallParams.from);
+      expect(
+        new Date(secondCallParams.to).getTime() - new Date(secondCallParams.from).getTime(),
+      ).toBe(7 * 24 * 60 * 60 * 1000);
     });
   });
 
@@ -222,5 +226,63 @@ describe('StatsPage — Giao diện Thống kê học tập tuần TV5 (Issue #1
       expect(getSpy).toHaveBeenCalledTimes(2);
       expect(screen.getByText('12 giờ 30 phút')).toBeInTheDocument();
     });
+  });
+
+  it('TC-UI-07: Cho phép lùi quá 4 tuần lịch sử và có nút quay về tuần hiện tại (B-03, W-04)', async () => {
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: mockWeeklyStatsSuccess,
+      warnings: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <StatsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('12 giờ 30 phút')).toBeInTheDocument();
+    });
+
+    const prevWeekBtn = screen.getByRole('button', { name: 'Xem tuần trước' });
+    for (let i = 0; i < 5; i += 1) {
+      fireEvent.click(prevWeekBtn);
+      await waitFor(() => {
+        expect(getSpy).toHaveBeenCalledTimes(i + 2);
+      });
+    }
+
+    // Không bị khóa cứng ở -4 tuần
+    expect(prevWeekBtn).toBeEnabled();
+
+    // Bấm quay về tuần hiện tại
+    const resetBtn = screen.getByRole('button', { name: 'Quay về tuần hiện tại' });
+    fireEvent.click(resetBtn);
+
+    await waitFor(() => {
+      expect(getSpy).toHaveBeenCalledTimes(7);
+      expect(screen.getByRole('button', { name: 'Xem tuần sau' })).toBeDisabled();
+    });
+  });
+
+  it('TC-UI-08: Ẩn error banner cũ khi đang loading chuyển sang tuần khác (W-03)', async () => {
+    vi.spyOn(apiClient, 'get')
+      .mockRejectedValueOnce(new ApiError('Lỗi máy chủ nội bộ', 500, 'INTERNAL_ERROR'))
+      .mockReturnValueOnce(new Promise(() => {}));
+
+    render(
+      <MemoryRouter>
+        <StatsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tuần trước' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Đang nạp dữ liệu thống kê')).toBeInTheDocument();
   });
 });

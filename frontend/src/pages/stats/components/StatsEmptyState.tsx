@@ -4,6 +4,7 @@ export function StatsEmptyState() {
   return (
     <div
       role="status"
+      aria-live="polite"
       className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 sm:p-5 rounded-xl border border-brand-borderDefault bg-gradient-to-r from-brand-surface/40 via-white to-brand-surface/20 shadow-sm"
     >
       <div className="flex items-center gap-3.5">

@@ -63,6 +63,9 @@ describe('stats-utils — Tiện ích tính toán và định dạng thống kê
       expect(formatAveragePerDay(750)).toBe('1g 47');
       // 420 / 7 = 60 phút -> 1 giờ 00 phút -> "1g 00"
       expect(formatAveragePerDay(420)).toBe('1g 00');
+      // Biên làm tròn lên 60 phút (W-02): 419 / 7 ≈ 59.86 -> 60 phút -> "1g 00" (không phải "0g 60")
+      expect(formatAveragePerDay(419)).toBe('1g 00');
+      expect(formatAveragePerDay(839)).toBe('2g 00');
       // 0 phút
       expect(formatAveragePerDay(0)).toBe('0g 00');
     });
@@ -115,11 +118,13 @@ describe('stats-utils — Tiện ích tính toán và định dạng thống kê
   });
 
   describe('formatWeekDateRange & getIsoWeekNumber', () => {
-    it('tính đúng số tuần ISO và dải ngày', () => {
+    it('tính đúng số tuần ISO và dải ngày nhất quán theo UTC (không lệch múi giờ local)', () => {
       const from = '2026-11-08T17:00:00.000Z'; // Thứ Hai 09/11/2026 VN
       const to = '2026-11-15T17:00:00.000Z'; // Thứ Hai 16/11/2026 VN
 
       expect(getIsoWeekNumber(new Date('2026-11-09T00:00:00.000Z'))).toBe(46);
+      // Biên Chủ Nhật tối UTC (nếu dùng local time UTC+7 sẽ bị nhảy sang Thứ Hai tuần 47)
+      expect(getIsoWeekNumber(new Date('2026-11-15T20:00:00.000Z'))).toBe(46);
       const info = formatWeekDateRange(from, to);
       expect(info.weekNumber).toBe(46);
       expect(info.dateRangeText).toBe('09–15/11/2026');
