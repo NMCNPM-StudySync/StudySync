@@ -62,10 +62,10 @@ export function KanbanHeader({
       </div>
 
       {/* Khung tóm tắt thông tin theo chuẩn thiết kế Figma Node 16:2 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 rounded-xl border border-[#B7CFEE] bg-gradient-to-r from-[#E1EDFF] via-[#EDF4FF] to-[#F6F9FF] shadow-sm text-xs">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 rounded-xl border border-brand-borderDefault bg-gradient-to-r from-brand-surface/70 via-brand-bg to-white shadow-sm text-xs">
         {/* Cột 1: Luồng công việc */}
-        <div className="flex flex-col gap-0.5 border-r border-[#4B7ECC]/20 pr-3">
-          <span className="font-bold tracking-wider text-[#1352A8] text-[10px] uppercase">
+        <div className="flex flex-col gap-0.5 border-r border-brand-borderDefault/50 pr-3">
+          <span className="font-bold tracking-wider text-brand-primary text-[10px] uppercase">
             Luồng công việc
           </span>
           <span className="font-heading font-bold text-sm text-brand-primary">Kanban liên tục</span>
@@ -73,31 +73,31 @@ export function KanbanHeader({
         </div>
 
         {/* Cột 2: Đội ngũ */}
-        <div className="flex flex-col gap-0.5 border-r border-[#4B7ECC]/20 pr-3">
-          <span className="font-bold tracking-wider text-[#1352A8] text-[10px] uppercase">
+        <div className="flex flex-col gap-0.5 border-r border-brand-borderDefault/50 pr-3">
+          <span className="font-bold tracking-wider text-brand-primary text-[10px] uppercase">
             Đội ngũ
           </span>
-          <span className="font-heading font-bold text-sm text-[#0D3F8D]">
+          <span className="font-heading font-bold text-sm text-brand-navy">
             {memberCount > 0 ? `${memberCount} thành viên` : 'Đang tải...'}
           </span>
           <span className="text-brand-muted text-[11px]">Cùng theo dõi tiến độ</span>
         </div>
 
         {/* Cột 3: Công việc */}
-        <div className="flex flex-col gap-0.5 border-r border-[#4B7ECC]/20 pr-3">
-          <span className="font-bold tracking-wider text-[#1352A8] text-[10px] uppercase">
+        <div className="flex flex-col gap-0.5 border-r border-brand-borderDefault/50 pr-3">
+          <span className="font-bold tracking-wider text-brand-primary text-[10px] uppercase">
             Công việc
           </span>
-          <span className="font-heading font-bold text-sm text-[#0D3F8D]">{totalCards} thẻ</span>
+          <span className="font-heading font-bold text-sm text-brand-navy">{totalCards} thẻ</span>
           <span className="text-brand-muted text-[11px]">Trong bảng Kanban</span>
         </div>
 
         {/* Cột 4: Quy định thẻ */}
         <div className="flex flex-col gap-0.5">
-          <span className="font-bold tracking-wider text-[#1352A8] text-[10px] uppercase">
+          <span className="font-bold tracking-wider text-brand-primary text-[10px] uppercase">
             Quy định nghiệp vụ
           </span>
-          <span className="font-heading font-bold text-sm text-[#0D3F8D]">
+          <span className="font-heading font-bold text-sm text-brand-navy">
             BR-04 · BR-07 · BR-08
           </span>
           <span

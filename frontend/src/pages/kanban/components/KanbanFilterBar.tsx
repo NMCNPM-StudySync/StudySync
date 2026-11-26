@@ -32,7 +32,7 @@ export function KanbanFilterBar({
     <div className="flex flex-wrap items-center justify-between gap-3 py-1">
       {/* Cụm viên pill lọc nhanh */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center rounded-lg border border-brand-borderDefault bg-[#DCE8FA] p-1 shadow-inner">
+        <div className="flex items-center rounded-lg border border-brand-borderDefault bg-brand-surface p-1 shadow-inner">
           <button
             type="button"
             onClick={() => onFilterChange('all')}

@@ -15,7 +15,6 @@ interface KanbanColumnProps {
   title: string;
   cards: KanbanCard[];
   currentUserId?: string;
-  isLeader?: boolean;
   onCardClick: (card: KanbanCard) => void;
   onStatusChange: (cardId: string, newStatus: KanbanStatus) => void;
   onDropCard: (cardId: string, targetStatus: KanbanStatus) => void;
@@ -27,7 +26,6 @@ export function KanbanColumn({
   title,
   cards,
   currentUserId,
-  isLeader,
   onCardClick,
   onStatusChange,
   onDropCard,
@@ -48,20 +46,20 @@ export function KanbanColumn({
         setIsDragOver(false);
         const cardId = e.dataTransfer.getData('text/plain');
         if (cardId) {
-          onDropCard(cardId, status);
+          Promise.resolve(onDropCard(cardId, status)).catch(() => {});
         }
       }}
       className={`flex flex-col gap-3 rounded-[14px] border p-3.5 min-h-[500px] transition-colors ${
         isDragOver
           ? 'border-brand-primary bg-brand-surface/70 ring-2 ring-brand-primary/30'
-          : 'border-[#BED0EC] bg-[#DCE8F8]'
+          : 'border-brand-borderDefault bg-brand-surface/30'
       }`}
       data-testid={`kanban-column-${status}`}
     >
       {/* Tiêu đề cột & Đếm số thẻ */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#BED0EC]/60">
+      <div className="flex items-center justify-between pb-2 border-b border-brand-borderDefault/60">
         <div className="flex items-center gap-2">
-          <h2 className="font-heading font-semibold text-sm text-[#153766]">{title}</h2>
+          <h2 className="font-heading font-semibold text-sm text-brand-navy">{title}</h2>
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-brand-slate shadow-sm">
             {cards.length}
           </span>
@@ -96,7 +94,6 @@ export function KanbanColumn({
               key={card.id}
               card={card}
               currentUserId={currentUserId}
-              isLeader={isLeader}
               onCardClick={onCardClick}
               onStatusChange={onStatusChange}
             />
@@ -105,7 +102,7 @@ export function KanbanColumn({
           /* Trạng thái rỗng (Empty State theo Mục 6.3.1 M3) */
           <div
             onClick={status === 'todo' ? onOpenCreateModal : undefined}
-            className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#BED0EC] p-6 text-center text-xs text-brand-muted h-36 select-none ${
+            className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-brand-borderDefault p-6 text-center text-xs text-brand-muted h-36 select-none ${
               status === 'todo' && onOpenCreateModal
                 ? 'cursor-pointer hover:border-brand-primary hover:text-brand-primary hover:bg-white/40'
                 : ''
