@@ -130,6 +130,11 @@ Bảng A.1: Phân công viết và soát báo cáo M3 (cập nhật chính thứ
   - [8.4 Biến môi trường](#84-biến-môi-trường)
   - [8.5 Sao lưu và phương án dự phòng](#85-sao-lưu-và-phương-án-dự-phòng)
 - [9. Truy vết](#9-truy-vết)
+- [10. Chiến lược kiểm thử hệ thống](#10-chiến-lược-kiểm-thử-hệ-thống)
+  - [10.1 Mục tiêu và phạm vi kiểm thử](#101-mục-tiêu-và-phạm-vi-kiểm-thử)
+  - [10.2 Phân tầng kiểm thử, công cụ và tích hợp CI](#102-phân-tầng-kiểm-thử-công-cụ-và-tích-hợp-ci)
+  - [10.3 Ma trận kiểm thử quy định nghiệp vụ và trường hợp biên](#103-ma-trận-kiểm-thử-quy-định-nghiệp-vụ-và-trường-hợp-biên)
+  - [10.4 Kịch bản tích hợp liên module, quản lý lỗi và tài liệu chi tiết](#104-kịch-bản-tích-hợp-liên-module-quản-lý-lỗi-và-tài-liệu-chi-tiết)
 - [Tài liệu tham khảo](#tài-liệu-tham-khảo)
 - [Ghi chú sử dụng AI (nếu có)](#ghi-chú-sử-dụng-ai-nếu-có)
 
@@ -1216,11 +1221,90 @@ Bảng 3.7: Danh sách endpoint module TV5
 
 ### 4.1 Module TV1: Tài khoản và nhóm
 
-* Use case liên quan: U001 đến U007.
+* Use case liên quan: U001 đến U007 (xem Bảng 4.1.1).
 
-* Sơ đồ tuần tự: đăng nhập; tham gia nhóm bằng liên kết mời.
+* Sơ đồ tuần tự: đăng nhập (Hình 4.1); tham gia nhóm bằng liên kết mời (Hình 4.2).
 
 * Sơ đồ lớp: Hình 4.12 (lớp thực thể) và Hình 4.17 (tầng xử lý), xem mục 4.7.4 và 4.7.9.
+
+Bảng 4.1.1: Use case của module TV1
+
+| **Use case** | **Nội dung** | **Story** | **Endpoint** | **Service xử lý** |
+|--------------|--------------|-----------|--------------|-------------------|
+| U001 | Đăng ký tài khoản | US-01 | POST /api/auth/register | AuthService |
+| U002 | Đăng nhập, cấp JWT 7 ngày | US-02 | POST /api/auth/login | AuthService |
+| U003 | Tạo nhóm, xem danh sách nhóm và thành viên | US-03 | POST /api/groups, GET /api/groups, GET /api/groups/{groupId} | GroupService |
+| U004 | Lấy hoặc tạo lại liên kết mời | US-04 | POST /api/groups/{groupId}/invite-link, .../regenerate | GroupService |
+| U005 | Tham gia nhóm bằng liên kết mời | US-05 | GET /api/invitations/{token}, POST /api/invitations/{token}/join | GroupService |
+| U006 | Xem và cập nhật hồ sơ cá nhân | US-06 | GET, PATCH /api/users/me | UserService |
+| U007 | Chuyển quyền Trưởng nhóm, rời nhóm | US-07 | PUT /api/groups/{groupId}/leader, POST /api/groups/{groupId}/leave | GroupService |
+
+#### 4.1.1 Phân định trách nhiệm theo tầng
+
+Bảng 4.1.2: Trách nhiệm của từng tầng trong module TV1
+
+| **Tầng** | **Thành phần** | **Trách nhiệm** |
+|----------|----------------|-----------------|
+| Route | Router `auth`, `users`, `groups`, `invitations` | Khai báo đường dẫn, gắn middleware `authenticate` cho mọi route "Đã đăng nhập". Chỉ `POST /api/auth/register`, `POST /api/auth/login` và `GET /api/invitations/{token}` là công khai |
+| Middleware | `authenticate`, `errorHandler` | `authenticate` xác thực JWT và gắn `req.userId`; `errorHandler` đổi `AppError` thành `{ error: { code, message, details } }` |
+| Controller | `AuthController`, `UserController`, `GroupController`, `InvitationController` | Kiểm tra kiểu, trường bắt buộc và UUID của `groupId`; gọi đúng một phương thức Service; chọn mã HTTP. Không chứa quy tắc nghiệp vụ |
+| Service | `AuthService`, `UserService`, `GroupService`, `MembershipService` | Chuẩn hóa dữ liệu, áp dụng BR-08, băm và so khớp mật khẩu, ký JWT, kiểm tra quyền theo nhóm, mở transaction và khóa dòng |
+| Repository | `UserRepository`, `GroupRepository`, `GroupMemberRepository`, `InvitationLinkRepository` | SQL có tham số, đổi dòng sang Entity; không kiểm tra quyền |
+| Entity | `User`, `Group`, `GroupMember`, `InvitationLink` | Quy tắc gắn với dữ liệu như `normalizeEmail`, `isLeader`, `isValidAt` |
+
+Quyền được kiểm tra ở Service, không chỉ ẩn nút trên giao diện (US-04 tiêu chí 4). `passwordHash` không rời khỏi tầng Service (BR-02).
+
+Bảng 4.1.2 theo thiết kế mục tiêu ở Hình 4.17 và Bảng 4.19 (mục 4.7.9). Hiện trạng mã nguồn trên `main` chưa đầy đủ: mã đã có `AuthService` (`register`, `login`, `getMe`, `verifyToken`), `MembershipService` và các router `createAuthRouter`, `createUserRouter`, `createGroupRouter`, gom trong thư mục `auth` và `groups`. Các phần sau là đặc tả thiết kế theo `docs/api.md`, chờ các PR cài đặt tiếp theo của TV1: `PATCH /api/users/me` (`UserService.updateDisplayName`), `GET /api/groups/{groupId}`, hai endpoint liên kết mời (U004), hai endpoint lời mời `GET /api/invitations/{token}` và `POST .../join` (U005), `PUT .../leader` và `POST .../leave` (U007), `InvitationLinkRepository`, `InvitationController` và các lớp Entity `Group`, `GroupMember`, `InvitationLink`.
+
+#### 4.1.2 Đặc tả AuthService và UserService (U001, U002, U006)
+
+**Đăng ký (U001).** Service chuẩn hóa `displayName` (NFC rồi cắt khoảng trắng) và `email` (cắt khoảng trắng, chữ thường), sau đó kiểm tra đủ ba trường và gom mọi lỗi vào `details[]` thay vì dừng ở lỗi đầu tiên:
+
+- Họ tên 1 đến 100 ký tự Unicode, đếm theo code point (BR-08).
+- Email đúng định dạng, tối đa 254 ký tự.
+- Mật khẩu 8 đến 72 ký tự, tối đa 72 byte UTF-8, có cả chữ cái và chữ số. Giới hạn byte vì bcrypt chỉ dùng 72 byte đầu, nếu không hai mật khẩu khác nhau có thể băm giống nhau.
+
+Có lỗi thì trả `400 VALIDATION_ERROR`. Nếu không, Service băm mật khẩu bằng bcrypt cost 10, chèn dòng `users` và ký JWT. Chống trùng email dựa vào ràng buộc `uq_users_email`: lỗi PostgreSQL `23505` được đổi thành `409 CONFLICT`. Cách này đúng cả khi hai yêu cầu cùng email đến đồng thời (một 201, một 409), điều mà "SELECT rồi INSERT" không bảo đảm. Ô xác nhận mật khẩu chỉ kiểm tra ở frontend. Mật khẩu và hash không xuất hiện trong log hay thông báo lỗi.
+
+**Đăng nhập (U002).** Quy trình xem Hình 4.1. Có hai yêu cầu bảo mật: (1) thông báo lỗi "Email hoặc mật khẩu không chính xác" giống hệt nhau cho email không tồn tại và sai mật khẩu, không kèm `details`, để không dò được email đã đăng ký; (2) khi không có người dùng, Service vẫn gọi `bcrypt.compare` với `DUMMY_HASH` (cùng cost 10, tạo một lần) để thời gian phản hồi tương đương, chống timing attack. Đăng nhập sai không khóa tài khoản trong phiên bản này.
+
+**Cấp và kiểm tra JWT.** Thuật toán HS256, khóa `JWT_SECRET`. Payload chỉ gồm `sub` (`users.id`), `iat`, `exp = iat + 7 ngày`; không đưa email hay vai trò vào token vì payload JWT chỉ mã hóa base64, không che giấu, và vai trò thay đổi theo từng nhóm. Phản hồi kèm `expiresAt` là chuỗi ISO 8601 UTC bằng `exp` (BR-07). Phiên bản này chỉ có một Access Token, không có Refresh Token; đăng xuất là frontend xóa token.
+
+**Hồ sơ cá nhân (U006).** `UserService` có `getProfile` (hiện là `AuthService.getMe` trong mã) và `updateDisplayName` chỉ thao tác trên `req.userId`, không nhận `userId` từ body hay đường dẫn. Tên mới được chuẩn hóa và kiểm tra BR-08, lỗi thì giữ nguyên dữ liệu cũ. Nếu token còn hạn nhưng tài khoản không còn, trả 401. Email chưa cho sửa.
+
+#### 4.1.3 Đặc tả GroupService và MembershipService (U003, U004, U005, U007)
+
+**Kiểm tra quyền (MembershipService).** `authenticate` chỉ cho biết ai đang gọi. Quyền theo nhóm kiểm tra ở Service, luôn tra CSDL theo `(groupId, userId)` vì vai trò lưu theo từng nhóm trong `group_members.role`. `requireMember` tra nhóm trước (không có: `404 NOT_FOUND`), rồi tra tư cách thành viên (không thuộc nhóm: `403 FORBIDDEN`). `requireLeader` gọi `requireMember` rồi yêu cầu `role = 'leader'`. Thứ tự là 401, 404, 403; nếu bỏ bước tra nhóm thì không phân biệt được "nhóm không tồn tại" và "không thuộc nhóm".
+
+Bảng 4.1.3: Ma trận quyền của endpoint TV1
+
+| **Endpoint** | **Công khai** | **Đã đăng nhập** | **Thành viên** | **Trưởng nhóm** |
+|--------------|:---:|:---:|:---:|:---:|
+| POST /api/auth/register, POST /api/auth/login, GET /api/invitations/{token} | x | | | |
+| GET, PATCH /api/users/me; POST, GET /api/groups; POST /api/invitations/{token}/join | | x | | |
+| GET /api/groups/{groupId}; POST .../leave | | | x | |
+| POST .../invite-link, .../invite-link/regenerate; PUT .../leader | | | | x |
+
+**Tạo nhóm (U003).** Tên nhóm 1 đến 100 ký tự (BR-08), không tự cắt. Hai lệnh `INSERT groups` và `INSERT group_members` (`role = 'leader'`) nằm trong một transaction để không có nhóm thiếu Trưởng nhóm. Chỉ mục `uq_group_members_one_leader_per_group` bảo đảm mỗi nhóm tối đa một Trưởng nhóm ở tầng CSDL.
+
+**Liên kết mời (U004).** Sau `requireLeader`, Service khóa dòng `groups FOR UPDATE`. Nếu đã có liên kết còn hạn thì trả lại (200); chưa có thì tạo mới (201); đã hết hạn thì cập nhật token mới. Token sinh bằng `crypto.randomBytes(32)` dạng base64url, hạn 7 ngày. Khóa dòng cùng `uq_invitation_links_group_id` bảo đảm mỗi nhóm chỉ có một liên kết còn hiệu lực dù hai Trưởng nhóm bấm cùng lúc. `regenerate` luôn đặt token mới nên liên kết cũ vô hiệu ngay. `token` và `inviteUrl` chỉ trả cho Trưởng nhóm.
+
+**Tham gia nhóm (U005).** Quy trình hai giai đoạn xem Hình 4.2. `GET /api/invitations/{token}` công khai, chỉ trả `groupName` và `expiresAt`, không lộ `groupId` hay danh sách thành viên. `POST .../join` bắt buộc đăng nhập, dùng `FOR SHARE` trên `groups` để nhóm vừa bị xóa trả 404 thay vì lỗi khóa ngoại 500, rồi `INSERT ... ON CONFLICT (group_id, user_id) DO NOTHING`. Nhờ đó thao tác idempotent: người đã là thành viên nhận `200` với `alreadyMember = true`, và Trưởng nhóm mở lại liên kết không bị hạ xuống `member`. Mọi trường hợp token không tồn tại, hết hạn hoặc bị thay đều trả cùng một thông báo `404`.
+
+**Chuyển quyền và rời nhóm (U007).** Mọi thao tác chạy trong một transaction, khóa `groups FOR UPDATE` để tuần tự hóa các yêu cầu đồng thời.
+
+Bảng 4.1.4: Các nghiệp vụ chuyển quyền và rời nhóm
+
+| **Nghiệp vụ** | **Xử lý** |
+|---------------|-----------|
+| Chuyển Trưởng nhóm (`PUT .../leader`) | `requireLeader`; người nhận khác người gọi (trùng: 400); người nhận phải là `member` (không thì 404); hạ Trưởng nhóm cũ xuống `member` rồi nâng người nhận lên `leader` |
+| Trưởng nhóm rời, còn người khác | Bắt buộc có `successorId` hợp lệ (thiếu hoặc trùng chính mình: 400; không còn trong nhóm: 404); hạ rồi nâng; xóa dòng `group_members` của người rời; đặt `kanban_cards.assigned_to_user_id = NULL` cho thẻ giao cho người rời |
+| Thành viên thường rời | Xóa dòng `group_members`, gỡ giao thẻ Kanban, quyền tổ chức họp mất theo |
+| Thành viên cuối rời | `DELETE groups`, CASCADE xóa thành viên, liên kết mời và dữ liệu nhóm; lịch cá nhân, việc và khung giờ học giữ nguyên; trả `groupDeleted = true` |
+
+Thứ tự "hạ trước, nâng sau" là bắt buộc vì chỉ mục duy nhất không cho tồn tại hai `leader` dù chỉ trong khoảnh khắc giữa hai câu lệnh.
+
+#### 4.1.4 Luồng xử lý và sơ đồ tuần tự
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -1235,28 +1319,28 @@ ND->>FE: Nhập email, mật khẩu và bấm Đăng nhập
 FE->>FE: Kiểm tra sơ bộ email hợp lệ và mật khẩu không rỗng
 FE->>API: POST /api/auth/login (email, password)
 activate API
-API->>API: Kiểm tra định dạng chuỗi của email và password
-alt Thiếu email hoặc mật khẩu, hoặc email sai định dạng
+API->>API: Kiểm tra body yêu cầu là đối tượng JSON
+alt Body không phải JSON, hoặc thiếu email hoặc mật khẩu (không phải chuỗi không rỗng)
 API-->>FE: 400 VALIDATION_ERROR
 FE-->>ND: Báo lỗi yêu cầu nhập đầy đủ email và mật khẩu hợp lệ
 else Dữ liệu đầu vào hợp lệ
 API->>SVC: Yêu cầu đăng nhập (email, password)
 activate SVC
-Note over SVC: Chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
-SVC->>DB: SELECT id, email, password_hash, display_name, created_at FROM users WHERE email = lower(btrim($1))
+Note over SVC: Kiểm tra email, password là chuỗi không rỗng; chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
+SVC->>DB: SELECT * FROM users WHERE email = $1 LIMIT 1
 activate DB
 DB-->>SVC: Bản ghi người dùng (hoặc null nếu không tìm thấy)
 deactivate DB
 alt Email không tồn tại hoặc mật khẩu sai
-Note over SVC: So khớp mật khẩu với bcrypt.compare() thất bại
+Note over SVC: Không có user thì so khớp với DUMMY_HASH (cost 10); bcrypt.compare() luôn chạy nên thời gian xử lý tương đương
 SVC-->>API: Lỗi xác thực người dùng (UNAUTHORIZED)
 deactivate SVC
-API-->>FE: 401 UNAUTHORIZED { message: "Email hoặc mật khẩu không chính xác" }
+API-->>FE: 401 UNAUTHORIZED { error: { code: "UNAUTHORIZED", message: "Email hoặc mật khẩu không chính xác" } }
 FE-->>ND: Hiển thị thông báo Email hoặc mật khẩu không chính xác
 else Thông tin đăng nhập chính xác
 activate SVC
-Note over SVC: bcrypt.compare() khớp, tạo JWT token hiệu lực 7 ngày (BR-07 UTC)
-SVC->>SVC: Ký JWT chứa sub (userId), email bằng JWT_SECRET
+Note over SVC: bcrypt.compare() khớp, tạo JWT hiệu lực 7 ngày, expiresAt theo UTC (BR-07)
+SVC->>SVC: Ký JWT HS256 chứa sub (userId), iat, exp bằng JWT_SECRET (không chứa email)
 SVC-->>API: Dữ liệu token, expiresAt và thông tin user
 deactivate SVC
 API-->>FE: 200 OK { data: { token, expiresAt, user } }
@@ -1291,7 +1375,7 @@ deactivate DB
 alt Mã mời không tồn tại hoặc đã quá hạn 7 ngày
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Hiển thị thông báo liên kết không tồn tại hoặc đã hết hạn
 else Mã mời hợp lệ và còn hiệu lực
@@ -1323,31 +1407,40 @@ deactivate DB
 alt Liên kết vừa hết hạn hoặc không còn hiệu lực
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
 else Liên kết còn hiệu lực
 activate API
 activate SVC
-SVC->>DB: SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2
+SVC->>DB: SELECT id FROM groups WHERE id = $1 FOR SHARE
 activate DB
-DB-->>SVC: Bản ghi thành viên (hoặc null)
+DB-->>SVC: Dòng nhóm (hoặc null nếu nhóm vừa bị xóa)
 deactivate DB
-alt Sinh viên đã là thành viên của nhóm từ trước
-Note over SVC,API: Không tạo dòng mới, giữ nguyên vai trò và báo thành công kèm cờ alreadyMember
+alt Nhóm vừa bị xóa
+SVC-->>API: Lỗi nhóm không còn (NOT_FOUND)
+deactivate SVC
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
+deactivate API
+FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
+else Nhóm còn tồn tại
+activate API
+activate SVC
+Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
+SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now()) ON CONFLICT (group_id, user_id) DO NOTHING RETURNING user_id
+activate DB
+DB-->>SVC: Dòng mới (hoặc rỗng nếu đã là thành viên)
+deactivate DB
+alt Không chèn được dòng mới (đã là thành viên từ trước)
+Note over SVC,API: Giữ nguyên vai trò (kể cả Trưởng nhóm), báo thành công kèm cờ alreadyMember
 SVC-->>API: Thông tin nhóm và alreadyMember = true
 deactivate SVC
 API-->>FE: 200 OK { data: { group, alreadyMember: true } }
 deactivate API
 FE-->>ND: Hiển thị Bạn đã là thành viên của nhóm này và mở nhóm
-else Sinh viên mới gia nhập nhóm lần đầu
+else Chèn được dòng thành viên mới
 activate API
 activate SVC
-Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
-SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now())
-activate DB
-DB-->>SVC: Bản ghi thành viên mới đã lưu
-deactivate DB
 SVC-->>API: Thông tin nhóm và alreadyMember = false
 deactivate SVC
 API-->>FE: 201 CREATED { data: { group, alreadyMember: false } }
@@ -1356,9 +1449,34 @@ FE-->>ND: Thông báo tham gia thành công và mở không gian làm việc c�
 end
 end
 end
+end
 ```
 
 Hình 4.2: Sơ đồ tuần tự tham gia nhóm bằng liên kết mời (U005)
+
+#### 4.1.5 Xử lý lỗi
+
+Bảng 4.1.5: Tình huống lỗi và cách xử lý của module TV1
+
+| **Use case** | **Tình huống** | **Kết quả** |
+|--------------|----------------|-------------|
+| U001 | Email sai định dạng, họ tên ngoài 1 đến 100 ký tự, mật khẩu yếu hoặc quá 72 ký tự/byte | 400 `VALIDATION_ERROR`, `details[]` chứa mọi lỗi |
+| U001 | Email đã tồn tại (kể cả khác hoa thường, thừa khoảng trắng, hoặc hai yêu cầu đồng thời) | 409 `CONFLICT`, giữ dữ liệu đã nhập ở form |
+| U002 | Thiếu email hoặc mật khẩu | 400 `VALIDATION_ERROR` |
+| U002 | Email không tồn tại hoặc sai mật khẩu | 401 `UNAUTHORIZED`, cùng một thông báo, thời gian tương đương |
+| U002 | Token thiếu, sai chữ ký, sai `alg`, hết hạn hoặc `sub` rỗng | 401 `UNAUTHORIZED`; frontend xóa token và về trang Đăng nhập |
+| U003 | Tên nhóm rỗng hoặc quá 100 ký tự; `groupId` không phải UUID | 400 `VALIDATION_ERROR` |
+| U003, U004, U007 | Nhóm không tồn tại | 404 `NOT_FOUND` |
+| U003, U007 | Người không thuộc nhóm xem chi tiết hoặc rời nhóm | 403 `FORBIDDEN` |
+| U004, U007 | Thành viên thường gọi tạo liên kết mời hoặc chuyển quyền | 403 `FORBIDDEN`, không thay đổi dữ liệu |
+| U005 | Liên kết không tồn tại, hết hạn, bị thay hoặc nhóm vừa bị xóa | 404 `NOT_FOUND`, cùng một thông báo |
+| U005 | Đã là thành viên mở lại liên kết | 200, `alreadyMember = true`, giữ nguyên vai trò |
+| U005 | Mở liên kết khi chưa đăng nhập | Frontend lưu đường dẫn, chuyển Đăng nhập, xong quay lại màn hình xác nhận |
+| U006 | Tên hiển thị rỗng hoặc quá 100 ký tự | 400 `VALIDATION_ERROR`, giữ nguyên tên cũ |
+| U007 | Trưởng nhóm rời thiếu `successorId`, hoặc chọn chính mình | 400 `VALIDATION_ERROR` |
+| U007 | Người kế nhiệm hoặc người nhận quyền đã rời nhóm | 404 `NOT_FOUND` |
+| Chung | Lỗi CSDL hoặc mất kết nối | 500 `INTERNAL_ERROR` không lộ chi tiết, transaction ROLLBACK |
+
 
 ### 4.2 Module TV2: Lịch cá nhân và nhập lịch
 
@@ -4729,13 +4847,42 @@ Hình 6.12: Giao diện trạng thái không tìm được khung giờ học ph�
 
 ### 7.1 Riêng tư lịch cá nhân (BR-02)
 
-* [Template] Mô tả cách API dành cho nhóm chỉ trả khoảng thời gian bận hoặc rảnh, kể cả với Trưởng nhóm; việc chặn thực hiện ở tầng API.
+Quy tắc BR-02: thành viên nhóm, kể cả Trưởng nhóm, chỉ thấy trạng thái bận hoặc rảnh của nhau, không thấy tên, loại, địa điểm hay ghi chú của sự kiện cá nhân. Việc chặn thực hiện ở tầng API và các tầng bên dưới, không dựa vào giao diện. Tham gia nhóm (U005) cũng không mở quyền xem lịch của ai: thành viên mới nhận vai `member` với `can_organize_meetings = false`.
+
+Nhóm dựng BR-02 thành nhiều lớp, mỗi lớp tự đúng khi lớp khác bị sửa nhầm:
+
+* Lớp truy vấn: khi tìm giờ họp chung (TV4), repository chỉ chọn `user_id`, `starts_at`, `ends_at` của `fixed_events`. Các cột `title`, `kind`, `location`, `notes`, `source` không được đọc. Bảng `tasks`, `study_slots` và `reminders` không tính vào trạng thái bận và không được trả cho nhóm.
+
+* Lớp thuật toán: thư viện khoảng thời gian (mục 1.3) chỉ nhận cặp thời điểm bắt đầu, kết thúc, không có kiểu nào chứa nội dung sự kiện.
+
+* Lớp phản hồi: DTO dựng theo danh sách trường cho phép. Khung giờ trả về chỉ gồm thời điểm, số người rảnh và `busyMembers` là `displayName` của người bận, không kèm lý do bận. Điểm xếp hạng là số tổng hợp, không kèm số liệu từng người.
+
+* Lớp dữ liệu hồ sơ: `GET /api/groups/{groupId}` chỉ trả `userId`, `displayName`, `role`, `canOrganizeMeetings`, `joinedAt`. `email` và `password_hash` không bao giờ trả cho người khác.
+
+* Lớp quyền: tìm giờ họp chung chỉ cho Trưởng nhóm hoặc người được ủy quyền tổ chức họp, và chỉ trong nhóm của họ (`403 FORBIDDEN` nếu không). Quyền này cho phép xem giờ rảnh chung, không cho phép xem chi tiết sự kiện.
+
+* Lớp nhật ký: không ghi khoảng bận hay kết quả tìm kiếm vào log.
+
+Theo thiết kế, các API dữ liệu cá nhân (lịch và việc của TV2, khung giờ học của TV3, thống kê tuần `GET /api/statistics/weekly` của TV5) đều lọc theo `user_id` lấy từ JWT (`req.userId`), không nhận `userId` từ yêu cầu, nên không có đường nào để một thành viên đọc lịch của người khác. Điều kiện đi kèm là các router này phải được mount sau middleware `authenticate`; hiện `backend/src/routes/api.ts` chưa truyền `authenticate` khi mount `/events`, `/tasks`, `/schedule` và `/scheduler`, nhóm cần rà soát và bổ sung ở phần cài đặt trước khi nghiệm thu.
 
 ### 7.2 Xác thực và phân quyền
 
-* Mật khẩu băm; phiên đăng nhập 7 ngày; liên kết mời có hiệu lực 7 ngày, mỗi nhóm một liên kết còn hiệu lực.
+**Băm mật khẩu.** Mật khẩu được băm bằng bcrypt với cost 10 trước khi lưu vào `users.password_hash`; không lưu hay ghi log mật khẩu gốc. Mật khẩu giới hạn 72 byte UTF-8 vì bcrypt chỉ dùng 72 byte đầu. Khi đăng nhập, `bcrypt.compare` luôn chạy, kể cả khi không có email (so với `DUMMY_HASH`), và hai trường hợp sai trả cùng một thông báo 401 để không lộ email nào đã đăng ký.
 
-* Quyền Trưởng nhóm, người tổ chức họp, người tạo thẻ kiểm tra ở API (403 FORBIDDEN).
+**JWT.** Sau khi đăng nhập hoặc đăng ký, hệ thống cấp một Access Token ký HS256 bằng `JWT_SECRET`, hiệu lực 7 ngày. Payload chỉ gồm `sub` (id người dùng), `iat`, `exp`; `expiresAt` trả về là thời điểm UTC (BR-07). Frontend gửi token qua `Authorization: Bearer <token>`. Middleware `authenticate` chỉ chấp nhận thuật toán HS256 (chặn `alg: none`), kiểm tra chữ ký, hạn dùng và `sub` là chuỗi không rỗng; mọi trường hợp thiếu, sai hoặc hết hạn đều trả `401 UNAUTHORIZED`. Middleware không truy vấn CSDL. Phiên bản này không có Refresh Token hay danh sách thu hồi: đăng xuất là frontend xóa token.
+
+**Phân quyền tầng API (403 FORBIDDEN).** Vai trò lưu theo từng nhóm trong `group_members` nên không đưa vào JWT, mà Service tra CSDL theo `(groupId, userId)` ở mỗi yêu cầu. Thứ tự kiểm tra: 401 (chưa đăng nhập), 404 (nhóm không tồn tại), 403 (không thuộc nhóm hoặc không đủ quyền). Việc chặn nằm ở Service nên một yêu cầu gọi trực tiếp API vẫn bị từ chối dù giao diện đã ẩn nút.
+
+Bảng 7.1: Các quyền kiểm tra ở API
+
+| **Quyền** | **Thao tác** | **Điều kiện** |
+|-----------|--------------|---------------|
+| Thành viên nhóm | Xem chi tiết nhóm, rời nhóm; xem, tạo và chuyển cột thẻ Kanban; xem đề xuất họp và phản hồi lời mời họp gửi cho mình | Có dòng `group_members` của người gọi (lời mời: là người nhận) |
+| Trưởng nhóm | Tạo hoặc tạo lại liên kết mời, chuyển quyền, giao hoặc bỏ giao thẻ Kanban, bật hoặc tắt quyền tổ chức họp của thành viên (U036, `PATCH .../members/{userId}/meeting-permission`) | `role = 'leader'` |
+| Người tổ chức họp | Tìm giờ chung, gửi lời mời họp | Trưởng nhóm hoặc `can_organize_meetings = true` |
+| Người tạo thẻ | Sửa, xóa thẻ Kanban | Là người tạo thẻ hoặc Trưởng nhóm |
+
+**Liên kết mời.** Token sinh bằng bộ sinh số ngẫu nhiên mật mã (`crypto.randomBytes(32)`, base64url), có hiệu lực 7 ngày, mỗi nhóm một liên kết còn hiệu lực; tạo lại thì liên kết cũ vô hiệu ngay. Người ngoài nhóm chỉ xem được tên nhóm và hạn liên kết; token không tồn tại, hết hạn hoặc bị thay đều trả cùng một thông báo 404.
 
 ### 7.3 Quản lý khóa và biến môi trường
 
@@ -4884,6 +5031,91 @@ Bảng 9.1: Truy vết từ user story đến thiết kế
 | **US-32** | Lọc thẻ Kanban theo người được giao (assigneeId hoặc unassigned) | TV5 | U044 | kanban_cards, group_members | GET /api/groups/{groupId}/cards |
 | US-33 | Xem biểu đồ thống kê tổng số giờ đã học theo tuần | TV5 | U045 | study_slots (status = 'studied', TV3) | GET /api/statistics/weekly |
 | **US-34** | Sửa thông tin (tên, hạn chót) hoặc xóa thẻ Kanban | TV5 | U046 | kanban_cards, group_members | PATCH /api/groups/{groupId}/cards/{cardId}<br>DELETE /api/groups/{groupId}/cards/{cardId} |
+
+## 10. Chiến lược kiểm thử hệ thống
+
+Mục này tóm tắt kiến trúc kiểm thử chất lượng của StudySync được trích xuất từ tài liệu đặc tả chi tiết [docs/testing/strategy.md](../testing/strategy.md) (Issue #108), làm cầu nối giữa thiết kế hệ thống ở M3 và kế hoạch thực thi kiểm thử ở M5.
+
+### 10.1 Mục tiêu và phạm vi kiểm thử
+
+Hoạt động kiểm thử nhằm xác minh hệ thống vận hành đúng 33 trên 34 user story thuộc phạm vi phát hành chính thức từ v0.1 đến v0.3 (`US-01` đến `US-34`, ngoại trừ `US-16` mức `Could` là nhập thời khóa biểu từ ảnh chụp được hoãn đến khi hoàn thành tính năng chính cuối Sprint 4), tuân thủ 8 quy định nghiệp vụ (`BR-01` đến `BR-08`) và chạy thông suốt 2 kịch bản demo tại M4 và M6.
+
+* **Trong phạm vi:** Toàn bộ 5 module backend (`TV1` đến `TV5`), thư viện khoảng thời gian dùng chung (`backend/src/utils/interval.ts`), middleware xác thực JWT (`authenticate`), dịch vụ kiểm tra quyền nhóm (`MembershipService`), bộ kiểm tra dữ liệu đầu vào (`validation.ts`); các component React có logic nghiệp vụ phức tạp (`ImportFileForm`, `WeekCalendar`, `EventForm`, `TaskForm`, `ProposalConfirmModal`, `KanbanBoard`, `MeetingSlotPicker`); toàn bộ các nhóm REST API của 5 module; và 2 luồng End-to-End (E2E) mô phỏng kịch bản sử dụng thật.
+* **Ngoài phạm vi:** Kiểm thử tự động cho `US-16` (nhập lịch từ ảnh chụp, dự phòng 3 ca thiết kế `TC-06`, `TC-28`, `TC-83` trên Google Sheets), kiểm thử tải (load test) và kiểm thử tương thích đa trình duyệt diện rộng (chỉ kiểm tra trực quan trên Google Chrome máy tính và Safari/Chrome trên điện thoại).
+* **Quy ước dữ liệu và thời gian kiểm thử:** Toàn bộ ca kiểm thử chỉ dùng dữ liệu giả, không dùng thời khóa biểu thật của sinh viên. Ở tầng Unit Test, thời điểm hiện tại `now: Date` được truyền trực tiếp vào hàm thuần và phương thức Entity/Service. Ở tầng Integration Test, nhóm chỉ giả đối tượng `Date` bằng `vi.useFakeTimers({ toFake: ['Date'] })` kết hợp `vi.setSystemTime(...)` để không làm treo kết nối `pg` và `Supertest`; với các điều kiện so sánh bằng hàm `now()` trực tiếp trong PostgreSQL (như hạn 7 ngày của `invitation_links.expires_at`), kịch bản cập nhật trực tiếp cột thời gian tương ứng trong CSDL kiểm thử.
+
+### 10.2 Phân tầng kiểm thử, công cụ và tích hợp CI
+
+Nhóm áp dụng mô hình kiểm thử gồm 4 cấp độ kết hợp với quy trình tích hợp liên tục (Continuous Integration, CI) trên GitHub Actions (xem Bảng 10.1).
+
+Bảng 10.1: Phạm vi các cấp độ kiểm thử và công cụ thực thi
+
+| **Cấp độ kiểm thử** | **Công cụ và thư viện** | **Phạm vi và vị trí mã nguồn** | **Môi trường chạy và tích hợp CI** |
+| :--- | :--- | :--- | :--- |
+| **Unit Test (Backend)** | `Vitest` (`^5.0.5`), `@vitest/coverage-v8` (`^5.0.5`) | Hàm thuần (`interval.ts`), validator (`BR-07`, `BR-08`), parser `.ics`/`.csv` (`BR-05`, `BR-06`), `authenticate`, `MembershipService`, Entity (`FixedEvent`, `Task`, `KanbanCard`), `SchedulerEngine` (`TV3`) và `MeetingSlotFinder` (`TV4`) *(tên lớp theo thiết kế mục 4.7; cài đặt thực tế trên `main` dùng `KanbanCardEntity` tại `kanban.entity.ts` ở TV5 và các hàm thuần `findCommonFreeSlots`, `dailyWindows`, `officeHourFactor` tại `meeting-slot.finder.ts` ở TV4)* tại `backend/tests/` | Chạy cục bộ không cần CSDL (`npm test`, `npm run test:coverage`; `backend/vitest.config.mts` đã loại trừ `tests/integration/**`); chạy tự động trên GitHub Actions CI |
+| **Frontend Test (UI Component)** | `Vitest` (`^5.0.5`), `React Testing Library` (`RTL`, `@testing-library/react` `^16.3.3`), `@testing-library/jest-dom` (`^7.0.1`), `jsdom` (`^26.1.0`) | Các component React có state và logic nghiệp vụ theo `strategy.md` (`ImportFileForm`, `WeekCalendar`, `EventForm`, `TaskForm`, `ProposalConfirmModal`, `KanbanBoard`, `MeetingSlotPicker`), quy đổi giờ Việt Nam và xử lý lỗi API tại `frontend/tests/` *(trên `main` hiện đã có các bộ test theo trang tại `frontend/tests/pages/` gồm `MeetingsPage.test.tsx`, `StatsPage.test.tsx`, `stats-utils.test.ts` và tiện ích tại `frontend/tests/utils/` gồm `meetings-helpers.test.ts`, `vietnam-time.test.ts`)* | Chạy cục bộ bằng `npm test`; chạy tự động trên GitHub Actions CI |
+| **Integration Test (API và CSDL)** | `Vitest` (`^5.0.5`), `Supertest` (`^7.3.1`), PostgreSQL test database | Kiểm thử xuyên suốt từ Route, Middleware, Controller, Service đến PostgreSQL thật: trên `main` hiện đã có `backend/tests/integration/api.test.ts` (10 kịch bản `API-IT-01` đến `API-IT-10`), `global-setup.ts`, thư mục `helpers/` và cấu hình `backend/vitest.integration.config.mts` (bên cạnh các test API cô lập đặt tại `backend/tests/` như `tv2-api-integration.test.ts`, `tv5-integration.test.ts`, `kanban.api.test.ts`, `meeting.api.test.ts`, `stats.api.test.ts`). Cấu trúc mục tiêu theo `strategy.md` chia thành 5 tệp riêng theo module (`auth`, `events`, `scheduler`, `meeting`, `kanban`) | Chạy trên PostgreSQL cục bộ riêng qua biến `TEST_DATABASE_URL` (cách ly 5 lớp, dọn dữ liệu theo tài khoản test) bằng script đã tách `npm run test:integration`; dự kiến bổ sung job `integration-test` với `services: postgres` trên `.github/workflows/ci.yml` |
+| **End-to-End Test (E2E)** | `Playwright` (`^1.x`, dự kiến cài đặt từ Sprint 3) | Xác minh 2 kịch bản demo thật từ trình duyệt đến CSDL tại `e2e/` *(thư mục đề xuất)*: `E2E-01` (`TC-159`, Tìm giờ họp nhóm) và `E2E-02` (`TC-160`, Tái xếp lịch khi bỏ lỡ buổi học) | Chạy trên bản dựng cục bộ giống môi trường chạy thật (Sprint 4) và nghiệm thu trên môi trường chạy thật (Tuần 9) |
+
+**Tích hợp GitHub Actions CI (`.github/workflows/ci.yml`):** Workflow `CI Pipeline` tự động kích hoạt khi có `pull_request` hoặc `push` vào nhánh `main`, chạy song song ma trận `matrix.project` gồm `backend` và `frontend` trên `ubuntu-latest` (phiên bản Node.js đọc từ `.nvmrc`). Mỗi nhánh ma trận thực thi tuần tự các bước `npm ci`, `npm run lint`, `npm run build` và `npm test`. Pull Request không đạt bước nào sẽ bị chặn merge. Ở các Sprint tiếp theo, nhóm dự kiến bổ sung bước `typecheck` riêng (`npx tsc --noEmit`) và job `integration-test` chạy `npm run migrate:up` cùng `npm run test:integration` trên dịch vụ `postgres:16` theo đề xuất tại `docs/testing/integration-tests.md`.
+
+### 10.3 Ma trận kiểm thử quy định nghiệp vụ và trường hợp biên
+
+Tab "Test case" trên Google Sheets hiện quản lý **193 ca kiểm thử (`TC-01` đến `TC-193`)**, gồm 158 ca nền từ `docs/testing/strategy.md` (`TC-01` đến `TC-158`, ánh xạ hai chiều với 64 nhóm ca `TS-01` đến `TS-64` và 6 kịch bản liên module `IT-01` đến `IT-06`) và 35 ca mở rộng (`TC-159` đến `TC-160` cho `E2E-01` và `E2E-02`, `TC-161` đến `TC-169` cho các ca biên TV4, `TC-170` đến `TC-193` cho các ca biên TV3). Bảng 10.2 tổng hợp phạm vi bao phủ cho cả 8 quy định nghiệp vụ cốt lõi từ `BR-01` đến `BR-08`.
+
+Bảng 10.2: Ma trận kiểm thử trọng tâm cho các quy định nghiệp vụ BR-01 đến BR-08
+
+| **Mã BR** | **Ưu tiên** | **Module áp dụng** | **Tầng kiểm thử** | **Mã ca tiêu biểu (`Strategy` / `Sheets`)** | **Kịch bản kiểm thử trọng tâm và kết quả mong đợi** |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **BR-01** | Blocker | TV2, TV3 | Unit, RTL, Supertest | `TS-01` đến `TS-09g` (`TC-29`, `TC-57` đến `TC-60`, `TC-85` đến `TC-97`) | `hasOverlap` trả `true` khi giao nhau và `false` khi nối tiếp; engine xếp lịch không đè lịch cố định, giữ khung nối tiếp hợp lệ, không xếp ép khi lịch kín; nhập tay hoặc nạp `.ics`/`.csv` có sự kiện chồng nhau vẫn lưu (HTTP 201/200) kèm cảnh báo `FIXED_EVENT_OVERLAP` |
+| **BR-02** | Blocker | TV1, TV4, TV5 | Unit, RTL, Supertest | `TS-10` đến `TS-14e` (`TC-61` đến `TC-63`, `TC-98` đến `TC-108`) | `authenticate` trả 401 khi thiếu/sai/hết hạn JWT; `MembershipService` trả 403 với người ngoài nhóm hoặc chưa được ủy quyền (`U036`); API và giao diện tìm giờ họp không trả `title`, `kind`, `location`, `notes`, `source` kể cả với Trưởng nhóm và thành viên vừa vào nhóm (`US-05`); người dùng chỉ đọc được lịch cá nhân và phạm vi phản hồi đúng vai trò |
+| **BR-03** | High | TV3 | Unit, RTL, Supertest | `TS-15` đến `TS-19d` (`TC-64`, `TC-65`, `TC-109` đến `TC-117`, `TC-148`) | Đề xuất chưa xác nhận không hiện trên `GET /api/schedule/week`; từ chối hoặc đóng hộp thoại giữ nguyên lịch tuần; xác nhận lặp chống lưu trùng (HTTP 200 trả kết quả cũ); từ chối xác nhận với 409 `CONFLICT` khi lịch thay đổi (`schedule_changed`), đề xuất quá giờ (`proposal_expired`) hoặc đã đóng (`proposal_closed`) |
+| **BR-04** | High | TV2, TV4, TV5 | Unit, RTL, Supertest | `TS-20` đến `TS-25e` (`TC-66` đến `TC-68`, `TC-118` đến `TC-123`, `TC-149` đến `TC-151`) | Từ chối tạo/sửa việc cần làm và thẻ Kanban thiếu `dueAt` (400 `VALIDATION_ERROR`); hạn chót đã qua vẫn cho lưu (201) kèm `DEADLINE_PASSED`; gán mặc định `durationMinutes = 60` khi không nhập ở việc cần làm; từ chối `durationMinutes <= 0` ở việc cần làm và từ chối mọi trường `durationMinutes` trên thẻ Kanban |
+| **BR-05** | High | TV2 | Unit, RTL, Supertest | `TS-26a` đến `TS-31` (`TC-01` đến `TC-07`, `TC-80`, `TC-81`, `TC-152` đến `TC-154`) | Chấp nhận tệp `.ics`/`.csv` đúng biên 5.242.880 byte (`5 × 1024 × 1024`) và tệp 5.000.001 byte; từ chối tệp 5.242.881 byte với 413 `FILE_TOO_LARGE` không ghi bản ghi nào; ngưỡng đổi động theo `MAX_IMPORT_FILE_MB`; giao diện `ImportFileForm` chặn sớm tệp quá 5 MB |
+| **BR-06** | High | TV2 | Unit, RTL, Supertest | `TS-32` đến `TS-41c` (`TC-08` đến `TC-28`, `TC-76`, `TC-82`, `TC-124` đến `TC-132`, `TC-156`, `TC-157`) | Từ chối toàn khối (422 `FILE_INVALID`, không lưu dòng nào) khi tệp rỗng, không có sự kiện, sai UTF-8, thiếu cột `.csv`, thiếu `SUMMARY`/`DTSTART`/`UID`, thiếu cả `DTEND` lẫn `DURATION`, `DTEND <= DTSTART`, `TZID` lạ hoặc tên vượt 200 ký tự; trả tối đa 20 lỗi đầu kèm `totalErrors` và đúng số dòng gốc sau unfold `.ics` |
+| **BR-07** | High | TV2, TV3, TV4, TV5 | Unit, RTL, Supertest | `TS-42` đến `TS-51c` (`TC-30` đến `TC-37`, `TC-133` đến `TC-141`, `TC-155`) | API nhận chuỗi ISO 8601 hậu tố `Z` (có hoặc không mili giây), từ chối offset `+07:00`/`+00:00` hoặc thiếu `Z` (400), luôn trả chuỗi có `.000Z`; lưu UTC không phụ thuộc múi giờ máy chủ; nhập 06:30 giờ VN thành `23:30:00.000Z` hôm trước; hỗ trợ `WINDOWS_TIMEZONE_MAP`; thống kê tuần và mốc nhắc 24 giờ/1 giờ tính đúng ranh giới ngày VN và UTC |
+| **BR-08** | High | TV1, TV2, TV4, TV5 | Unit, RTL, Supertest | `TS-52` đến `TS-64` (`TC-16`, `TC-38` đến `TC-56`, `TC-69` đến `TC-75`, `TC-77` đến `TC-79`, `TC-84`, `TC-142`) | Chuẩn hóa Unicode NFC, cắt khoảng trắng, tab, xuống dòng và khoảng trắng không ngắt (Non-Breaking Space, NBSP) hai đầu rồi đếm theo code point; kiểm tra biên 1, 100, 101 ký tự (tên nhóm, tên hiển thị) và 1, 200, 201 ký tự (việc cần làm, sự kiện cố định, đề xuất họp, thẻ Kanban); đếm đúng tiếng Việt dạng tổ hợp (Normalization Form D, NFD), emoji đơn và emoji ghép có ký tự nối không độ rộng (Zero Width Joiner, ZWJ); kiểm tra ràng buộc `varchar` và `CHECK` ở PostgreSQL; cắt hiển thị `...` mà không cắt dữ liệu gốc |
+
+Bên cạnh ma trận theo quy định nghiệp vụ ở Bảng 10.2, bộ kiểm thử bao phủ các trường hợp biên đặc thù của từng module (xem Bảng 10.3), đồng bộ với thiết kế chi tiết tại mục 4, mục 5 và bảng truy vết tại mục 9.
+
+Bảng 10.3: Tổng hợp các trường hợp biên trọng tâm theo 5 module
+
+| **Module** | **Trường hợp biên trọng tâm cần kiểm thử** | **Mã ca tham chiếu** |
+| :--- | :--- | :--- |
+| **TV1 (Tài khoản và nhóm)** | Đăng ký trùng email (409); mật khẩu dưới 8 ký tự, vượt 72 byte hoặc thiếu chữ/số (400); gọi endpoint bảo vệ khi chưa đăng nhập/hết hạn token (401); tên nhóm và tên hiển thị rỗng/khoảng trắng, đúng 100 và 101 ký tự NFC, ràng buộc `CHECK`/`varchar` ở CSDL; liên kết mời hết hạn 7 ngày hoặc bị thu hồi khi tạo lại (404); tham gia lại nhóm đã vào (`alreadyMember = true`, 200); Trưởng nhóm rời nhóm thiếu `successorId` (400); thành viên cuối cùng rời nhóm xóa nhóm theo `ON DELETE CASCADE` mà vẫn giữ lịch cá nhân | `TS-10c`, `TS-12c`, `TS-61`, `TS-61b`, `TS-61c`, `TS-63d`, `IT-06` (`TC-147`) |
+| **TV2 (Lịch cá nhân và nhập lịch)** | Sự kiện cố định trùng nhau và nối tiếp chạm mép; tệp đúng 5.242.880 byte và vượt 1 byte; tệp 0 byte; đúng 20 và 21 dòng lỗi; `RRULE` vượt trần 150 buổi/24 tuần; loại trừ ngày nghỉ qua `EXDATE`; sự kiện cả ngày `VALUE=DATE`; tệp `.csv` có UTF-8 BOM và sai bảng mã Windows-1252; ngày không tồn tại (`31/02`); dừng ngắt nguyên tử ở sự kiện lỗi thứ 100 | `TS-02`, `TS-07`, `TS-08`, `TS-26a` đến `TS-41c`, `IT-05` (`TC-158`) |
+| **TV3 (Xếp lịch tự động)** | Lịch trống hoàn toàn và lịch kín 07:00 đến 22:00; việc đã xếp đủ (`NO_TASKS_TO_SCHEDULE`); việc quá hạn (`overdue`); chia khung tối đa 2 giờ, nghỉ giữa 2 khung cùng việc 30 phút, tối đa 4 giờ/ngày; kiểm tra gộp hạn chót EDF để không làm trễ việc gấp hơn; đề xuất chờ chưa đổi lịch tuần, chấp nhận/từ chối (`BR-03`); chỉ còn chỗ cho 0, 1 hoặc 2 khung giờ bù (`NO_MAKEUP_SLOT`); đánh dấu đã học lũy đẳng và chặn khung chưa bắt đầu hoặc đã bỏ lỡ | `TS-01` đến `TS-09f`, `TS-15` đến `TS-19b`, `TC-TV3-01` đến `TC-TV3-36` (bổ sung `TC-170` đến `TC-193`), `IT-01`, `IT-02` |
+| **TV4 (Giờ chung và nhắc việc)** | Nhóm chỉ có 1 thành viên (400); khoảng tìm kiếm đã qua hoàn toàn (400); nhóm không có giờ rảnh chung trả tối đa 10 `partialSlots` có `busyMembers[].displayName`; thành viên chưa nhập sự kiện cố định (`MEMBER_NO_FIXED_EVENTS`); phản hồi vào lời mời đã `superseded` hoặc quá giờ (409); thành viên thường chỉ thấy phản hồi của mình (`viewScope = "self"`); bỏ mốc nhắc đã qua khi lưu việc còn 5 giờ hoặc 30 phút; chống gửi lặp bằng `SKIP LOCKED` | `TS-10` đến `TS-14e`, `TS-51` đến `TS-51c`, `TC-TV4-01` đến `TC-TV4-19` (bổ sung `TC-161` đến `TC-169`), `IT-03` (`TC-145`) |
+| **TV5 (Kanban và thống kê)** | Tạo và sửa thẻ Kanban có hạn chót quá khứ (`DEADLINE_PASSED`), từ chối khi gửi kèm `durationMinutes`; chuyển cột hai chiều giữa 3 cột cố định (`todo`, `in_progress`, `done`); chỉ Trưởng nhóm được giao/bỏ giao thẻ và chỉ người tạo hoặc Trưởng nhóm được sửa/xóa (403); thành viên rời nhóm tự gỡ giao thẻ; thống kê tuần tính đúng khung `studied` bắt đầu 06:30 Thứ Hai giờ VN (`23:30Z` Chủ Nhật), khung vắt qua nửa đêm, khung có `task_id = NULL`, chặn tuần tương lai (400) | `TS-25` đến `TS-25e`, `TS-50` đến `TS-50d`, `TS-62c`, `IT-04` (`TC-146`) |
+
+*Ghi chú về mã ca biên:* Các mã `TC-TV3-01` đến `TC-TV3-36` và `TC-TV4-01` đến `TC-TV4-19` trong Bảng 10.3 là mã ca biên nội bộ được định nghĩa tại mục 5.3 (Bảng 5.10 và Bảng 5.11). Các ca biên chưa có mã trùng trong bộ 158 ca nền của `strategy.md` đã được đồng bộ bổ sung vào dải `TC-161` đến `TC-169` (9 ca biên TV4) và `TC-170` đến `TC-193` (24 ca biên TV3) trên tab "Test case" của Google Sheets (cùng `TC-159`, `TC-160` cho 2 kịch bản E2E).
+
+### 10.4 Kịch bản tích hợp liên module, quản lý lỗi và tài liệu chi tiết
+
+Để bảo đảm tính nhất quán giữa các module dùng chung dữ liệu (xem mục 2.4 và mục 9), hệ thống định nghĩa 6 kịch bản kiểm thử tích hợp liên module (xem Bảng 10.4; triển khai chi tiết thành 10 khối `API-IT-01` đến `API-IT-10` trong `backend/tests/integration/api.test.ts`) cùng 2 kịch bản E2E tự động (`E2E-01` / `TC-159`, `E2E-02` / `TC-160`).
+
+Bảng 10.4: Tóm tắt 6 kịch bản kiểm thử tích hợp liên module
+
+| **Mã kịch bản** | **Mã Sheets** | **Module phối hợp** | **Luồng nghiệp vụ được xác minh** |
+| :--- | :--- | :--- | :--- |
+| **IT-01** | `TC-143` | TV1 + TV2 + TV3 | Tạo sự kiện cố định, việc cần làm, gọi `auto-plan`, xác nhận áp dụng (`confirm`) và kiểm tra hiển thị trên lịch tuần (`GET /api/schedule/week`) |
+| **IT-02** | `TC-144` | TV2 + TV3 | Báo lỡ khung giờ học đã đến giờ bắt đầu (`missed-session`), nhận tối đa 2 khung giờ bù không trùng lịch cố định và chọn 1 khung bằng một chạm (Kịch bản demo 2) |
+| **IT-03** | `TC-145` | TV1 + TV2 + TV4 | Nhóm 5 thành viên nạp `.ics`, Trưởng nhóm tìm giờ họp chung bảo đảm `BR-02`, gửi lời mời, thành viên phản hồi và kiểm tra trạng thái phản hồi (Kịch bản demo 1) |
+| **IT-04** | `TC-146` | TV1 + TV2 + TV3 + TV5 | Tạo, phân công, chuyển cột, lọc, sửa/xóa thẻ Kanban; đánh dấu khung đã học (`studied`), xóa việc gốc (`task_id = NULL`) và đối chiếu thống kê giờ học tuần |
+| **IT-05** | `TC-158` | TV2 (`BR-01`, `BR-05`, `BR-06`) | Kiểm thử toàn chu trình nạp tệp lịch: kích thước hợp lệ, biên 5 MB, vượt 5 MB (413), trùng lịch cảnh báo `FIXED_EVENT_OVERLAP`, dừng ngắt nguyên tử 422 và cắt 20 dòng lỗi |
+| **IT-06** | `TC-147` | TV1 + TV4 + TV5 | Vòng đời tài khoản và nhóm: đăng ký, tạo/tạo lại liên kết mời, tham gia nhóm, chuyển quyền Trưởng nhóm, rời nhóm gỡ giao thẻ Kanban, loại khỏi quorum họp nhóm và xóa nhóm CASCADE |
+
+**Quản lý lỗi và tiêu chí kết thúc kiểm thử (Definition of Done):**
+
+* Mọi lỗi phát hiện đều báo qua GitHub Issue gắn nhãn `bug` theo mẫu chuẩn, phân loại theo 4 mức: `Blocker` (chặn tính năng chính, vi phạm `BR-01`/`BR-02` hoặc làm hỏng kịch bản demo, sửa ngay trong ngày), `High` (sai kết quả chính hoặc vi phạm `BR-03` đến `BR-08`, sửa trong sprint hiện tại), `Normal` (đưa vào backlog sprint kế tiếp) và `Low` (sửa khi còn thời gian).
+* Một đợt phát hành đạt tiêu chí kết thúc kiểm thử khi: 100% ca kiểm thử mức `Blocker` và `High` đạt `Pass`; không còn lỗi `Blocker` hoặc `High` đang mở; độ bao phủ unit test mục tiêu cho toàn bộ `backend/src/` đạt tối thiểu 70% line coverage (cần cập nhật lại cấu hình `backend/vitest.config.mts` hiện mới đo `src/utils` với ngưỡng `branches` 95%); cả 8 quy định nghiệp vụ đều có ca `Pass` ở các tầng áp dụng; 2 kịch bản `E2E-01` và `E2E-02` chạy đạt; và kết quả thực tế được đồng bộ đủ lên tab "Test case" của Google Sheets.
+
+**Liên kết tham chiếu chi tiết trên repository:**
+
+* Tài liệu Chiến lược kiểm thử hệ thống đầy đủ (bao gồm kế hoạch theo từng mốc từ Sprint 0 đến M6, chi tiết toàn bộ 64 nhóm ca `TS-01` đến `TS-64` gồm 143 tình huống, quy ước và đoạn lệnh mẫu kiểm soát thời gian, phân công kiểm thử và danh sách lựa chọn chờ chốt): [docs/testing/strategy.md](../testing/strategy.md).
+* Đặc tả và hướng dẫn kiểm thử tích hợp API cho 5 module (10 kịch bản `API-IT-01` đến `API-IT-10` tại `backend/tests/integration/api.test.ts`, cơ chế cách ly 5 lớp với `TEST_DATABASE_URL`, hướng dẫn chạy `npm run test:integration` và đề xuất job CI PostgreSQL): [docs/testing/integration-tests.md](../testing/integration-tests.md).
+* Ma trận truy vết yêu cầu sang bảng CSDL và endpoint API: [docs/traceability-matrix.md](../traceability-matrix.md).
+* Cấu hình đường ống kiểm thử tự động CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml).
 
 ## Tài liệu tham khảo
 
