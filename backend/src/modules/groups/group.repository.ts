@@ -52,6 +52,18 @@ export class GroupRepository {
     return res.rows.length > 0;
   }
 
+  public async findById(
+    groupId: string,
+    db: Queryable,
+  ): Promise<{ id: string; name: string; createdAt: string } | null> {
+    const res = await db.query('SELECT id, name, created_at FROM groups WHERE id = $1', [groupId]);
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const createdAt =
+      row.created_at instanceof Date ? row.created_at : new Date(String(row.created_at));
+    return { id: String(row.id), name: String(row.name), createdAt: createdAt.toISOString() };
+  }
+
   public async findByUser(userId: string, db: Queryable): Promise<GroupSummary[]> {
     const res = await db.query(
       `SELECT g.id, g.name, g.created_at, gm.role AS my_role,
