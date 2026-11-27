@@ -120,9 +120,10 @@ Mở http://localhost:5173, thấy giao diện StudySync với thanh điều hư
 
 ### Biến môi trường frontend
 
-| Biến           | Ý nghĩa                           | Mặc định                    |
-| -------------- | --------------------------------- | --------------------------- |
-| `VITE_API_URL` | Địa chỉ API backend của StudySync | `http://localhost:3000/api` |
+| Biến            | Ý nghĩa                                                                                                  | Mặc định                    |
+| --------------- | -------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `VITE_API_URL`  | Địa chỉ API backend của StudySync                                                                        | `http://localhost:3000/api` |
+| `VITE_USE_MOCK` | `true` để trang Xếp lịch (TV3) dùng dữ liệu giả khi chạy `npm run dev` (thêm `?mock=empty` để thử trường hợp không có khung phù hợp); bản build bỏ qua biến này | `false`                     |
 
 Không commit file `.env`. Khi thêm biến mới, cập nhật `frontend/.env.example` và bảng trên.
 
