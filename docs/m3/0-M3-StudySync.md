@@ -1221,11 +1221,90 @@ Bảng 3.7: Danh sách endpoint module TV5
 
 ### 4.1 Module TV1: Tài khoản và nhóm
 
-* Use case liên quan: U001 đến U007.
+* Use case liên quan: U001 đến U007 (xem Bảng 4.1.1).
 
-* Sơ đồ tuần tự: đăng nhập; tham gia nhóm bằng liên kết mời.
+* Sơ đồ tuần tự: đăng nhập (Hình 4.1); tham gia nhóm bằng liên kết mời (Hình 4.2).
 
 * Sơ đồ lớp: Hình 4.12 (lớp thực thể) và Hình 4.17 (tầng xử lý), xem mục 4.7.4 và 4.7.9.
+
+Bảng 4.1.1: Use case của module TV1
+
+| **Use case** | **Nội dung** | **Story** | **Endpoint** | **Service xử lý** |
+|--------------|--------------|-----------|--------------|-------------------|
+| U001 | Đăng ký tài khoản | US-01 | POST /api/auth/register | AuthService |
+| U002 | Đăng nhập, cấp JWT 7 ngày | US-02 | POST /api/auth/login | AuthService |
+| U003 | Tạo nhóm, xem danh sách nhóm và thành viên | US-03 | POST /api/groups, GET /api/groups, GET /api/groups/{groupId} | GroupService |
+| U004 | Lấy hoặc tạo lại liên kết mời | US-04 | POST /api/groups/{groupId}/invite-link, .../regenerate | GroupService |
+| U005 | Tham gia nhóm bằng liên kết mời | US-05 | GET /api/invitations/{token}, POST /api/invitations/{token}/join | GroupService |
+| U006 | Xem và cập nhật hồ sơ cá nhân | US-06 | GET, PATCH /api/users/me | UserService |
+| U007 | Chuyển quyền Trưởng nhóm, rời nhóm | US-07 | PUT /api/groups/{groupId}/leader, POST /api/groups/{groupId}/leave | GroupService |
+
+#### 4.1.1 Phân định trách nhiệm theo tầng
+
+Bảng 4.1.2: Trách nhiệm của từng tầng trong module TV1
+
+| **Tầng** | **Thành phần** | **Trách nhiệm** |
+|----------|----------------|-----------------|
+| Route | Router `auth`, `users`, `groups`, `invitations` | Khai báo đường dẫn, gắn middleware `authenticate` cho mọi route "Đã đăng nhập". Chỉ `POST /api/auth/register`, `POST /api/auth/login` và `GET /api/invitations/{token}` là công khai |
+| Middleware | `authenticate`, `errorHandler` | `authenticate` xác thực JWT và gắn `req.userId`; `errorHandler` đổi `AppError` thành `{ error: { code, message, details } }` |
+| Controller | `AuthController`, `UserController`, `GroupController`, `InvitationController` | Kiểm tra kiểu, trường bắt buộc và UUID của `groupId`; gọi đúng một phương thức Service; chọn mã HTTP. Không chứa quy tắc nghiệp vụ |
+| Service | `AuthService`, `UserService`, `GroupService`, `MembershipService` | Chuẩn hóa dữ liệu, áp dụng BR-08, băm và so khớp mật khẩu, ký JWT, kiểm tra quyền theo nhóm, mở transaction và khóa dòng |
+| Repository | `UserRepository`, `GroupRepository`, `GroupMemberRepository`, `InvitationLinkRepository` | SQL có tham số, đổi dòng sang Entity; không kiểm tra quyền |
+| Entity | `User`, `Group`, `GroupMember`, `InvitationLink` | Quy tắc gắn với dữ liệu như `normalizeEmail`, `isLeader`, `isValidAt` |
+
+Quyền được kiểm tra ở Service, không chỉ ẩn nút trên giao diện (US-04 tiêu chí 4). `passwordHash` không rời khỏi tầng Service (BR-02).
+
+Bảng 4.1.2 theo thiết kế mục tiêu ở Hình 4.17 và Bảng 4.19 (mục 4.7.9). Hiện trạng mã nguồn trên `main` chưa đầy đủ: mã đã có `AuthService` (`register`, `login`, `getMe`, `verifyToken`), `MembershipService` và các router `createAuthRouter`, `createUserRouter`, `createGroupRouter`, gom trong thư mục `auth` và `groups`. Các phần sau là đặc tả thiết kế theo `docs/api.md`, chờ các PR cài đặt tiếp theo của TV1: `PATCH /api/users/me` (`UserService.updateDisplayName`), `GET /api/groups/{groupId}`, hai endpoint liên kết mời (U004), hai endpoint lời mời `GET /api/invitations/{token}` và `POST .../join` (U005), `PUT .../leader` và `POST .../leave` (U007), `InvitationLinkRepository`, `InvitationController` và các lớp Entity `Group`, `GroupMember`, `InvitationLink`.
+
+#### 4.1.2 Đặc tả AuthService và UserService (U001, U002, U006)
+
+**Đăng ký (U001).** Service chuẩn hóa `displayName` (NFC rồi cắt khoảng trắng) và `email` (cắt khoảng trắng, chữ thường), sau đó kiểm tra đủ ba trường và gom mọi lỗi vào `details[]` thay vì dừng ở lỗi đầu tiên:
+
+- Họ tên 1 đến 100 ký tự Unicode, đếm theo code point (BR-08).
+- Email đúng định dạng, tối đa 254 ký tự.
+- Mật khẩu 8 đến 72 ký tự, tối đa 72 byte UTF-8, có cả chữ cái và chữ số. Giới hạn byte vì bcrypt chỉ dùng 72 byte đầu, nếu không hai mật khẩu khác nhau có thể băm giống nhau.
+
+Có lỗi thì trả `400 VALIDATION_ERROR`. Nếu không, Service băm mật khẩu bằng bcrypt cost 10, chèn dòng `users` và ký JWT. Chống trùng email dựa vào ràng buộc `uq_users_email`: lỗi PostgreSQL `23505` được đổi thành `409 CONFLICT`. Cách này đúng cả khi hai yêu cầu cùng email đến đồng thời (một 201, một 409), điều mà "SELECT rồi INSERT" không bảo đảm. Ô xác nhận mật khẩu chỉ kiểm tra ở frontend. Mật khẩu và hash không xuất hiện trong log hay thông báo lỗi.
+
+**Đăng nhập (U002).** Quy trình xem Hình 4.1. Có hai yêu cầu bảo mật: (1) thông báo lỗi "Email hoặc mật khẩu không chính xác" giống hệt nhau cho email không tồn tại và sai mật khẩu, không kèm `details`, để không dò được email đã đăng ký; (2) khi không có người dùng, Service vẫn gọi `bcrypt.compare` với `DUMMY_HASH` (cùng cost 10, tạo một lần) để thời gian phản hồi tương đương, chống timing attack. Đăng nhập sai không khóa tài khoản trong phiên bản này.
+
+**Cấp và kiểm tra JWT.** Thuật toán HS256, khóa `JWT_SECRET`. Payload chỉ gồm `sub` (`users.id`), `iat`, `exp = iat + 7 ngày`; không đưa email hay vai trò vào token vì payload JWT chỉ mã hóa base64, không che giấu, và vai trò thay đổi theo từng nhóm. Phản hồi kèm `expiresAt` là chuỗi ISO 8601 UTC bằng `exp` (BR-07). Phiên bản này chỉ có một Access Token, không có Refresh Token; đăng xuất là frontend xóa token.
+
+**Hồ sơ cá nhân (U006).** `UserService` có `getProfile` (hiện là `AuthService.getMe` trong mã) và `updateDisplayName` chỉ thao tác trên `req.userId`, không nhận `userId` từ body hay đường dẫn. Tên mới được chuẩn hóa và kiểm tra BR-08, lỗi thì giữ nguyên dữ liệu cũ. Nếu token còn hạn nhưng tài khoản không còn, trả 401. Email chưa cho sửa.
+
+#### 4.1.3 Đặc tả GroupService và MembershipService (U003, U004, U005, U007)
+
+**Kiểm tra quyền (MembershipService).** `authenticate` chỉ cho biết ai đang gọi. Quyền theo nhóm kiểm tra ở Service, luôn tra CSDL theo `(groupId, userId)` vì vai trò lưu theo từng nhóm trong `group_members.role`. `requireMember` tra nhóm trước (không có: `404 NOT_FOUND`), rồi tra tư cách thành viên (không thuộc nhóm: `403 FORBIDDEN`). `requireLeader` gọi `requireMember` rồi yêu cầu `role = 'leader'`. Thứ tự là 401, 404, 403; nếu bỏ bước tra nhóm thì không phân biệt được "nhóm không tồn tại" và "không thuộc nhóm".
+
+Bảng 4.1.3: Ma trận quyền của endpoint TV1
+
+| **Endpoint** | **Công khai** | **Đã đăng nhập** | **Thành viên** | **Trưởng nhóm** |
+|--------------|:---:|:---:|:---:|:---:|
+| POST /api/auth/register, POST /api/auth/login, GET /api/invitations/{token} | x | | | |
+| GET, PATCH /api/users/me; POST, GET /api/groups; POST /api/invitations/{token}/join | | x | | |
+| GET /api/groups/{groupId}; POST .../leave | | | x | |
+| POST .../invite-link, .../invite-link/regenerate; PUT .../leader | | | | x |
+
+**Tạo nhóm (U003).** Tên nhóm 1 đến 100 ký tự (BR-08), không tự cắt. Hai lệnh `INSERT groups` và `INSERT group_members` (`role = 'leader'`) nằm trong một transaction để không có nhóm thiếu Trưởng nhóm. Chỉ mục `uq_group_members_one_leader_per_group` bảo đảm mỗi nhóm tối đa một Trưởng nhóm ở tầng CSDL.
+
+**Liên kết mời (U004).** Sau `requireLeader`, Service khóa dòng `groups FOR UPDATE`. Nếu đã có liên kết còn hạn thì trả lại (200); chưa có thì tạo mới (201); đã hết hạn thì cập nhật token mới. Token sinh bằng `crypto.randomBytes(32)` dạng base64url, hạn 7 ngày. Khóa dòng cùng `uq_invitation_links_group_id` bảo đảm mỗi nhóm chỉ có một liên kết còn hiệu lực dù hai Trưởng nhóm bấm cùng lúc. `regenerate` luôn đặt token mới nên liên kết cũ vô hiệu ngay. `token` và `inviteUrl` chỉ trả cho Trưởng nhóm.
+
+**Tham gia nhóm (U005).** Quy trình hai giai đoạn xem Hình 4.2. `GET /api/invitations/{token}` công khai, chỉ trả `groupName` và `expiresAt`, không lộ `groupId` hay danh sách thành viên. `POST .../join` bắt buộc đăng nhập, dùng `FOR SHARE` trên `groups` để nhóm vừa bị xóa trả 404 thay vì lỗi khóa ngoại 500, rồi `INSERT ... ON CONFLICT (group_id, user_id) DO NOTHING`. Nhờ đó thao tác idempotent: người đã là thành viên nhận `200` với `alreadyMember = true`, và Trưởng nhóm mở lại liên kết không bị hạ xuống `member`. Mọi trường hợp token không tồn tại, hết hạn hoặc bị thay đều trả cùng một thông báo `404`.
+
+**Chuyển quyền và rời nhóm (U007).** Mọi thao tác chạy trong một transaction, khóa `groups FOR UPDATE` để tuần tự hóa các yêu cầu đồng thời.
+
+Bảng 4.1.4: Các nghiệp vụ chuyển quyền và rời nhóm
+
+| **Nghiệp vụ** | **Xử lý** |
+|---------------|-----------|
+| Chuyển Trưởng nhóm (`PUT .../leader`) | `requireLeader`; người nhận khác người gọi (trùng: 400); người nhận phải là `member` (không thì 404); hạ Trưởng nhóm cũ xuống `member` rồi nâng người nhận lên `leader` |
+| Trưởng nhóm rời, còn người khác | Bắt buộc có `successorId` hợp lệ (thiếu hoặc trùng chính mình: 400; không còn trong nhóm: 404); hạ rồi nâng; xóa dòng `group_members` của người rời; đặt `kanban_cards.assigned_to_user_id = NULL` cho thẻ giao cho người rời |
+| Thành viên thường rời | Xóa dòng `group_members`, gỡ giao thẻ Kanban, quyền tổ chức họp mất theo |
+| Thành viên cuối rời | `DELETE groups`, CASCADE xóa thành viên, liên kết mời và dữ liệu nhóm; lịch cá nhân, việc và khung giờ học giữ nguyên; trả `groupDeleted = true` |
+
+Thứ tự "hạ trước, nâng sau" là bắt buộc vì chỉ mục duy nhất không cho tồn tại hai `leader` dù chỉ trong khoảnh khắc giữa hai câu lệnh.
+
+#### 4.1.4 Luồng xử lý và sơ đồ tuần tự
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -1240,28 +1319,28 @@ ND->>FE: Nhập email, mật khẩu và bấm Đăng nhập
 FE->>FE: Kiểm tra sơ bộ email hợp lệ và mật khẩu không rỗng
 FE->>API: POST /api/auth/login (email, password)
 activate API
-API->>API: Kiểm tra định dạng chuỗi của email và password
-alt Thiếu email hoặc mật khẩu, hoặc email sai định dạng
+API->>API: Kiểm tra body yêu cầu là đối tượng JSON
+alt Body không phải JSON, hoặc thiếu email hoặc mật khẩu (không phải chuỗi không rỗng)
 API-->>FE: 400 VALIDATION_ERROR
 FE-->>ND: Báo lỗi yêu cầu nhập đầy đủ email và mật khẩu hợp lệ
 else Dữ liệu đầu vào hợp lệ
 API->>SVC: Yêu cầu đăng nhập (email, password)
 activate SVC
-Note over SVC: Chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
-SVC->>DB: SELECT id, email, password_hash, display_name, created_at FROM users WHERE email = lower(btrim($1))
+Note over SVC: Kiểm tra email, password là chuỗi không rỗng; chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
+SVC->>DB: SELECT * FROM users WHERE email = $1 LIMIT 1
 activate DB
 DB-->>SVC: Bản ghi người dùng (hoặc null nếu không tìm thấy)
 deactivate DB
 alt Email không tồn tại hoặc mật khẩu sai
-Note over SVC: So khớp mật khẩu với bcrypt.compare() thất bại
+Note over SVC: Không có user thì so khớp với DUMMY_HASH (cost 10); bcrypt.compare() luôn chạy nên thời gian xử lý tương đương
 SVC-->>API: Lỗi xác thực người dùng (UNAUTHORIZED)
 deactivate SVC
-API-->>FE: 401 UNAUTHORIZED { message: "Email hoặc mật khẩu không chính xác" }
+API-->>FE: 401 UNAUTHORIZED { error: { code: "UNAUTHORIZED", message: "Email hoặc mật khẩu không chính xác" } }
 FE-->>ND: Hiển thị thông báo Email hoặc mật khẩu không chính xác
 else Thông tin đăng nhập chính xác
 activate SVC
-Note over SVC: bcrypt.compare() khớp, tạo JWT token hiệu lực 7 ngày (BR-07 UTC)
-SVC->>SVC: Ký JWT chứa sub (userId), email bằng JWT_SECRET
+Note over SVC: bcrypt.compare() khớp, tạo JWT hiệu lực 7 ngày, expiresAt theo UTC (BR-07)
+SVC->>SVC: Ký JWT HS256 chứa sub (userId), iat, exp bằng JWT_SECRET (không chứa email)
 SVC-->>API: Dữ liệu token, expiresAt và thông tin user
 deactivate SVC
 API-->>FE: 200 OK { data: { token, expiresAt, user } }
@@ -1296,7 +1375,7 @@ deactivate DB
 alt Mã mời không tồn tại hoặc đã quá hạn 7 ngày
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Hiển thị thông báo liên kết không tồn tại hoặc đã hết hạn
 else Mã mời hợp lệ và còn hiệu lực
@@ -1328,31 +1407,40 @@ deactivate DB
 alt Liên kết vừa hết hạn hoặc không còn hiệu lực
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
 else Liên kết còn hiệu lực
 activate API
 activate SVC
-SVC->>DB: SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2
+SVC->>DB: SELECT id FROM groups WHERE id = $1 FOR SHARE
 activate DB
-DB-->>SVC: Bản ghi thành viên (hoặc null)
+DB-->>SVC: Dòng nhóm (hoặc null nếu nhóm vừa bị xóa)
 deactivate DB
-alt Sinh viên đã là thành viên của nhóm từ trước
-Note over SVC,API: Không tạo dòng mới, giữ nguyên vai trò và báo thành công kèm cờ alreadyMember
+alt Nhóm vừa bị xóa
+SVC-->>API: Lỗi nhóm không còn (NOT_FOUND)
+deactivate SVC
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
+deactivate API
+FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
+else Nhóm còn tồn tại
+activate API
+activate SVC
+Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
+SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now()) ON CONFLICT (group_id, user_id) DO NOTHING RETURNING user_id
+activate DB
+DB-->>SVC: Dòng mới (hoặc rỗng nếu đã là thành viên)
+deactivate DB
+alt Không chèn được dòng mới (đã là thành viên từ trước)
+Note over SVC,API: Giữ nguyên vai trò (kể cả Trưởng nhóm), báo thành công kèm cờ alreadyMember
 SVC-->>API: Thông tin nhóm và alreadyMember = true
 deactivate SVC
 API-->>FE: 200 OK { data: { group, alreadyMember: true } }
 deactivate API
 FE-->>ND: Hiển thị Bạn đã là thành viên của nhóm này và mở nhóm
-else Sinh viên mới gia nhập nhóm lần đầu
+else Chèn được dòng thành viên mới
 activate API
 activate SVC
-Note over SVC,DB: BR-02: Vào nhóm chỉ thấy trạng thái bận/rảnh, không thấy sự kiện riêng tư
-SVC->>DB: INSERT INTO group_members (group_id, user_id, role, can_organize_meetings, joined_at) VALUES ($1, $2, 'member', false, now())
-activate DB
-DB-->>SVC: Bản ghi thành viên mới đã lưu
-deactivate DB
 SVC-->>API: Thông tin nhóm và alreadyMember = false
 deactivate SVC
 API-->>FE: 201 CREATED { data: { group, alreadyMember: false } }
@@ -1361,9 +1449,34 @@ FE-->>ND: Thông báo tham gia thành công và mở không gian làm việc c�
 end
 end
 end
+end
 ```
 
 Hình 4.2: Sơ đồ tuần tự tham gia nhóm bằng liên kết mời (U005)
+
+#### 4.1.5 Xử lý lỗi
+
+Bảng 4.1.5: Tình huống lỗi và cách xử lý của module TV1
+
+| **Use case** | **Tình huống** | **Kết quả** |
+|--------------|----------------|-------------|
+| U001 | Email sai định dạng, họ tên ngoài 1 đến 100 ký tự, mật khẩu yếu hoặc quá 72 ký tự/byte | 400 `VALIDATION_ERROR`, `details[]` chứa mọi lỗi |
+| U001 | Email đã tồn tại (kể cả khác hoa thường, thừa khoảng trắng, hoặc hai yêu cầu đồng thời) | 409 `CONFLICT`, giữ dữ liệu đã nhập ở form |
+| U002 | Thiếu email hoặc mật khẩu | 400 `VALIDATION_ERROR` |
+| U002 | Email không tồn tại hoặc sai mật khẩu | 401 `UNAUTHORIZED`, cùng một thông báo, thời gian tương đương |
+| U002 | Token thiếu, sai chữ ký, sai `alg`, hết hạn hoặc `sub` rỗng | 401 `UNAUTHORIZED`; frontend xóa token và về trang Đăng nhập |
+| U003 | Tên nhóm rỗng hoặc quá 100 ký tự; `groupId` không phải UUID | 400 `VALIDATION_ERROR` |
+| U003, U004, U007 | Nhóm không tồn tại | 404 `NOT_FOUND` |
+| U003, U007 | Người không thuộc nhóm xem chi tiết hoặc rời nhóm | 403 `FORBIDDEN` |
+| U004, U007 | Thành viên thường gọi tạo liên kết mời hoặc chuyển quyền | 403 `FORBIDDEN`, không thay đổi dữ liệu |
+| U005 | Liên kết không tồn tại, hết hạn, bị thay hoặc nhóm vừa bị xóa | 404 `NOT_FOUND`, cùng một thông báo |
+| U005 | Đã là thành viên mở lại liên kết | 200, `alreadyMember = true`, giữ nguyên vai trò |
+| U005 | Mở liên kết khi chưa đăng nhập | Frontend lưu đường dẫn, chuyển Đăng nhập, xong quay lại màn hình xác nhận |
+| U006 | Tên hiển thị rỗng hoặc quá 100 ký tự | 400 `VALIDATION_ERROR`, giữ nguyên tên cũ |
+| U007 | Trưởng nhóm rời thiếu `successorId`, hoặc chọn chính mình | 400 `VALIDATION_ERROR` |
+| U007 | Người kế nhiệm hoặc người nhận quyền đã rời nhóm | 404 `NOT_FOUND` |
+| Chung | Lỗi CSDL hoặc mất kết nối | 500 `INTERNAL_ERROR` không lộ chi tiết, transaction ROLLBACK |
+
 
 ### 4.2 Module TV2: Lịch cá nhân và nhập lịch
 
@@ -4734,13 +4847,42 @@ Hình 6.12: Giao diện trạng thái không tìm được khung giờ học ph�
 
 ### 7.1 Riêng tư lịch cá nhân (BR-02)
 
-* [Template] Mô tả cách API dành cho nhóm chỉ trả khoảng thời gian bận hoặc rảnh, kể cả với Trưởng nhóm; việc chặn thực hiện ở tầng API.
+Quy tắc BR-02: thành viên nhóm, kể cả Trưởng nhóm, chỉ thấy trạng thái bận hoặc rảnh của nhau, không thấy tên, loại, địa điểm hay ghi chú của sự kiện cá nhân. Việc chặn thực hiện ở tầng API và các tầng bên dưới, không dựa vào giao diện. Tham gia nhóm (U005) cũng không mở quyền xem lịch của ai: thành viên mới nhận vai `member` với `can_organize_meetings = false`.
+
+Nhóm dựng BR-02 thành nhiều lớp, mỗi lớp tự đúng khi lớp khác bị sửa nhầm:
+
+* Lớp truy vấn: khi tìm giờ họp chung (TV4), repository chỉ chọn `user_id`, `starts_at`, `ends_at` của `fixed_events`. Các cột `title`, `kind`, `location`, `notes`, `source` không được đọc. Bảng `tasks`, `study_slots` và `reminders` không tính vào trạng thái bận và không được trả cho nhóm.
+
+* Lớp thuật toán: thư viện khoảng thời gian (mục 1.3) chỉ nhận cặp thời điểm bắt đầu, kết thúc, không có kiểu nào chứa nội dung sự kiện.
+
+* Lớp phản hồi: DTO dựng theo danh sách trường cho phép. Khung giờ trả về chỉ gồm thời điểm, số người rảnh và `busyMembers` là `displayName` của người bận, không kèm lý do bận. Điểm xếp hạng là số tổng hợp, không kèm số liệu từng người.
+
+* Lớp dữ liệu hồ sơ: `GET /api/groups/{groupId}` chỉ trả `userId`, `displayName`, `role`, `canOrganizeMeetings`, `joinedAt`. `email` và `password_hash` không bao giờ trả cho người khác.
+
+* Lớp quyền: tìm giờ họp chung chỉ cho Trưởng nhóm hoặc người được ủy quyền tổ chức họp, và chỉ trong nhóm của họ (`403 FORBIDDEN` nếu không). Quyền này cho phép xem giờ rảnh chung, không cho phép xem chi tiết sự kiện.
+
+* Lớp nhật ký: không ghi khoảng bận hay kết quả tìm kiếm vào log.
+
+Theo thiết kế, các API dữ liệu cá nhân (lịch và việc của TV2, khung giờ học của TV3, thống kê tuần `GET /api/statistics/weekly` của TV5) đều lọc theo `user_id` lấy từ JWT (`req.userId`), không nhận `userId` từ yêu cầu, nên không có đường nào để một thành viên đọc lịch của người khác. Điều kiện đi kèm là các router này phải được mount sau middleware `authenticate`; hiện `backend/src/routes/api.ts` chưa truyền `authenticate` khi mount `/events`, `/tasks`, `/schedule` và `/scheduler`, nhóm cần rà soát và bổ sung ở phần cài đặt trước khi nghiệm thu.
 
 ### 7.2 Xác thực và phân quyền
 
-* Mật khẩu băm; phiên đăng nhập 7 ngày; liên kết mời có hiệu lực 7 ngày, mỗi nhóm một liên kết còn hiệu lực.
+**Băm mật khẩu.** Mật khẩu được băm bằng bcrypt với cost 10 trước khi lưu vào `users.password_hash`; không lưu hay ghi log mật khẩu gốc. Mật khẩu giới hạn 72 byte UTF-8 vì bcrypt chỉ dùng 72 byte đầu. Khi đăng nhập, `bcrypt.compare` luôn chạy, kể cả khi không có email (so với `DUMMY_HASH`), và hai trường hợp sai trả cùng một thông báo 401 để không lộ email nào đã đăng ký.
 
-* Quyền Trưởng nhóm, người tổ chức họp, người tạo thẻ kiểm tra ở API (403 FORBIDDEN).
+**JWT.** Sau khi đăng nhập hoặc đăng ký, hệ thống cấp một Access Token ký HS256 bằng `JWT_SECRET`, hiệu lực 7 ngày. Payload chỉ gồm `sub` (id người dùng), `iat`, `exp`; `expiresAt` trả về là thời điểm UTC (BR-07). Frontend gửi token qua `Authorization: Bearer <token>`. Middleware `authenticate` chỉ chấp nhận thuật toán HS256 (chặn `alg: none`), kiểm tra chữ ký, hạn dùng và `sub` là chuỗi không rỗng; mọi trường hợp thiếu, sai hoặc hết hạn đều trả `401 UNAUTHORIZED`. Middleware không truy vấn CSDL. Phiên bản này không có Refresh Token hay danh sách thu hồi: đăng xuất là frontend xóa token.
+
+**Phân quyền tầng API (403 FORBIDDEN).** Vai trò lưu theo từng nhóm trong `group_members` nên không đưa vào JWT, mà Service tra CSDL theo `(groupId, userId)` ở mỗi yêu cầu. Thứ tự kiểm tra: 401 (chưa đăng nhập), 404 (nhóm không tồn tại), 403 (không thuộc nhóm hoặc không đủ quyền). Việc chặn nằm ở Service nên một yêu cầu gọi trực tiếp API vẫn bị từ chối dù giao diện đã ẩn nút.
+
+Bảng 7.1: Các quyền kiểm tra ở API
+
+| **Quyền** | **Thao tác** | **Điều kiện** |
+|-----------|--------------|---------------|
+| Thành viên nhóm | Xem chi tiết nhóm, rời nhóm; xem, tạo và chuyển cột thẻ Kanban; xem đề xuất họp và phản hồi lời mời họp gửi cho mình | Có dòng `group_members` của người gọi (lời mời: là người nhận) |
+| Trưởng nhóm | Tạo hoặc tạo lại liên kết mời, chuyển quyền, giao hoặc bỏ giao thẻ Kanban, bật hoặc tắt quyền tổ chức họp của thành viên (U036, `PATCH .../members/{userId}/meeting-permission`) | `role = 'leader'` |
+| Người tổ chức họp | Tìm giờ chung, gửi lời mời họp | Trưởng nhóm hoặc `can_organize_meetings = true` |
+| Người tạo thẻ | Sửa, xóa thẻ Kanban | Là người tạo thẻ hoặc Trưởng nhóm |
+
+**Liên kết mời.** Token sinh bằng bộ sinh số ngẫu nhiên mật mã (`crypto.randomBytes(32)`, base64url), có hiệu lực 7 ngày, mỗi nhóm một liên kết còn hiệu lực; tạo lại thì liên kết cũ vô hiệu ngay. Người ngoài nhóm chỉ xem được tên nhóm và hạn liên kết; token không tồn tại, hết hạn hoặc bị thay đều trả cùng một thông báo 404.
 
 ### 7.3 Quản lý khóa và biến môi trường
 
