@@ -10,6 +10,7 @@
     "format": "prettier --write src tests migrations scripts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "migrate:create": "node-pg-migrate create -j ts",
     "migrate:up": "node scripts/safe-migrate.mjs up",
     "migrate:down": "node scripts/safe-migrate.mjs down",
