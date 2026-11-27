@@ -2229,7 +2229,7 @@ sequenceDiagram
 
 ## TV3 – Đề xuất khung giờ học
 
-Trạng thái: Nháp · Người viết: Nhi · Người review: Hưng · Cập nhật: 12/11/2026
+Trạng thái: Nháp · Người viết: Nhi · Người review: Hưng · Cập nhật: 27/11/2026
 
 Phạm vi: US-17 đến US-22. Use case: U021 đến U024. Mọi endpoint theo quy ước chung ở đầu file (REST, JSON UTF-8, tiền tố `/api`, camelCase, id là UUID, thời gian ISO 8601 hậu tố Z và luôn có mili giây khi API trả về, dạng phản hồi `data`, `warnings`, `error`). Bảng và cột liên quan xem vùng TV3 trong `docs/data-dictionary.md`.
 
@@ -2377,18 +2377,35 @@ Không có (gửi `{}` hoặc bỏ trống). Mốc thời gian là thời điể
         }
       ],
       "missedSlotId": null
-    }
+    },
+    "freeMinutes": 390
   }
 }
 ```
 
 Ví dụ trên ứng với US-17 tiêu chí 4: việc 4 giờ, trống liền 08:00–13:00 giờ Việt Nam, được chia thành 08:00–10:00 và 10:30–12:30.
 
+**Các trường trong `data`**
+
+| Tên | Kiểu | Mô tả |
+| --- | --- | --- |
+| `proposal` | Proposal hoặc `null` | Lượt đề xuất vừa tạo (xem kiểu Proposal ở trên); `null` khi không có việc cần làm để xếp |
+| `freeMinutes` | integer (≥ 0) | Tổng số phút còn có thể xếp giờ học trong 7 ngày kể từ lúc gọi, dùng cho ô "Thời gian trống" và dòng "Giờ trống còn lại" trên giao diện (Figma Node 12:2) |
+
+Cách tính `freeMinutes` (cùng dữ liệu và quy tắc mà Scheduler Engine dùng để xếp, nên giao diện không tự tính lại):
+
+1. Lấy đúng phạm vi xếp của Engine: từ mốc lưới 15 phút đầu tiên sau `now` đến `floorStep(now + 7 ngày)`, mỗi ngày chỉ lấy khung 07:00–22:00 giờ Việt Nam (BR-07).
+2. Trừ các sự kiện cố định (BR-01; làm tròn ra ngoài theo lưới 15 phút như khi xếp, hai sự kiện chồng nhau được gộp thành một khoảng bận) và các khung `scheduled`, `studied` của người dùng.
+3. Giới hạn mỗi ngày tối đa 240 phút trừ đi số phút `scheduled` và `studied` đã có trong ngày đó (tối đa 4 giờ học mỗi ngày); ngày âm thì tính 0.
+4. Cộng các ngày lại, làm tròn xuống phút. Cài đặt: `SchedulerEngine.freeMinutes` (`backend/src/modules/scheduler/scheduler.engine.ts`).
+
+Khung trong lượt đề xuất đang chờ (`proposed`) không bị trừ vì chưa được xác nhận (BR-03), nên `freeMinutes` là thời gian trống trước khi áp dụng lượt đề xuất này. Trường luôn có mặt, kể cả khi `proposal` là `null`.
+
 **Cảnh báo có thể gặp**
 
 | Mã cảnh báo (`warnings[].code`) | Điều kiện |
 | --- | --- |
-| `NO_TASKS_TO_SCHEDULE` | Không có việc cần làm chưa hoàn thành; `data.proposal` là `null`, không tạo lượt đề xuất |
+| `NO_TASKS_TO_SCHEDULE` | Không có việc cần làm chưa hoàn thành; `data.proposal` là `null`, không tạo lượt đề xuất (`data.freeMinutes` vẫn có) |
 
 **Lỗi có thể gặp**
 
@@ -2555,7 +2572,7 @@ Quyền: Chủ tài khoản.
 
 **Kết quả thành công (200)**
 
-Như `auto-plan`, với `proposal.kind = "replan"` và `slots[].replacesSlot` ghi khung cũ bị dời (khung của việc mới có `replacesSlot: null`). Không có khung nào bị giao và không có việc mới: `data.proposal` là `null`, không tạo lượt (U023 kịch bản phụ 2a).
+Như `auto-plan` (gồm cả `freeMinutes`), với `proposal.kind = "replan"` và `slots[].replacesSlot` ghi khung cũ bị dời (khung của việc mới có `replacesSlot: null`). Không có khung nào bị giao và không có việc mới: `data.proposal` là `null`, không tạo lượt (U023 kịch bản phụ 2a).
 
 **Lỗi có thể gặp**
 
