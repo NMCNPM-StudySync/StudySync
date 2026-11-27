@@ -152,15 +152,15 @@ ND->>FE: Nhập email, mật khẩu và bấm Đăng nhập
 FE->>FE: Kiểm tra sơ bộ email hợp lệ và mật khẩu không rỗng
 FE->>API: POST /api/auth/login (email, password)
 activate API
-API->>API: Kiểm tra định dạng chuỗi của email và password
-alt Thiếu email hoặc mật khẩu, hoặc email sai định dạng
+API->>API: Kiểm tra body yêu cầu là đối tượng JSON
+alt Body không phải JSON, hoặc thiếu email hoặc mật khẩu (không phải chuỗi không rỗng)
 API-->>FE: 400 VALIDATION_ERROR
 FE-->>ND: Báo lỗi yêu cầu nhập đầy đủ email và mật khẩu hợp lệ
 else Dữ liệu đầu vào hợp lệ
 API->>SVC: Yêu cầu đăng nhập (email, password)
 activate SVC
-Note over SVC: Chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
-SVC->>DB: SELECT id, email, password_hash, display_name, created_at FROM users WHERE email = lower(btrim($1))
+Note over SVC: Kiểm tra email, password là chuỗi không rỗng; chuẩn hóa email về chữ thường và cắt khoảng trắng hai đầu
+SVC->>DB: SELECT * FROM users WHERE email = $1 LIMIT 1
 activate DB
 DB-->>SVC: Bản ghi người dùng (hoặc null nếu không tìm thấy)
 deactivate DB
@@ -168,7 +168,7 @@ alt Email không tồn tại hoặc mật khẩu sai
 Note over SVC: Không có user thì so khớp với DUMMY_HASH (cost 10); bcrypt.compare() luôn chạy nên thời gian xử lý tương đương
 SVC-->>API: Lỗi xác thực người dùng (UNAUTHORIZED)
 deactivate SVC
-API-->>FE: 401 UNAUTHORIZED { message: "Email hoặc mật khẩu không chính xác" }
+API-->>FE: 401 UNAUTHORIZED { error: { code: "UNAUTHORIZED", message: "Email hoặc mật khẩu không chính xác" } }
 FE-->>ND: Hiển thị thông báo Email hoặc mật khẩu không chính xác
 else Thông tin đăng nhập chính xác
 activate SVC
@@ -196,7 +196,7 @@ Hình 4.1: Sơ đồ tuần tự đăng nhập (U002)
 | :--- | :--- |
 | Thuật toán | `HS256` (đối xứng), khóa `JWT_SECRET` (≥ 32 ký tự, mỗi môi trường một khóa) |
 | Header | `{ "alg": "HS256", "typ": "JWT" }` |
-| Payload | `sub` = `users.id` (UUID), `iat` = thời điểm cấp (giây UTC), `exp` = `iat` + 7 ngày (`JWT_EXPIRES_IN=7d`) |
+| Payload | `sub` = `users.id`, `iat` = thời điểm cấp (giây UTC), `exp` = `iat` + 7 ngày (`JWT_EXPIRES_IN=7d`) |
 | Phản hồi kèm | `expiresAt`: chuỗi ISO 8601 UTC có mili giây, đúng bằng `exp` (BR-07) |
 | Nơi lưu (client) | `tokenStorage` ở frontend; gửi qua header `Authorization: Bearer <token>` |
 
@@ -224,7 +224,7 @@ flowchart TD
     D -->|Không: sai chữ ký, sai alg, sai định dạng| E401
     D -->|Có| F{exp > now?}
     F -->|Không: hết hạn| E401
-    F -->|Có| G{sub là UUID hợp lệ?}
+    F -->|Có| G{sub là chuỗi không rỗng?}
     G -->|Không| E401
     G -->|Có| H[req.userId = sub]
     H --> I([next: Controller])
@@ -238,7 +238,7 @@ authenticate(req, res, next):
   thử payload ← jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] })
     (verify tự kiểm tra chữ ký và exp; clockTolerance = 0)
   bắt mọi lỗi (TokenExpiredError, JsonWebTokenError, NotBeforeError) → 401
-  nếu payload.sub không phải UUID → 401
+  nếu payload.sub không phải chuỗi không rỗng → 401
   req.userId ← payload.sub
   next()
 ```
@@ -409,7 +409,7 @@ flowchart TD
 
 #### 4.1.6.3b. Sơ đồ tuần tự (Hình 4.2 trong Báo cáo M3)
 
-Đồng bộ với mục 4.1 của `docs/m3/0-M3-StudySync.md`. Giai đoạn xác nhận dùng `FOR SHARE` trên `groups` và `INSERT ... ON CONFLICT DO NOTHING` như lưu đồ ở trên.
+Đồng bộ với mục 4.1 của `docs/m3/0-M3-StudySync.md`. Giai đoạn xác nhận dùng `FOR SHARE` trên `groups` và `INSERT ... ON CONFLICT DO NOTHING` như lưu đồ ở mục 4.1.6.3.
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -433,7 +433,7 @@ deactivate DB
 alt Mã mời không tồn tại hoặc đã quá hạn 7 ngày
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Hiển thị thông báo liên kết không tồn tại hoặc đã hết hạn
 else Mã mời hợp lệ và còn hiệu lực
@@ -465,7 +465,7 @@ deactivate DB
 alt Liên kết vừa hết hạn hoặc không còn hiệu lực
 SVC-->>API: Lỗi liên kết không hợp lệ (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
 else Liên kết còn hiệu lực
@@ -478,7 +478,7 @@ deactivate DB
 alt Nhóm vừa bị xóa
 SVC-->>API: Lỗi nhóm không còn (NOT_FOUND)
 deactivate SVC
-API-->>FE: 404 NOT_FOUND { message: "Liên kết mời không hợp lệ hoặc đã hết hạn" }
+API-->>FE: 404 NOT_FOUND { error: { code: "NOT_FOUND", message: "Liên kết mời không hợp lệ hoặc đã hết hạn" } }
 deactivate API
 FE-->>ND: Báo lỗi liên kết mời không còn hiệu lực
 else Nhóm còn tồn tại
@@ -542,7 +542,7 @@ Hình 4.2: Sơ đồ tuần tự tham gia nhóm bằng liên kết mời (U005)
 | 11 | Đăng nhập thiếu trường | Controller | 400 `VALIDATION_ERROR` | api.md |
 | 12 | Token hết hạn (`exp` ≤ now) | `jwt.verify` báo `TokenExpiredError` | 401; frontend xóa token, về trang Đăng nhập | US-02.4 |
 | 13 | Token sai chữ ký, bị sửa, sai `alg`, không có `Bearer` | `jwt.verify` lỗi / sai định dạng | 401 `UNAUTHORIZED` | 4.1.4.3 |
-| 14 | `sub` không phải UUID | Kiểm tra sau verify | 401 | 4.1.4.3 |
+| 14 | `sub` thiếu hoặc rỗng | Kiểm tra sau verify | 401 | 4.1.4.3 |
 | 15 | Người không thuộc nhóm gọi `GET /groups/{id}` hoặc `leave` | `requireMember` | 403 `FORBIDDEN` | api.md |
 | 16 | Thành viên thường gọi trực tiếp API tạo liên kết mời/chuyển quyền | `requireLeader` | 403 `FORBIDDEN`, không tạo liên kết | US-04.4 |
 | 17 | `groupId` không đúng dạng UUID | Controller | 400 `VALIDATION_ERROR` | architecture.md 1.2 |
