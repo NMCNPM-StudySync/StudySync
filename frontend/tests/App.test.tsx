@@ -139,7 +139,8 @@ describe('App navigation and layout', () => {
       { route: '/scheduler', title: 'Xếp lịch (TV3)' },
       { route: '/meetings', title: 'TÌM GIỜ HỌP' },
       { route: '/groups/group-001/meetings', title: 'TÌM GIỜ HỌP' },
-      { route: '/kanban', title: 'Kanban (TV5)' },
+      { route: '/kanban', title: 'Bảng Kanban công việc nhóm' },
+      { route: '/groups/test-group-id/kanban', title: 'Bảng Kanban công việc nhóm' },
       { route: '/stats', title: 'Thống kê giờ học' },
     ];
 
