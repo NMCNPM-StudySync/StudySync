@@ -60,7 +60,7 @@ describe('App navigation and layout', () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
       { route: '/groups', title: 'Nhóm (TV1)' },
-      { route: '/scheduler', title: 'Xếp lịch (TV3)' },
+      { route: '/scheduler', title: 'Xếp lịch tự động' },
       { route: '/meetings', title: 'Giờ chung (TV4)' },
       { route: '/kanban', title: 'Kanban (TV5)' },
       { route: '/stats', title: 'Thống kê giờ học' },
