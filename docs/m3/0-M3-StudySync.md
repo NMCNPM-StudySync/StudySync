@@ -1676,15 +1676,25 @@ Nhằm đảm bảo tính độc lập và khả năng bảo trì, phân hệ L�
 
 #### 4.2.2 Đặc tả giao diện dịch vụ (Service Interfaces)
 
-Giao diện và kiểu dữ liệu chuẩn mực của phân hệ TV2:
+Giao diện và kiểu dữ liệu chuẩn mực của phân hệ TV2 được chuẩn hóa đồng bộ với sơ đồ tuần tự (xem Hình 4.3a), sơ đồ lớp tầng xử lý (xem Hình 4.18), Bảng 4.19 và đặc tả API (`docs/api.md`):
 
-- `Result<T>`: `{ data: T, warnings?: BusinessWarning[] }` (trong đó BusinessWarning gồm code: 'FIXED_EVENT_OVERLAP' | 'DEADLINE_PASSED', message: string, conflictingEventId?: string).
+- `Result<T>`: `{ data: T, warnings?: ApiWarning[] }`, trong đó `ApiWarning` (`backend/src/shared/response.ts`) có cấu trúc `{ code: string, message: string, details?: Array<{ field?: string, issue: string }> }` (mã cảnh báo của TV2 gồm `'FIXED_EVENT_OVERLAP'` theo BR-01 và `'DEADLINE_PASSED'` theo BR-04). Khi phát hiện chồng lấn thời gian giữa các sự kiện cố định, mỗi phần tử trong `details` ghi `field: 'startsAt'` đối với thao tác tạo hoặc cập nhật đơn lẻ (`FixedEventService`) và ghi `field: 'events[i]'` đối với các bản ghi chồng lấn (với lịch hiện có hoặc tự xung đột nội bộ trong cùng tệp) khi nạp tệp hàng loạt (`CalendarImportService`).
 
-- IFixedEventService: listEvents(userId, from, to), createEvent(userId, input), getEvent(userId, eventId), updateEvent(userId, eventId, input), deleteEvent(userId, eventId).
+- `IFixedEventService` (`FixedEventService` tại `backend/src/modules/events/events.service.ts`): `listEvents(userId, from, to)`, `createEvent(userId, input)`, `getEvent(userId, eventId)`, `updateEvent(userId, eventId, input)`, `deleteEvent(userId, eventId, scope)` (tham số `scope` nhận `'single'` mặc định hoặc `'all'` để xóa toàn bộ chuỗi sự kiện cùng `recurringRuleId` trong một giao dịch CSDL).
 
-- ICalendarImportService: previewIcs(userId, fileBuffer, fileName), confirmIcsImport(userId, previewToken, selectedEventIds), previewCsv(userId, fileBuffer, fileName), confirmCsvImport(userId, previewToken, selectedEventIds).
+- `ICalendarImportService` (`CalendarImportService` tại `backend/src/modules/events/calendar-import.service.ts` - quy trình nạp nguyên tử một bước):
 
-- ICalendarFileParser: parse(rawContent): ParseResult (events: ExtractedEvent[], errors: LineValidationError[]).
+  - `importIcs(userId: string, file: UploadedFile): Promise<CalendarImportResult>` (biểu diễn ở Hình 4.18 và Bảng 4.19 với `UploadedFile { buffer, fileName }`; chữ ký cài đặt thực tế là `importIcs(userId: string, fileBuffer: Buffer, fileName: string): Promise<CalendarImportResult>`): tiếp nhận tệp `.ics` từ endpoint `POST /api/events/import/ics`, kiểm tra kích thước tối đa 5 MB (BR-05), phân tích toàn bộ nội dung trên bộ nhớ qua `IcsParser` và từ chối toàn khối nếu phát sinh lỗi cú pháp, nghiệp vụ hoặc tệp không có sự kiện nào (BR-06). Khi 100% dữ liệu hợp lệ, dịch vụ quét kiểm tra trùng lịch theo BR-01 rồi mở duy nhất một giao dịch CSDL (`withTransaction`) để ghi nhật ký vào bảng `imported_files` (cài đặt hiện tại thực thi câu lệnh `INSERT` trực tiếp trên `txClient` thay cho lớp `ImportedFileRepository` riêng ở Hình 4.18) và chèn hàng loạt sự kiện đã bung phẳng vào `fixed_events` qua `FixedEventRepository.createMany`, trả về kết quả ngay trong phản hồi `200 OK` mà không qua bước xem trước hay xác nhận trung gian.
+
+  - `importCsv(userId: string, file: UploadedFile): Promise<CalendarImportResult>` (chữ ký cài đặt thực tế `importCsv(userId: string, fileBuffer: Buffer, fileName: string): Promise<CalendarImportResult>`): thực hiện cùng quy trình nạp nguyên tử một bước cho endpoint `POST /api/events/import/csv` thông qua `CsvParser`.
+
+  - Kiểu dữ liệu trả về `CalendarImportResult`: `{ data: ImportResultData, warnings?: ApiWarning[] }`, trong đó `ImportResultData` gồm `{ importedFileId: string, fileName: string, totalEvents: number, message: string }`, khớp với cấu trúc phản hồi của `POST /api/events/import/ics` và `POST /api/events/import/csv` trong `docs/api.md`.
+
+- `ITaskService` (`TaskService` tại `backend/src/modules/tasks/tasks.service.ts`): `listTasks(userId, filter)` (cài đặt thực tế nhận tham số `query: ListTasksQuery`), `createTask(userId, input)`, `getTask(userId, taskId)`, `updateTask(userId, taskId, input)`, `deleteTask(userId, taskId)`.
+
+- `IWeekScheduleService` (`WeekScheduleService` tại `backend/src/modules/schedule/schedule.service.ts`): `getWeek(userId, weekStart)` (cài đặt thực tế là `getWeekSchedule(userId: string, weekStartStr: string): Promise<WeekScheduleData>`), tổng hợp `fixedEvents` (kèm cờ động `hasOverlap`), `tasks` có hạn chót trong tuần và các `studySlots` ở trạng thái `'scheduled'`, `'studied'` hoặc `'missed'`.
+
+- `ICalendarFileParser` (`CalendarFileParser` ở Hình 4.18; hiện thực bởi hai lớp `IcsParser` và `CsvParser` tại `backend/src/modules/events/parsers/`): `IcsParser.parse(rawContent: string): ParseResult` và `CsvParser.parse(contentOrBuffer: string | Buffer): ParseResult` (kiểm tra mã hóa UTF-8 nghiêm ngặt và xử lý BOM), cùng trả về `ParseResult` gồm `{ events: ExtractedEvent[], errors: ParseErrorDetail[], totalErrors: number }`, trong đó `ParseErrorDetail` chứa `{ line?: number, issue: string }` và mảng `errors` lưu tối đa 20 lỗi đầu tiên theo BR-06.
 
 #### 4.2.3 Đặc tả giải thuật bóc tách thời khóa biểu và kiểm tra xung đột trùng lịch
 
@@ -4886,7 +4896,38 @@ Bảng 7.1: Các quyền kiểm tra ở API
 
 ### 7.3 Quản lý khóa và biến môi trường
 
-* Khóa API, chuỗi kết nối CSDL lưu ở biến môi trường và cấu hình dịch vụ hosting, không đưa vào repo.
+Hệ thống tách biệt mã nguồn khỏi thông tin cấu hình nhạy cảm nhằm ngăn chặn rò rỉ khóa truy cập CSDL và khóa ký xác thực trên kho lưu trữ Git.
+
+* **Nguyên tắc lưu giữ biến môi trường:**
+
+  * Mọi chuỗi kết nối CSDL, khóa ký JWT và token triển khai không được phép đưa vào mã nguồn. Tệp `.gitignore` tại gốc repository chặn toàn bộ tệp `.env` và `.env.*`, chỉ giữ lại hai tệp mẫu `backend/.env.example` và `frontend/.env.example` chứa các giá trị giữ chỗ để thành viên đối chiếu thiết lập trên môi trường cục bộ.
+
+  * Chuỗi kết nối thật và mật khẩu quản trị chỉ được chia sẻ qua kênh trao đổi nội bộ bảo mật của nhóm và nạp vào mục Environment Variables trên bảng điều khiển của Render, Vercel hoặc GitHub Repository Secrets (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` cho luồng triển khai giao diện; `DATABASE_URL` và `DIRECT_URL` cho job định kỳ giữ hoạt động CSDL).
+
+  * Biến cấu hình phía giao diện có tiền tố `VITE_` (như `VITE_API_URL`) được nhúng vào mã tĩnh gửi về trình duyệt nên được khai báo ở mức cấu hình công khai (`Config`) trên Vercel; nhóm không đặt bất kỳ khóa API bí mật hay chuỗi kết nối CSDL nào vào biến `VITE_*`.
+
+* **Phân định kênh kết nối CSDL Supabase (Transaction Pooler và Session Pooler):**
+
+  * CSDL PostgreSQL đám mây trên Supabase (khu vực Singapore `ap-southeast-1`) là tài nguyên dùng chung cho cả nhóm. Do tên miền kết nối trực tiếp `db.[project-ref].supabase.co` chỉ phân giải địa chỉ IPv6, còn máy chủ Render và đa số mạng phát triển vận hành trên IPv4 (dễ phát sinh lỗi `ENETUNREACH`), hệ thống sử dụng cụm Supavisor Pooler hỗ trợ IPv4 tại `aws-1-ap-southeast-1.pooler.supabase.com` với tên người dùng định tuyến dạng `postgres.[project-ref]`, tách biệt rõ hai cổng kết nối theo mục đích (xem Bảng 7.2).
+
+  * Mọi kết nối ra môi trường đám mây đều yêu cầu mã hóa SSL (`PGSSLMODE=require`, kèm tham số URI `uselibpqcompat=true&sslmode=require`). Ở tầng khởi tạo kết nối (`backend/src/config/db.ts`), hệ thống nhận diện `localhost` hoặc `127.0.0.1` để giữ kết nối cục bộ không SSL; với các máy chủ từ xa, bộ cấu hình tự động tách tham số `sslmode` khỏi chuỗi truy vấn để tránh xung đột cơ chế kiểm tra chứng chỉ mặc định của thư viện `pg` và bật `ssl: { rejectUnauthorized: false }` (khi chuyển sang vận hành sản phẩm chính thức có thể bổ sung chứng chỉ CA của Supabase qua `ssl.ca`). Các ký tự đặc biệt trong mật khẩu kết nối (ví dụ `@`) phải được mã hóa URL (thành `%40`) để tránh sai lệch khi phân tích cú pháp URI.
+
+Bảng 7.2: Phân định kênh kết nối cơ sở dữ liệu và phạm vi quản trị biến môi trường
+
+| **Thành phần / Biến** | **Chế độ kết nối và cổng** | **Mục đích sử dụng** | **Nơi lưu giữ và quy tắc bảo vệ** |
+| :--- | :--- | :--- | :--- |
+| `DATABASE_URL` | Supabase Transaction Pooler, cổng `6543` | Phục vụ ứng dụng Express runtime xử lý các yêu cầu API và truy vấn giao dịch ngắn hạn, tái sử dụng connection pool để không vượt giới hạn kết nối đồng thời. | Lưu trong `.env` cục bộ, Environment Variables trên Render (mức Secret) và GitHub Secrets cho tác vụ giữ kết nối. |
+| `DIRECT_URL` | Supabase Session Pooler, cổng `5432` (hoặc Direct Connection cổng `5432` trên môi trường hỗ trợ IPv6/cục bộ) | Phục vụ công cụ `node-pg-migrate` thực thi các câu lệnh thay đổi lược đồ bảng (DDL) và khóa phiên migration, vốn không tương thích với chế độ Transaction Pooler. | Lưu trong `.env` cục bộ khi chạy migration thủ công theo chiều thuận, Render Environment Variables (mức Secret) và GitHub Secrets. |
+| `JWT_SECRET` | Khóa đối xứng HS256 (không gắn cổng) | Ký và xác thực Access Token cho phiên đăng nhập của sinh viên. | Lưu trong `.env` cục bộ và Render Environment Variables (mức Secret); tách riêng khóa giữa cục bộ và môi trường chạy thật. |
+| `TEST_DATABASE_URL` | Kết nối PostgreSQL cục bộ (`localhost` / `127.0.0.1` / `::1`, cổng `5432`) | Cô lập dữ liệu cho bộ kiểm thử tích hợp API (`npm run test:integration`), bắt buộc tên CSDL kết thúc bằng `_test` và khác `DATABASE_URL`/`DIRECT_URL`. | Chỉ dùng trên máy cá nhân hoặc service container của CI; bộ kiểm tra an toàn (`safety.ts`) chặn chạy nếu trỏ ra ngoài cục bộ hoặc chứa `supabase`. |
+
+* **Kiểm soát cấu hình khi khởi động, phân quyền quản trị và bảo vệ CSDL dùng chung:**
+
+  * Mô-đun nạp cấu hình (`backend/src/config/env.ts`) kiểm tra nghiêm ngặt ngay lúc khởi động ở chế độ `production`: từ chối khởi chạy nếu thiếu `DATABASE_URL`, nếu `JWT_SECRET` ngắn hơn 32 ký tự hoặc còn chứa ký tự giữ chỗ `<` hay `>`, hoặc nếu `CORS_ORIGIN` bị bỏ trống hay đặt là `*`.
+
+  * Quyền quản trị bí mật trên các nền tảng hosting được phân công rõ: thành viên phụ trách DevOps nắm quyền quản trị chính và thành viên phụ trách module TV2 giữ vai trò quản trị dự phòng để xử lý sự cố hoặc xoay vòng khóa khi phát hiện dấu hiệu lộ thông tin.
+
+  * Tập lệnh bảo vệ migration (`backend/scripts/safe-migrate.mjs`) chặn đứng mọi lệnh hoàn tác hoặc xóa bảng (`migrate:down`, `migrate:redo`) nếu `DIRECT_URL` không trỏ về `localhost` hoặc `127.0.0.1`, bảo đảm toàn vẹn dữ liệu trên CSDL Supabase dùng chung; mọi thử nghiệm chiều hoàn tác chỉ được phép thực hiện trên PostgreSQL cục bộ.
 
 ## 8. Môi trường triển khai
 
@@ -4963,29 +5004,31 @@ Bảng 8.2: Biến môi trường chính
 
 ### 8.5 Sao lưu và phương án dự phòng
 
-Để đảm bảo hệ thống vận hành liên tục và kiểm soát toàn diện mọi rủi ro kỹ thuật trong suốt quá trình phát triển cũng như các đợt đánh giá đồ án trực tiếp, nhóm thiết lập các chính sách sao lưu và kịch bản ứng phó sự cố như sau:
+Để đảm bảo hệ thống vận hành ổn định trong suốt quá trình phát triển cũng như các đợt đánh giá đồ án trực tiếp, nhóm thiết lập chính sách sao lưu dữ liệu và kịch bản ứng phó sự cố hai lớp như sau:
 
 * **Chiến lược Sao lưu Dữ liệu (Database Backup Policy):**
 
-  * *Sao lưu định kỳ trước cột mốc:* Trước mỗi buổi thuyết trình nghiệm thu Sprint hoặc chấm đồ án, thành viên phụ trách CSDL thực thi lệnh kết xuất toàn bộ lược đồ và dữ liệu (dump file `.sql`) từ hệ thống Supabase về máy cá nhân bằng công cụ `pg_dump`.
+  * *Sao lưu định kỳ trước cột mốc:* Trước mỗi buổi thuyết trình nghiệm thu Sprint hoặc chấm đồ án, thành viên phụ trách CSDL thực thi lệnh kết xuất toàn bộ lược đồ và dữ liệu (tệp dump `.sql`) từ hệ thống Supabase về máy cá nhân bằng công cụ `pg_dump`.
 
-  * *Lưu trữ an toàn:* Tệp sao lưu được đặt tên theo quy chuẩn `studysync_backup_YYYYMMDD_vX.X.sql`, nén bảo mật và lưu trữ trong thư mục riêng của nhóm trên Google Drive để có thể khôi phục tức thời khi có sự cố hỏng dữ liệu.
+  * *Lưu trữ an toàn:* Tệp sao lưu được đặt tên theo quy chuẩn `studysync_backup_YYYYMMDD_vX.X.sql`, nén bảo mật và lưu trữ trong thư mục riêng của nhóm trên Google Drive để có thể khôi phục khi phát sinh sự cố dữ liệu.
 
 * **Phương án Dự phòng 2 lớp khi Demo trực tiếp (Fault Tolerance & Failover):**
 
-  * *Lớp 1 - Dự phòng Đám mây (Cloud Failover):*
+  * *Lớp 1 - Dự phòng Đám mây (Cloud Failover kích hoạt theo nhu cầu):*
 
-    * Nhóm cấu hình sẵn một Web Service dự phòng trên Railway (sử dụng gói 5 USD credit dùng thử được cấp sẵn) kết nối vào project CSDL PostgreSQL dự phòng trên Neon (Singapore).
+    * Nhóm duy trì Supabase PostgreSQL làm CSDL đám mây duy nhất cho môi trường phát triển và staging, không mở dịch vụ chạy song song thường trực trên Railway hay Neon để tránh tiêu hao hạn mức credit dùng thử (5 USD trên Railway). Thay vào đó, nhóm chuẩn bị sẵn cấu hình để kích hoạt dự phòng theo nhu cầu (on-demand) khi dịch vụ chính gặp sự cố.
 
-    * Khi Render rơi vào thời gian bảo trì hoặc gặp sự cố nghẽn mạng cục bộ, nhóm chỉ cần cập nhật biến `VITE_API_URL` trên bảng điều khiển Vercel trỏ sang tên miền của Railway. Thời gian chuyển đổi hoàn tất chỉ mất dưới 3 phút mà không làm gián đoạn buổi demo.
+    * Nếu Render gặp sự cố bảo trì hoặc gián đoạn kết nối kéo dài, nhóm triển khai nhanh dịch vụ Backend dự phòng lên Railway từ cùng kho mã nguồn GitHub (thời gian khởi tạo dưới 3 phút), cấu hình bộ biến môi trường trỏ tới CSDL Supabase hiện hành (hoặc tới một project PostgreSQL dự phòng trên Neon tại Singapore được khôi phục từ tệp dump `.sql` gần nhất trong trường hợp Supabase ngừng hoạt động), sau đó cập nhật `VITE_API_URL` trên Vercel sang tên miền của Railway.
 
-  * *Lớp 2 - Dự phòng Cục bộ tại Hội trường (Offline Local Failover):*
+    * Nếu Vercel gặp sự cố xuất bản hoặc truy cập, nhóm kích hoạt triển khai Frontend dự phòng lên Cloudflare Pages thông qua tệp định tuyến `frontend/public/_redirects` (`/* /index.html 200`) đã tích hợp sẵn trong kho mã nguồn, đồng thời cập nhật biến `CORS_ORIGIN` trên dịch vụ Backend sang tên miền của Cloudflare Pages.
 
-    * Máy tính thuyết trình của nhóm luôn khởi chạy sẵn toàn bộ hệ thống ở môi trường cục bộ (Frontend tại `localhost:5173` và Backend tại `localhost:3000`).
+  * *Lớp 2 - Dự phòng Cục bộ tại Hội trường (Offline Local Failover - ưu tiên khi demo trực tiếp):*
 
-    * Chuẩn bị sẵn một máy chủ PostgreSQL cục bộ đã nạp sẵn tệp dữ liệu mẫu chuẩn (`studysync_demo_data.sql`). Nếu hội trường gặp sự cố mất kết nối mạng Internet hoàn toàn, nhóm lập tức chuyển kết nối Frontend sang Backend cục bộ để tiếp tục thực hiện đầy đủ kịch bản demo tính năng trước hội đồng.
+    * Máy tính thuyết trình của nhóm khởi chạy sẵn Frontend tại `localhost:5173` và Backend tại `localhost:3000`. Khi mạng hội trường ổn định, hệ thống cục bộ có thể kết nối trực tiếp tới Supabase để tránh phụ thuộc dịch vụ hosting miễn phí.
 
-    * Nhóm đồng thời ghi hình sẵn một video demo chất lượng cao quay lại toàn bộ thao tác các ca sử dụng cốt lõi của 5 module, sẵn sàng trình chiếu đối chứng theo đúng quy định tại mục 4.10 và 5.4 của tài liệu dự án.
+    * Trường hợp hội trường mất kết nối Internet hoàn toàn, máy thuyết trình đã chuẩn bị sẵn máy chủ PostgreSQL cục bộ (`localhost:5432`) chạy đủ bộ migration và nạp sẵn tệp dữ liệu mẫu (`studysync_demo_data.sql`), cho phép chuyển đổi cấu hình cục bộ trong vài giây để tiếp tục kịch bản demo trước hội đồng.
+
+    * Nhóm đồng thời ghi hình sẵn video demo toàn bộ thao tác các ca sử dụng cốt lõi của 5 module, sẵn sàng trình chiếu đối chứng theo đúng quy định tại mục 4.10 và 5.4 của tài liệu dự án.
 
 ## 9. Truy vết
 
