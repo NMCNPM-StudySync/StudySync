@@ -44,10 +44,25 @@ function generateToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-/** Địa chỉ frontend để dựng `inviteUrl`; `CORS_ORIGIN` chỉ chứa một địa chỉ duy nhất. */
-function frontendBaseUrl(): string {
-  const origin = env.corsOrigin;
-  return (origin === '*' ? 'http://localhost:5173' : origin).replace(/\/+$/, '');
+const DEFAULT_FRONTEND_ORIGIN = 'http://localhost:5173';
+
+/**
+ * Chọn một địa chỉ frontend để dựng `inviteUrl` từ `CORS_ORIGIN` (có thể là danh sách cách nhau bởi dấu phẩy).
+ * Bỏ phần tử rỗng và `*`; ở production ưu tiên địa chỉ không phải localhost, còn lại lấy phần tử đầu tiên.
+ */
+export function resolveFrontendBaseUrl(
+  rawOrigins: string = env.corsOrigin,
+  nodeEnv: string = process.env.NODE_ENV ?? 'development',
+): string {
+  const origins = rawOrigins
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter((o) => o !== '' && o !== '*');
+  const preferred =
+    nodeEnv === 'production'
+      ? origins.find((o) => !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(o))
+      : undefined;
+  return preferred ?? origins[0] ?? DEFAULT_FRONTEND_ORIGIN;
 }
 
 export class GroupService {
@@ -84,7 +99,7 @@ export class GroupService {
     const list = await this.members.listMembers(groupId, this.db);
     const ordered = [...list].sort((a, b) => {
       if (a.role !== b.role) return a.role === 'leader' ? -1 : 1;
-      return a.joinedAt.getTime() - b.joinedAt.getTime();
+      return a.joinedAt.getTime() - b.joinedAt.getTime() || a.userId.localeCompare(b.userId);
     });
     return {
       ...group,
@@ -103,8 +118,11 @@ export class GroupService {
   /** Lấy liên kết còn hạn, hoặc tạo mới (hiệu lực 7 ngày). Chỉ Trưởng nhóm. */
   public async getInviteLink(userId: string, groupId: string): Promise<InviteLinkResult> {
     return this.runTransaction(async (client) => {
+      // Khóa dòng nhóm trước, rồi mới kiểm tra quyền trên dữ liệu đã được khóa.
+      if (!(await this.repo.lockForUpdate(groupId, client))) {
+        throw new NotFoundError('Không tìm thấy nhóm');
+      }
       await this.membership.requireLeader(groupId, userId, client);
-      await this.repo.lockForUpdate(groupId, client);
       const active = await this.invitations.findActive(groupId, client);
       if (active) return { link: this.toDto(active), created: false };
       const record = await this.invitations.upsert(groupId, generateToken(), client);
@@ -115,8 +133,11 @@ export class GroupService {
   /** Luôn đổi token mới; liên kết cũ vô hiệu ngay. Chỉ Trưởng nhóm. */
   public async regenerateInviteLink(userId: string, groupId: string): Promise<InviteLinkDto> {
     return this.runTransaction(async (client) => {
+      // Khóa dòng nhóm trước, rồi mới kiểm tra quyền trên dữ liệu đã được khóa.
+      if (!(await this.repo.lockForUpdate(groupId, client))) {
+        throw new NotFoundError('Không tìm thấy nhóm');
+      }
       await this.membership.requireLeader(groupId, userId, client);
-      await this.repo.lockForUpdate(groupId, client);
       const record = await this.invitations.upsert(groupId, generateToken(), client);
       return this.toDto(record);
     });
@@ -125,7 +146,7 @@ export class GroupService {
   private toDto(record: { token: string; expiresAt: Date }): InviteLinkDto {
     return {
       token: record.token,
-      inviteUrl: `${frontendBaseUrl()}/invite/${record.token}`,
+      inviteUrl: `${resolveFrontendBaseUrl()}/invite/${record.token}`,
       expiresAt: record.expiresAt.toISOString(),
     };
   }

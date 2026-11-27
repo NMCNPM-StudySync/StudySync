@@ -1,12 +1,15 @@
+import type { RequestHandler } from 'express';
 import type { PoolClient } from 'pg';
+import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
+import { createApp } from '../src/app';
 import { GroupMemberRepository } from '../src/modules/groups/group-member.repository';
 import { GroupRepository } from '../src/modules/groups/group.repository';
-import { GroupService } from '../src/modules/groups/group.service';
+import { GroupService, resolveFrontendBaseUrl } from '../src/modules/groups/group.service';
 import { InvitationLinkRepository } from '../src/modules/groups/invitation-link.repository';
 import { MembershipService } from '../src/modules/groups/membership.service';
 import type { Queryable } from '../src/shared/base-repository';
-import { ForbiddenError, NotFoundError } from '../src/shared/errors';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '../src/shared/errors';
 
 type Row = Record<string, unknown>;
 
@@ -139,5 +142,178 @@ describe('GroupService invite link', () => {
     await expect(svc.getInviteLink('u2', 'g1')).rejects.toBeInstanceOf(ForbiddenError);
     await expect(svc.regenerateInviteLink('u2', 'g1')).rejects.toBeInstanceOf(ForbiddenError);
     expect(query.mock.calls.some(([t]) => t.includes('invitation_links'))).toBe(false);
+  });
+});
+
+describe('resolveFrontendBaseUrl', () => {
+  it('lấy origin đầu tiên và cắt dấu / ở cuối khi CORS_ORIGIN có nhiều địa chỉ', () => {
+    expect(
+      resolveFrontendBaseUrl(
+        'http://localhost:5173/, https://studysync.vercel.app,https://studysync.pages.dev',
+        'development',
+      ),
+    ).toBe('http://localhost:5173');
+  });
+
+  it('ở production ưu tiên origin không phải localhost', () => {
+    expect(
+      resolveFrontendBaseUrl('http://localhost:5173,https://studysync.vercel.app/', 'production'),
+    ).toBe('https://studysync.vercel.app');
+  });
+
+  it('bỏ phần tử rỗng và *, không còn gì thì dùng localhost mặc định', () => {
+    expect(resolveFrontendBaseUrl('*', 'development')).toBe('http://localhost:5173');
+    expect(resolveFrontendBaseUrl(' , ,', 'development')).toBe('http://localhost:5173');
+    expect(resolveFrontendBaseUrl('*,https://a.example', 'development')).toBe('https://a.example');
+  });
+});
+
+describe('GroupService: khóa nhóm trước khi kiểm tra quyền', () => {
+  it('nhóm không tồn tại: 404, không truy vấn tư cách thành viên hay liên kết mời', async () => {
+    const { db, query } = fakeDb(() => []);
+    const svc = buildService(db);
+    await expect(svc.getInviteLink('u1', 'g1')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(svc.regenerateInviteLink('u1', 'g1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(query.mock.calls.some(([t]) => t.includes('FOR UPDATE'))).toBe(true);
+    expect(query.mock.calls.some(([t]) => t.includes('invitation_links'))).toBe(false);
+  });
+
+  it('lệnh FOR UPDATE chạy trước lệnh kiểm tra quyền Trưởng nhóm', async () => {
+    const { db, query } = fakeDb((text) => {
+      if (text.includes('SELECT id FROM groups')) return [{ id: 'g1' }];
+      if (text.includes('gm.user_id = $2'))
+        return [member('u1', 'An', 'leader', '2026-11-05T13:00:00Z')];
+      if (text.includes('INSERT INTO invitation_links'))
+        return [{ token: 't', expires_at: new Date('2026-11-12T13:00:00Z') }];
+      return [];
+    });
+    await buildService(db).regenerateInviteLink('u1', 'g1');
+    const texts = query.mock.calls.map(([t]) => t);
+    const lockAt = texts.findIndex((t) => t.includes('FOR UPDATE'));
+    const roleAt = texts.findIndex((t) => t.includes('gm.user_id = $2'));
+    expect(lockAt).toBeGreaterThanOrEqual(0);
+    expect(lockAt).toBeLessThan(roleAt);
+  });
+});
+
+describe('Route và Controller của nhóm (TV1)', () => {
+  const gid = '7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33';
+  const expires = new Date('2026-11-12T13:00:00Z');
+
+  const testAuthenticate: RequestHandler = (req, _res, next) => {
+    const header = req.headers.authorization;
+    if (!header?.startsWith('Bearer ')) {
+      next(new UnauthorizedError());
+      return;
+    }
+    req.userId = header.slice(7).trim();
+    next();
+  };
+
+  /** Db giả: `u-leader` là Trưởng nhóm, `u-member` là thành viên; nhóm `gid` tồn tại (trừ khi `groupExists = false`). */
+  function appWith(opts: { groupExists?: boolean; activeLink?: boolean } = {}) {
+    const { groupExists = true, activeLink = false } = opts;
+    const { db } = fakeDb((text, params) => {
+      if (text.includes('SELECT id FROM groups')) return groupExists ? [{ id: gid }] : [];
+      if (text.includes('SELECT id, name, created_at FROM groups'))
+        return [{ id: gid, name: 'Nhóm', created_at: new Date('2026-11-05T13:00:00Z') }];
+      if (text.includes('gm.user_id = $2')) {
+        const uid = params?.[1];
+        if (uid === 'u-leader') return [member('u-leader', 'An', 'leader', '2026-11-05T13:00:00Z')];
+        if (uid === 'u-member')
+          return [member('u-member', 'Bình', 'member', '2026-11-06T02:30:00Z')];
+        return [];
+      }
+      if (text.includes('INSERT INTO invitation_links'))
+        return [{ token: 'n'.repeat(43), expires_at: expires }];
+      if (text.includes('FROM invitation_links'))
+        return activeLink ? [{ token: 'a'.repeat(43), expires_at: expires }] : [];
+      if (text.includes('gm.group_id = $1'))
+        return [
+          member('u-leader', 'An', 'leader', '2026-11-05T13:00:00Z'),
+          member('u-member', 'Bình', 'member', '2026-11-06T02:30:00Z'),
+        ].map((r) => ({ ...r, email: 'khong-duoc-lo@example.com' }));
+      return [];
+    });
+    return createApp({ groups: buildService(db), authenticate: testAuthenticate });
+  }
+
+  const auth = (uid: string) => ({ Authorization: `Bearer ${uid}` });
+
+  it('groupId sai định dạng UUID: 400 VALIDATION_ERROR kèm details cho groupId', async () => {
+    const app = appWith();
+    for (const [method, path] of [
+      ['get', '/api/groups/abc'],
+      ['post', '/api/groups/abc/invite-link'],
+      ['post', '/api/groups/abc/invite-link/regenerate'],
+    ] as const) {
+      const res = await request(app)[method](path).set(auth('u-leader'));
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.details[0].field).toBe('groupId');
+    }
+  });
+
+  it('thiếu token trên cả 3 endpoint: 401 UNAUTHORIZED', async () => {
+    const app = appWith();
+    for (const [method, path] of [
+      ['get', `/api/groups/${gid}`],
+      ['post', `/api/groups/${gid}/invite-link`],
+      ['post', `/api/groups/${gid}/invite-link/regenerate`],
+    ] as const) {
+      const res = await request(app)[method](path);
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+    }
+  });
+
+  it('invite-link: 201 khi tạo mới, 200 khi trả liên kết còn hạn; regenerate: 201', async () => {
+    const created = await request(appWith())
+      .post(`/api/groups/${gid}/invite-link`)
+      .set(auth('u-leader'));
+    expect(created.status).toBe(201);
+    expect(created.body.data.expiresAt).toBe('2026-11-12T13:00:00.000Z');
+
+    const existing = await request(appWith({ activeLink: true }))
+      .post(`/api/groups/${gid}/invite-link`)
+      .set(auth('u-leader'));
+    expect(existing.status).toBe(200);
+    expect(existing.body.data.token).toBe('a'.repeat(43));
+
+    const regen = await request(appWith({ activeLink: true }))
+      .post(`/api/groups/${gid}/invite-link/regenerate`)
+      .set(auth('u-leader'));
+    expect(regen.status).toBe(201);
+    expect(regen.body.data.token).toBe('n'.repeat(43));
+  });
+
+  it('nhóm không tồn tại: 404 NOT_FOUND cho invite-link và regenerate', async () => {
+    const app = appWith({ groupExists: false });
+    for (const path of [
+      `/api/groups/${gid}/invite-link`,
+      `/api/groups/${gid}/invite-link/regenerate`,
+    ]) {
+      const res = await request(app).post(path).set(auth('u-leader'));
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('thành viên thường gọi invite-link: 403 FORBIDDEN', async () => {
+    const res = await request(appWith())
+      .post(`/api/groups/${gid}/invite-link`)
+      .set(auth('u-member'));
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('GET chi tiết nhóm: joinedAt đúng định dạng .000Z và không chứa email', async () => {
+    const res = await request(appWith()).get(`/api/groups/${gid}`).set(auth('u-member'));
+    expect(res.status).toBe(200);
+    for (const m of res.body.data.members) {
+      expect(m.joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/);
+      expect(m).not.toHaveProperty('email');
+    }
+    expect(JSON.stringify(res.body)).not.toContain('@');
   });
 });
