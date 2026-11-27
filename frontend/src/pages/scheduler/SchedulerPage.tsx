@@ -12,7 +12,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui';
 import { ApiError } from '../../services/apiClient';
-import { getProposalConflictIssue, schedulerApi } from '../../services/schedulerApi';
+import {
+  getProposalConflictIssue,
+  isSchedulerMockMode,
+  schedulerApi,
+} from '../../services/schedulerApi';
 import type { ConfirmAction, Proposal, SchedulerTask, StudySlot } from '../../types/scheduler';
 import { NoSlotState } from './components/NoSlotState';
 import { ProposalDetailPanel } from './components/ProposalDetailPanel';
@@ -54,9 +58,15 @@ const noticeToneClasses: Record<NoticeTone, string> = {
   error: 'bg-brand-alert text-brand-alertText border-brand-alertText/20',
 };
 
+/** Thông báo khi không gọi được máy chủ (trình duyệt chỉ trả "Failed to fetch" bằng tiếng Anh). */
+const NETWORK_ERROR_MESSAGE =
+  'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.';
+
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiError && error.message) return error.message;
-  if (error instanceof Error && error.message) return error.message;
+  if (error instanceof ApiError) {
+    if (error.code === 'NETWORK_ERROR') return NETWORK_ERROR_MESSAGE;
+    return error.message || fallback;
+  }
   return fallback;
 }
 
@@ -184,8 +194,19 @@ export function SchedulerPage() {
 
   const reloadWeek = () => {
     setWeekLoading(true);
+    setWeekError(null);
     setWeekReloadKey((key) => key + 1);
   };
+
+  /** Lỗi tải dữ liệu ban đầu: gom lại hiện một lần ở đầu trang thay vì lặp ở từng khối. */
+  const loadError = tasksError ?? weekError;
+  const reloadAll = () => {
+    if (tasksError) reloadTasks();
+    if (weekError) reloadWeek();
+  };
+  // Lỗi khi bấm đề xuất trùng nội dung với lỗi tải (ví dụ cùng 401) thì không hiện lần nữa
+  const visibleNotice =
+    notice && !(notice.tone === 'error' && notice.text === loadError) ? notice : null;
 
   const closeDetail = useCallback(() => setSelectedSlotId(null), []);
 
@@ -290,6 +311,14 @@ export function SchedulerPage() {
           <span className="inline-flex h-11 items-center rounded-lg border border-brand-borderDefault bg-white px-4 text-sm text-brand-navy shadow-sm">
             {STUDY_WINDOW_LABEL} · Cố định
           </span>
+          {isSchedulerMockMode && (
+            <span
+              title="Chạy local với VITE_USE_MOCK=true, không gọi backend"
+              className="inline-flex h-11 items-center rounded-lg border border-brand-warningText/30 bg-brand-warning px-4 text-sm text-brand-warningText"
+            >
+              Dữ liệu giả lập
+            </span>
+          )}
           {phase.kind === 'no_slot' ? (
             <button
               type="button"
@@ -378,22 +407,29 @@ export function SchedulerPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          {notice && (
+          {loadError && (
             <div
-              role={notice.tone === 'error' ? 'alert' : 'status'}
-              className={`rounded-lg border px-4 py-3 text-sm ${noticeToneClasses[notice.tone]}`}
+              role="alert"
+              className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${noticeToneClasses.error}`}
             >
-              {notice.text}
+              <span>{loadError}</span>
+              <Button variant="secondary" size="md" onClick={reloadAll}>
+                Thử lại
+              </Button>
+            </div>
+          )}
+
+          {visibleNotice && (
+            <div
+              role={visibleNotice.tone === 'error' ? 'alert' : 'status'}
+              className={`rounded-lg border px-4 py-3 text-sm ${noticeToneClasses[visibleNotice.tone]}`}
+            >
+              {visibleNotice.text}
             </div>
           )}
 
           {activeTab === 'scheduled' && (
             <section aria-label="Khung giờ đã xếp trong tuần" className="flex flex-col gap-4">
-              {weekError && (
-                <p className="rounded-2xl border border-brand-borderDefault bg-white p-5 text-sm text-brand-alertText">
-                  {weekError}
-                </p>
-              )}
               {!weekError && !weekLoading && scheduledSlots.length === 0 && (
                 <p className="rounded-2xl border border-brand-borderDefault bg-white p-5 text-sm text-brand-muted">
                   Chưa có khung giờ học nào được xếp trong tuần này.
@@ -435,11 +471,11 @@ export function SchedulerPage() {
                 </p>
               )}
 
-              {!proposing && phase.kind === 'idle' && (
+              {!proposing && phase.kind === 'idle' && !tasksError && (
                 <UnscheduledTaskList
                   tasks={waitingTasks}
                   loading={tasksLoading}
-                  error={tasksError}
+                  error={null}
                   onRetry={reloadTasks}
                 />
               )}

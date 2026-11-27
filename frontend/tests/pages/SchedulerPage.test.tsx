@@ -519,6 +519,54 @@ describe('SchedulerPage (TV3, Issue #146)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Đề xuất xếp lịch' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Không kết nối được');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.',
+    );
+  });
+
+  it('mất kết nối khi tải danh sách việc thì báo tiếng Việt, không hiện "Failed to fetch"', async () => {
+    listTasks.mockRejectedValueOnce(new ApiError('Failed to fetch', 0, 'NETWORK_ERROR'));
+    getWeek.mockRejectedValueOnce(new ApiError('Failed to fetch', 0, 'NETWORK_ERROR'));
+    renderPage();
+
+    // Hai lời gọi cùng lỗi nhưng chỉ hiện một thông báo ở đầu trang
+    expect(
+      await screen.findAllByText(
+        'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.',
+      ),
+    ).toHaveLength(1);
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+  });
+
+  it('chưa đăng nhập: lỗi 401 ở danh sách việc, lịch tuần và nút đề xuất chỉ hiện một lần', async () => {
+    const unauthorized = () =>
+      new ApiError('Chưa đăng nhập hoặc phiên làm việc đã hết hạn', 401, 'UNAUTHORIZED');
+    listTasks.mockRejectedValueOnce(unauthorized());
+    getWeek.mockRejectedValueOnce(unauthorized());
+    autoPlan.mockRejectedValueOnce(unauthorized());
+    renderPage();
+
+    expect(
+      await screen.findAllByText('Chưa đăng nhập hoặc phiên làm việc đã hết hạn'),
+    ).toHaveLength(1);
+    // Danh sách việc không hiện câu "không có việc" gây hiểu nhầm khi đang lỗi
+    expect(screen.queryByRole('region', { name: 'Việc chờ xếp' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đề xuất xếp lịch' }));
+    await waitFor(() => expect(autoPlan).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByText('Chưa đăng nhập hoặc phiên làm việc đã hết hạn')).toHaveLength(1);
+  });
+
+  it('bấm "Thử lại" ở thông báo lỗi chung thì tải lại cả danh sách việc và lịch tuần', async () => {
+    listTasks.mockRejectedValueOnce(new ApiError('Máy chủ lỗi', 500, 'INTERNAL_ERROR'));
+    getWeek.mockRejectedValueOnce(new ApiError('Máy chủ lỗi', 500, 'INTERNAL_ERROR'));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+
+    await waitForTasks();
+    expect(listTasks).toHaveBeenCalledTimes(2);
+    expect(getWeek).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Máy chủ lỗi')).not.toBeInTheDocument();
   });
 });

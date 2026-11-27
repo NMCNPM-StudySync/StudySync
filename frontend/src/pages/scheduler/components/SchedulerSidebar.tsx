@@ -93,7 +93,8 @@ export function SchedulerSidebar({
         </dl>
         <div className="my-4 border-t border-brand-borderDefault" />
         {weekError ? (
-          <p className="text-sm text-brand-alertText">{weekError}</p>
+          // Lỗi tải lịch tuần đã hiện ở đầu trang, ở đây chỉ để trống
+          <p className="text-sm text-brand-muted">—</p>
         ) : timeline.length === 0 ? (
           <p className="text-sm text-brand-muted">
             {weekLoading ? 'Đang tải lịch tuần...' : 'Chưa có khung giờ học nào trong tuần.'}
