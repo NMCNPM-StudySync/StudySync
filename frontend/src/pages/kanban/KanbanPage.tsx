@@ -180,6 +180,11 @@ export function KanbanPage() {
             if (groupData.members && groupData.members.length > 0) {
               setMembers(groupData.members);
             }
+          } else {
+            showToast(
+              'Không thể tải đầy đủ thông tin nhóm học tập và danh sách thành viên',
+              'warning',
+            );
           }
         }
       } catch (err: unknown) {
@@ -204,7 +209,7 @@ export function KanbanPage() {
     return () => {
       ignore = true;
     };
-  }, [paramGroupId, reloadCounter, navigate, sortCardsDeterministically]);
+  }, [paramGroupId, reloadCounter, navigate, sortCardsDeterministically, showToast]);
 
   const effectiveGroupId = activeGroupId || paramGroupId || '';
 
@@ -309,6 +314,12 @@ export function KanbanPage() {
     [cards, currentTime],
   );
 
+  // Thẻ đang được chọn chỉnh sửa lấy dữ liệu mới nhất từ mảng cards (tránh stale state)
+  const activeCardForEdit = useMemo(() => {
+    if (!selectedCardForEdit) return null;
+    return cards.find((c) => c.id === selectedCardForEdit.id) ?? selectedCardForEdit;
+  }, [cards, selectedCardForEdit]);
+
   // Tạo thẻ mới (US-29, U041)
   const handleCreateCard = async (payload: CreateCardPayload) => {
     if (!effectiveGroupId) return;
@@ -344,6 +355,7 @@ export function KanbanPage() {
       setCards((prev) =>
         sortCardsDeterministically(prev.map((c) => (c.id === cardId ? updatedCard : c))),
       );
+      setSelectedCardForEdit((prev) => (prev && prev.id === cardId ? updatedCard : prev));
 
       const hasOverdueWarning = res.warnings?.some((w) => w.code === 'DEADLINE_PASSED');
       if (hasOverdueWarning) {
@@ -374,6 +386,11 @@ export function KanbanPage() {
         ),
       ),
     );
+    setSelectedCardForEdit((prev) =>
+      prev && prev.id === cardId
+        ? { ...prev, status: targetStatus, updatedAt: new Date().toISOString() }
+        : prev,
+    );
 
     try {
       const res = await kanbanService.updateStatus(effectiveGroupId, cardId, targetStatus);
@@ -381,6 +398,7 @@ export function KanbanPage() {
       setCards((prev) =>
         sortCardsDeterministically(prev.map((c) => (c.id === cardId ? res.data : c))),
       );
+      setSelectedCardForEdit((prev) => (prev && prev.id === cardId ? res.data : prev));
       showToast(
         `Đã chuyển thẻ sang cột "${
           targetStatus === 'todo'
@@ -398,6 +416,9 @@ export function KanbanPage() {
           prev.map((c) => (c.id === cardId ? { ...c, status: previousStatus } : c)),
         ),
       );
+      setSelectedCardForEdit((prev) =>
+        prev && prev.id === cardId ? { ...prev, status: previousStatus } : prev,
+      );
       const message =
         err instanceof ApiError ? err.message : 'Không thể chuyển trạng thái thẻ. Vui lòng thử lại';
       showToast(message, 'error');
@@ -413,6 +434,7 @@ export function KanbanPage() {
       const updatedCard = res.data;
 
       setCards((prev) => prev.map((c) => (c.id === cardId ? updatedCard : c)));
+      setSelectedCardForEdit((prev) => (prev && prev.id === cardId ? updatedCard : prev));
       showToast(
         targetUserId ? `Đã giao thẻ cho ${updatedCard.assignedToDisplayName}` : 'Đã bỏ giao thẻ',
         'success',
@@ -558,13 +580,13 @@ export function KanbanPage() {
         />
       )}
 
-      {/* Modal Xem & Chỉnh sửa thẻ việc */}
-      {selectedCardForEdit && (
+      {/* Modal Xem & Chỉnh sửa thẻ việc (sử dụng activeCardForEdit để tránh stale state khi đổi cột) */}
+      {activeCardForEdit && (
         <CardModal
-          key={`edit-card-${selectedCardForEdit.id}`}
-          isOpen={Boolean(selectedCardForEdit)}
+          key={`edit-card-${activeCardForEdit.id}`}
+          isOpen={Boolean(activeCardForEdit)}
           onClose={() => setSelectedCardForEdit(null)}
-          card={selectedCardForEdit}
+          card={activeCardForEdit}
           members={displayMembers}
           currentUserId={currentUserId}
           isLeader={isLeader}

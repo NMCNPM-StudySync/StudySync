@@ -354,4 +354,55 @@ describe('KanbanPage Integration Tests', () => {
       expect(screen.getByRole('button', { name: 'Đi đến trang Nhóm' })).toBeInTheDocument();
     });
   });
+
+  it('TC-KB-10: Modal không bị stale state khi đổi trạng thái thẻ qua lại nhiều lần', async () => {
+    vi.mocked(kanbanService.updateStatus).mockImplementation(async (_groupId, cardId, status) => ({
+      data: { ...mockCards[0]!, id: cardId, status },
+    }));
+
+    renderKanbanPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Viết tài liệu kiến trúc')).toBeInTheDocument();
+    });
+
+    // Mở modal chỉnh sửa thẻ
+    fireEvent.click(screen.getByText('Viết tài liệu kiến trúc'));
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+
+    const statusSelect = within(dialog).getByLabelText('Cột trạng thái');
+    expect(statusSelect).toHaveValue('todo');
+
+    // Lần 1: Chuyển từ todo sang done
+    await act(async () => {
+      fireEvent.change(statusSelect, { target: { value: 'done' } });
+    });
+
+    expect(kanbanService.updateStatus).toHaveBeenCalledTimes(1);
+    expect(kanbanService.updateStatus).toHaveBeenLastCalledWith('test-group', 'card-1', 'done');
+
+    // Lần 2: Trong cùng modal đang mở, chuyển ngược từ done về todo
+    await act(async () => {
+      fireEvent.change(statusSelect, { target: { value: 'todo' } });
+    });
+
+    // Kiểm tra lần 2 được gọi thành công, không bị guard clause stale state chặn lại
+    expect(kanbanService.updateStatus).toHaveBeenCalledTimes(2);
+    expect(kanbanService.updateStatus).toHaveBeenLastCalledWith('test-group', 'card-1', 'todo');
+  });
+
+  it('TC-KB-11: Hiển thị cảnh báo toast khi không tải được chi tiết nhóm và thành viên', async () => {
+    vi.mocked(kanbanService.getGroupDetails).mockRejectedValueOnce(new Error('Lỗi tải nhóm'));
+
+    renderKanbanPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Viết tài liệu kiến trúc')).toBeInTheDocument();
+      expect(
+        screen.getByText('Không thể tải đầy đủ thông tin nhóm học tập và danh sách thành viên'),
+      ).toBeInTheDocument();
+    });
+  });
 });

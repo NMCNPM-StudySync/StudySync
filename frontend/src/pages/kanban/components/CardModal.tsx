@@ -98,8 +98,13 @@ export function CardModal({
   const [dueAtLocal, setDueAtLocal] = useState(() =>
     card ? toDatetimeLocalVn(card.dueAt) : getDefaultDueAtLocal(),
   );
-  const [status, setStatus] = useState<KanbanStatus>(() => card?.status || 'todo');
-  const [assigneeId, setAssigneeId] = useState<string>(() => card?.assignedToUserId || '');
+  // Trạng thái và người phụ trách được derive trực tiếp từ prop card tươi, có fallback tạm thời khi submitting
+  const [submittingStatus, setSubmittingStatus] = useState<KanbanStatus | null>(null);
+  const currentStatus = submittingStatus ?? card?.status ?? 'todo';
+
+  const [submittingAssigneeId, setSubmittingAssigneeId] = useState<string | null>(null);
+  const currentAssigneeId = submittingAssigneeId ?? card?.assignedToUserId ?? '';
+
   const [titleError, setTitleError] = useState<string | null>(null);
   const [dueAtError, setDueAtError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -172,28 +177,24 @@ export function CardModal({
     if (!card || newStatus === card.status) return;
     try {
       setIsSubmitting(true);
+      setSubmittingStatus(newStatus);
       await onStatusChange(card.id, newStatus);
-      setStatus(newStatus);
-    } catch {
-      // Hoàn tác về trạng thái cũ trên dropdown nếu thao tác thất bại
-      setStatus(card.status);
     } finally {
       setIsSubmitting(false);
+      setSubmittingStatus(null);
     }
   };
 
   const handleAssigneeChange = async (newAssigneeId: string) => {
-    if (!card) return;
+    if (!card || newAssigneeId === (card.assignedToUserId || '')) return;
     try {
       setIsSubmitting(true);
+      setSubmittingAssigneeId(newAssigneeId);
       const targetUserId = newAssigneeId ? newAssigneeId : null;
       await onAssign(card.id, targetUserId);
-      setAssigneeId(newAssigneeId);
-    } catch {
-      // Hoàn tác về người phụ trách cũ trên dropdown nếu thao tác thất bại
-      setAssigneeId(card.assignedToUserId || '');
     } finally {
       setIsSubmitting(false);
+      setSubmittingAssigneeId(null);
     }
   };
 
@@ -336,7 +337,7 @@ export function CardModal({
               </label>
               <select
                 id="card-status"
-                value={status}
+                value={currentStatus}
                 onChange={(e) => handleStatusChange(e.target.value as KanbanStatus)}
                 disabled={isSubmitting}
                 className="w-full rounded-lg border border-brand-borderDefault bg-white p-2.5 text-sm font-medium text-brand-slate shadow-sm outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary"
@@ -363,7 +364,7 @@ export function CardModal({
               {isLeader ? (
                 <select
                   id="card-assignee"
-                  value={assigneeId}
+                  value={currentAssigneeId}
                   onChange={(e) => handleAssigneeChange(e.target.value)}
                   disabled={isSubmitting}
                   className="w-full rounded-lg border border-brand-borderDefault bg-white p-2.5 text-sm font-medium text-brand-slate shadow-sm outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary"
