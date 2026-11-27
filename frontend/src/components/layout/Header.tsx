@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 
 interface NavItem {
@@ -135,6 +135,8 @@ export function Header() {
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const navRef = useRef<HTMLElement | null>(null);
 
+  const isGroupMeetingsPath = /^\/groups\/[^/]+\/meetings(\/|$)/.test(location.pathname);
+
   // Xác định tab đang active dựa trên pathname hiện tại (hỗ trợ cả route con của cả 6 tab)
   const activeIndex = navItems.findIndex((item) => {
     if (
@@ -142,6 +144,16 @@ export function Header() {
       (location.pathname === '/' || location.pathname === '/calendar')
     ) {
       return true;
+    }
+    if (item.to === '/meetings') {
+      return (
+        location.pathname === '/meetings' ||
+        location.pathname.startsWith('/meetings/') ||
+        isGroupMeetingsPath
+      );
+    }
+    if (item.to === '/groups' && isGroupMeetingsPath) {
+      return false;
     }
     return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
   });
@@ -238,7 +250,7 @@ export function Header() {
       <div className="block md:hidden mx-auto max-w-md rounded-3xl border border-brand-surface bg-white/95 p-3.5 shadow-prototype backdrop-blur-md">
         {/* Hàng 1: Logo StudySync + Chuông thông báo + Avatar TK */}
         <div className="flex items-center justify-between">
-          <NavLink to="/calendar" className="flex items-center space-x-2.5 focus:outline-none">
+          <Link to="/calendar" className="flex items-center space-x-2.5 focus:outline-none">
             <img
               src="/studysync-logo.png"
               alt="StudySync Logo"
@@ -247,7 +259,7 @@ export function Header() {
             <span className="font-heading text-lg font-black tracking-wider text-brand-navy">
               STUDYSYNC
             </span>
-          </NavLink>
+          </Link>
 
           <div className="flex items-center space-x-2">
             <button
@@ -286,14 +298,21 @@ export function Header() {
         <nav aria-label="Thanh điều hướng di động" className="my-3 grid grid-cols-3 gap-1.5">
           {navItems.map((item) => {
             const isActive =
-              location.pathname === item.to ||
-              (item.to === '/calendar' && location.pathname === '/') ||
-              location.pathname.startsWith(`${item.to}/`);
+              item.to === '/meetings'
+                ? location.pathname === '/meetings' ||
+                  location.pathname.startsWith('/meetings/') ||
+                  isGroupMeetingsPath
+                : item.to === '/groups' && isGroupMeetingsPath
+                  ? false
+                  : location.pathname === item.to ||
+                    (item.to === '/calendar' && location.pathname === '/') ||
+                    location.pathname.startsWith(`${item.to}/`);
 
             return (
-              <NavLink
+              <Link
                 key={item.to}
                 to={item.to}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex h-10 items-center justify-center space-x-1.5 rounded-xl px-1 transition-all duration-200 focus:outline-none ${
                   isActive
                     ? 'bg-brand-surface text-brand-primary font-semibold shadow-sm'
@@ -304,7 +323,7 @@ export function Header() {
                 <span className="font-sans text-[13px] font-semibold whitespace-nowrap">
                   {item.label}
                 </span>
-              </NavLink>
+              </Link>
             );
           })}
         </nav>
@@ -351,7 +370,7 @@ export function Header() {
       {/* 2. GIAO DIỆN HEADER TRÊN DESKTOP (Thanh nổi 76px + Viên thuốc Stripe lướt mượt mà) */}
       <div className="hidden md:flex mx-auto h-[76px] max-w-7xl items-center justify-between rounded-2xl border border-brand-surface bg-white/95 px-4 lg:px-6 shadow-prototype backdrop-blur-md">
         {/* Brand / Logo 3D sạch, không sọc, kích thước 42×42px với phông Zalando Sans Expanded */}
-        <NavLink
+        <Link
           to="/calendar"
           className="flex items-center space-x-2.5 lg:space-x-3.5 shrink-0 focus:outline-none"
         >
@@ -363,7 +382,7 @@ export function Header() {
           <span className="hidden min-[900px]:inline font-heading text-lg lg:text-xl font-black tracking-wider text-brand-navy">
             STUDYSYNC
           </span>
-        </NavLink>
+        </Link>
 
         {/* Thanh chuyển đổi Module với hiệu ứng viên thuốc lướt mượt chuẩn Stripe */}
         <nav
@@ -390,12 +409,13 @@ export function Header() {
             const isPillTarget = targetIndex === index;
 
             return (
-              <NavLink
+              <Link
                 key={item.to}
                 ref={(el) => {
                   itemRefs.current[index] = el;
                 }}
                 to={item.to}
+                aria-current={isActive ? 'page' : undefined}
                 aria-label={item.label}
                 title={item.label}
                 onMouseEnter={() => setHoveredIndex(index)}
@@ -417,7 +437,7 @@ export function Header() {
                     {item.label}
                   </span>
                 )}
-              </NavLink>
+              </Link>
             );
           })}
         </nav>
