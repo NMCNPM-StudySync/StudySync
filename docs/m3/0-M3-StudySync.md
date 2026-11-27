@@ -1249,7 +1249,10 @@ Bảng 4.1.2: Trách nhiệm của từng tầng trong module TV1
 
 Quyền được kiểm tra ở Service, không chỉ ẩn nút trên giao diện (US-04 tiêu chí 4). `passwordHash` không rời khỏi tầng Service (BR-02).
 
-Bảng 4.1.2 theo thiết kế mục tiêu ở Hình 4.17 và Bảng 4.19 (mục 4.7.9). Hiện trạng mã nguồn trên `main` chưa đầy đủ: mã đã có `AuthService` (`register`, `login`, `getMe`, `verifyToken`), `MembershipService` và các router `createAuthRouter`, `createUserRouter`, `createGroupRouter`, gom trong thư mục `auth` và `groups`. Các phần sau là đặc tả thiết kế theo `docs/api.md`, chờ các PR cài đặt tiếp theo của TV1: `PATCH /api/users/me` (`UserService.updateDisplayName`), `GET /api/groups/{groupId}`, hai endpoint liên kết mời (U004), hai endpoint lời mời `GET /api/invitations/{token}` và `POST .../join` (U005), `PUT .../leader` và `POST .../leave` (U007), `InvitationLinkRepository`, `InvitationController` và các lớp Entity `Group`, `GroupMember`, `InvitationLink`.
+Bảng 4.1.2 theo thiết kế mục tiêu ở Hình 4.17 và Bảng 4.19 (mục 4.7.9). Hiện trạng cài đặt trong mã nguồn chưa đầy đủ, gom trong thư mục `auth` và `groups`:
+
+* Đã cài đặt: `AuthService` (`register`, `login`, `getMe`, `verifyToken`), `MembershipService`, `GroupService` với tạo nhóm, danh sách nhóm của tôi (U003), chi tiết nhóm `GET /api/groups/{groupId}` và hai endpoint liên kết mời `POST .../invite-link`, `.../invite-link/regenerate` (U004), cùng `InvitationLinkRepository` và các router `createAuthRouter`, `createUserRouter`, `createGroupRouter`.
+* Chưa cài đặt, là đặc tả thiết kế theo `docs/api.md`: `PATCH /api/users/me` (`UserService.updateDisplayName`), hai endpoint lời mời `GET /api/invitations/{token}` và `POST .../join` (U005), `PUT .../leader` và `POST .../leave` (U007), `InvitationController`, `UserController` và các lớp Entity `Group`, `GroupMember`, `InvitationLink`.
 
 #### 4.1.2 Đặc tả AuthService và UserService (U001, U002, U006)
 
