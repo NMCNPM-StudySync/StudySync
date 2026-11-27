@@ -191,6 +191,32 @@ export class SchedulerEngine {
     return this.ceilStepMinutes(Math.max(0, task.durationMinutes - counted));
   }
 
+  /**
+   * freeMinutes (docs/api.md, POST /api/scheduler/auto-plan): tổng số phút còn có thể xếp giờ học
+   * trong phạm vi [t0, end). Dùng cùng khoảng trống với planSlots (khung 07:00-22:00, đã trừ sự kiện
+   * cố định làm tròn ra ngoài và khung scheduled, studied), rồi giới hạn mỗi ngày bởi
+   * maxDailyMinutes trừ số phút đã xếp trong ngày đó. Khung proposed không nằm trong busy (BR-03).
+   */
+  public freeMinutes(busy: PlanBusy, window: PlanWindow): number {
+    const t0 = this.firstGridAfter(window.now);
+    const free = this.buildFree(t0, window.end.getTime(), busy);
+    const used = this.usedByDay(busy.slots);
+
+    // Mỗi khoảng trống nằm gọn trong khung 07:00-22:00 của một ngày nên cộng theo ngày bắt đầu.
+    const freeByDay = new Map<number, number>();
+    for (const span of free) {
+      const day = this.dayOf(span.start);
+      freeByDay.set(day, (freeByDay.get(day) ?? 0) + minutesOf(span));
+    }
+
+    let total = 0;
+    for (const [day, minutes] of freeByDay) {
+      const cap = Math.max(0, this.config.maxDailyMinutes - (used.get(day) ?? 0));
+      total += Math.min(minutes, cap);
+    }
+    return Math.floor(total);
+  }
+
   // -------------------------------------------------------------------------
   // planSlots (mục 5.1.3 đến 5.1.7)
   // -------------------------------------------------------------------------

@@ -35,6 +35,16 @@ export class ScheduleProposalRepository extends BaseRepository<ScheduleProposal>
     return row ? this.toEntity(row as Record<string, unknown>) : null;
   }
 
+  /** Khóa dòng lượt đề xuất khi xác nhận (bảng "Giao dịch TV3 nhiều bảng", bước 1). */
+  public async lockById(id: string, db: Queryable): Promise<ScheduleProposal | null> {
+    const res = await db.query(
+      `SELECT ${COLUMNS} FROM schedule_proposals WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const row = res.rows[0];
+    return row ? this.toEntity(row as Record<string, unknown>) : null;
+  }
+
   public async insert(proposal: ScheduleProposal, db: Queryable): Promise<void> {
     await db.query(
       `INSERT INTO schedule_proposals (id, user_id, kind, status, missed_slot_id, created_at, updated_at)

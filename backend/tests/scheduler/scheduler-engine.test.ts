@@ -135,6 +135,48 @@ describe('SchedulerEngine - quy ước thời gian (mục 5.1.2)', () => {
   });
 });
 
+describe('SchedulerEngine.freeMinutes (trường freeMinutes của auto-plan)', () => {
+  const free = (now: Date, fixed: TimeInterval[] = [], slots: PlanSlotInput[] = []) =>
+    engine.freeMinutes({ fixed, slots }, engine.planWindow(now));
+
+  it('lịch trống, bấm lúc 06:00 -> 7 ngày x 240 phút (giới hạn 4 giờ mỗi ngày)', () => {
+    expect(free(vn('2026-11-23 06:00'))).toBe(7 * cfg.maxDailyMinutes);
+  });
+
+  it('ngày bị sự kiện cố định chiếm gần hết chỉ còn phần trống thật', () => {
+    // 23/11 chỉ trống 20:00-22:00 = 120 phút; 6 ngày còn lại mỗi ngày 240
+    expect(free(vn('2026-11-23 06:00'), [span('2026-11-23', '07:00', '20:00')])).toBe(
+      120 + 6 * 240,
+    );
+  });
+
+  it('khung đã xếp vừa là bận vừa trừ vào giới hạn 4 giờ của ngày', () => {
+    const slots = [slot('a', 't', span('2026-11-24', '07:00', '09:00'))];
+    // 24/11 trống 780 phút nhưng chỉ còn 240 - 120 = 120 phút được xếp
+    expect(free(vn('2026-11-23 06:00'), [], slots)).toBe(7 * 240 - 120);
+  });
+
+  it('ngày đã học quá 4 giờ không bị âm, tính 0', () => {
+    const slots = [slot('a', 't', span('2026-11-24', '07:00', '12:00'), 'studied')];
+    expect(free(vn('2026-11-23 06:00'), [], slots)).toBe(6 * 240);
+  });
+
+  it('bấm lúc 21:10: hôm nay chỉ còn 21:15-22:00, ngày cuối cắt ở end = 30/11 21:00', () => {
+    // 45 phút hôm nay + 6 ngày x 240 + ngày 30/11 (07:00-21:00, giới hạn 240)
+    expect(free(vn('2026-11-23 21:10'))).toBe(45 + 6 * 240 + 240);
+  });
+
+  it('sự kiện lệch lưới được làm tròn ra ngoài như khi xếp', () => {
+    // Bận 07:10-21:50 làm tròn thành 07:00-22:00 -> ngày 23/11 không còn phút nào
+    const fixed = [span('2026-11-23', '07:10', '21:50')];
+    expect(free(vn('2026-11-23 06:00'), fixed)).toBe(6 * 240);
+  });
+
+  it('lịch kín cả 7 ngày -> 0', () => {
+    expect(free(vn('2026-11-23 06:00'), fullDays('2026-11-23', 8))).toBe(0);
+  });
+});
+
 describe('SchedulerEngine.planSlots - trường hợp biên (Bảng 5.1, mục 5.3)', () => {
   it('TC-TV3-01: lịch trống, việc 1 giờ, bấm lúc 06:50 -> 07:00-08:00', () => {
     const r = plan([task({ id: 'a' })], [], vn('2026-11-23 06:50'));
