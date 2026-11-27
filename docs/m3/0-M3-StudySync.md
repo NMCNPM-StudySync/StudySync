@@ -130,6 +130,11 @@ Bảng A.1: Phân công viết và soát báo cáo M3 (cập nhật chính thứ
   - [8.4 Biến môi trường](#84-biến-môi-trường)
   - [8.5 Sao lưu và phương án dự phòng](#85-sao-lưu-và-phương-án-dự-phòng)
 - [9. Truy vết](#9-truy-vết)
+- [10. Chiến lược kiểm thử hệ thống](#10-chiến-lược-kiểm-thử-hệ-thống)
+  - [10.1 Mục tiêu và phạm vi kiểm thử](#101-mục-tiêu-và-phạm-vi-kiểm-thử)
+  - [10.2 Phân tầng kiểm thử, công cụ và tích hợp CI](#102-phân-tầng-kiểm-thử-công-cụ-và-tích-hợp-ci)
+  - [10.3 Ma trận kiểm thử quy định nghiệp vụ và trường hợp biên](#103-ma-trận-kiểm-thử-quy-định-nghiệp-vụ-và-trường-hợp-biên)
+  - [10.4 Kịch bản tích hợp liên module, quản lý lỗi và tài liệu chi tiết](#104-kịch-bản-tích-hợp-liên-module-quản-lý-lỗi-và-tài-liệu-chi-tiết)
 - [Tài liệu tham khảo](#tài-liệu-tham-khảo)
 - [Ghi chú sử dụng AI (nếu có)](#ghi-chú-sử-dụng-ai-nếu-có)
 
@@ -5029,6 +5034,91 @@ Bảng 9.1: Truy vết từ user story đến thiết kế
 | **US-32** | Lọc thẻ Kanban theo người được giao (assigneeId hoặc unassigned) | TV5 | U044 | kanban_cards, group_members | GET /api/groups/{groupId}/cards |
 | US-33 | Xem biểu đồ thống kê tổng số giờ đã học theo tuần | TV5 | U045 | study_slots (status = 'studied', TV3) | GET /api/statistics/weekly |
 | **US-34** | Sửa thông tin (tên, hạn chót) hoặc xóa thẻ Kanban | TV5 | U046 | kanban_cards, group_members | PATCH /api/groups/{groupId}/cards/{cardId}<br>DELETE /api/groups/{groupId}/cards/{cardId} |
+
+## 10. Chiến lược kiểm thử hệ thống
+
+Mục này tóm tắt kiến trúc kiểm thử chất lượng của StudySync được trích xuất từ tài liệu đặc tả chi tiết [docs/testing/strategy.md](../testing/strategy.md) (Issue #108), làm cầu nối giữa thiết kế hệ thống ở M3 và kế hoạch thực thi kiểm thử ở M5.
+
+### 10.1 Mục tiêu và phạm vi kiểm thử
+
+Hoạt động kiểm thử nhằm xác minh hệ thống vận hành đúng 33 trên 34 user story thuộc phạm vi phát hành chính thức từ v0.1 đến v0.3 (`US-01` đến `US-34`, ngoại trừ `US-16` mức `Could` là nhập thời khóa biểu từ ảnh chụp được hoãn đến khi hoàn thành tính năng chính cuối Sprint 4), tuân thủ 8 quy định nghiệp vụ (`BR-01` đến `BR-08`) và chạy thông suốt 2 kịch bản demo tại M4 và M6.
+
+* **Trong phạm vi:** Toàn bộ 5 module backend (`TV1` đến `TV5`), thư viện khoảng thời gian dùng chung (`backend/src/utils/interval.ts`), middleware xác thực JWT (`authenticate`), dịch vụ kiểm tra quyền nhóm (`MembershipService`), bộ kiểm tra dữ liệu đầu vào (`validation.ts`); các component React có logic nghiệp vụ phức tạp (`ImportFileForm`, `WeekCalendar`, `EventForm`, `TaskForm`, `ProposalConfirmModal`, `KanbanBoard`, `MeetingSlotPicker`); toàn bộ các nhóm REST API của 5 module; và 2 luồng End-to-End (E2E) mô phỏng kịch bản sử dụng thật.
+* **Ngoài phạm vi:** Kiểm thử tự động cho `US-16` (nhập lịch từ ảnh chụp, dự phòng 3 ca thiết kế `TC-06`, `TC-28`, `TC-83` trên Google Sheets), kiểm thử tải (load test) và kiểm thử tương thích đa trình duyệt diện rộng (chỉ kiểm tra trực quan trên Google Chrome máy tính và Safari/Chrome trên điện thoại).
+* **Quy ước dữ liệu và thời gian kiểm thử:** Toàn bộ ca kiểm thử chỉ dùng dữ liệu giả, không dùng thời khóa biểu thật của sinh viên. Ở tầng Unit Test, thời điểm hiện tại `now: Date` được truyền trực tiếp vào hàm thuần và phương thức Entity/Service. Ở tầng Integration Test, nhóm chỉ giả đối tượng `Date` bằng `vi.useFakeTimers({ toFake: ['Date'] })` kết hợp `vi.setSystemTime(...)` để không làm treo kết nối `pg` và `Supertest`; với các điều kiện so sánh bằng hàm `now()` trực tiếp trong PostgreSQL (như hạn 7 ngày của `invitation_links.expires_at`), kịch bản cập nhật trực tiếp cột thời gian tương ứng trong CSDL kiểm thử.
+
+### 10.2 Phân tầng kiểm thử, công cụ và tích hợp CI
+
+Nhóm áp dụng mô hình kiểm thử gồm 4 cấp độ kết hợp với quy trình tích hợp liên tục (Continuous Integration, CI) trên GitHub Actions (xem Bảng 10.1).
+
+Bảng 10.1: Phạm vi các cấp độ kiểm thử và công cụ thực thi
+
+| **Cấp độ kiểm thử** | **Công cụ và thư viện** | **Phạm vi và vị trí mã nguồn** | **Môi trường chạy và tích hợp CI** |
+| :--- | :--- | :--- | :--- |
+| **Unit Test (Backend)** | `Vitest` (`^5.0.5`), `@vitest/coverage-v8` (`^5.0.5`) | Hàm thuần (`interval.ts`), validator (`BR-07`, `BR-08`), parser `.ics`/`.csv` (`BR-05`, `BR-06`), `authenticate`, `MembershipService`, Entity (`FixedEvent`, `Task`, `KanbanCard`), `SchedulerEngine` (`TV3`) và `MeetingSlotFinder` (`TV4`) *(tên lớp theo thiết kế mục 4.7; cài đặt thực tế trên `main` dùng `KanbanCardEntity` tại `kanban.entity.ts` ở TV5 và các hàm thuần `findCommonFreeSlots`, `dailyWindows`, `officeHourFactor` tại `meeting-slot.finder.ts` ở TV4)* tại `backend/tests/` | Chạy cục bộ không cần CSDL (`npm test`, `npm run test:coverage`; `backend/vitest.config.mts` đã loại trừ `tests/integration/**`); chạy tự động trên GitHub Actions CI |
+| **Frontend Test (UI Component)** | `Vitest` (`^5.0.5`), `React Testing Library` (`RTL`, `@testing-library/react` `^16.3.3`), `@testing-library/jest-dom` (`^7.0.1`), `jsdom` (`^26.1.0`) | Các component React có state và logic nghiệp vụ theo `strategy.md` (`ImportFileForm`, `WeekCalendar`, `EventForm`, `TaskForm`, `ProposalConfirmModal`, `KanbanBoard`, `MeetingSlotPicker`), quy đổi giờ Việt Nam và xử lý lỗi API tại `frontend/tests/` *(trên `main` hiện đã có các bộ test theo trang tại `frontend/tests/pages/` gồm `MeetingsPage.test.tsx`, `StatsPage.test.tsx`, `stats-utils.test.ts` và tiện ích tại `frontend/tests/utils/` gồm `meetings-helpers.test.ts`, `vietnam-time.test.ts`)* | Chạy cục bộ bằng `npm test`; chạy tự động trên GitHub Actions CI |
+| **Integration Test (API và CSDL)** | `Vitest` (`^5.0.5`), `Supertest` (`^7.3.1`), PostgreSQL test database | Kiểm thử xuyên suốt từ Route, Middleware, Controller, Service đến PostgreSQL thật: trên `main` hiện đã có `backend/tests/integration/api.test.ts` (10 kịch bản `API-IT-01` đến `API-IT-10`), `global-setup.ts`, thư mục `helpers/` và cấu hình `backend/vitest.integration.config.mts` (bên cạnh các test API cô lập đặt tại `backend/tests/` như `tv2-api-integration.test.ts`, `tv5-integration.test.ts`, `kanban.api.test.ts`, `meeting.api.test.ts`, `stats.api.test.ts`). Cấu trúc mục tiêu theo `strategy.md` chia thành 5 tệp riêng theo module (`auth`, `events`, `scheduler`, `meeting`, `kanban`) | Chạy trên PostgreSQL cục bộ riêng qua biến `TEST_DATABASE_URL` (cách ly 5 lớp, dọn dữ liệu theo tài khoản test) bằng script đã tách `npm run test:integration`; dự kiến bổ sung job `integration-test` với `services: postgres` trên `.github/workflows/ci.yml` |
+| **End-to-End Test (E2E)** | `Playwright` (`^1.x`, dự kiến cài đặt từ Sprint 3) | Xác minh 2 kịch bản demo thật từ trình duyệt đến CSDL tại `e2e/` *(thư mục đề xuất)*: `E2E-01` (`TC-159`, Tìm giờ họp nhóm) và `E2E-02` (`TC-160`, Tái xếp lịch khi bỏ lỡ buổi học) | Chạy trên bản dựng cục bộ giống môi trường chạy thật (Sprint 4) và nghiệm thu trên môi trường chạy thật (Tuần 9) |
+
+**Tích hợp GitHub Actions CI (`.github/workflows/ci.yml`):** Workflow `CI Pipeline` tự động kích hoạt khi có `pull_request` hoặc `push` vào nhánh `main`, chạy song song ma trận `matrix.project` gồm `backend` và `frontend` trên `ubuntu-latest` (phiên bản Node.js đọc từ `.nvmrc`). Mỗi nhánh ma trận thực thi tuần tự các bước `npm ci`, `npm run lint`, `npm run build` và `npm test`. Pull Request không đạt bước nào sẽ bị chặn merge. Ở các Sprint tiếp theo, nhóm dự kiến bổ sung bước `typecheck` riêng (`npx tsc --noEmit`) và job `integration-test` chạy `npm run migrate:up` cùng `npm run test:integration` trên dịch vụ `postgres:16` theo đề xuất tại `docs/testing/integration-tests.md`.
+
+### 10.3 Ma trận kiểm thử quy định nghiệp vụ và trường hợp biên
+
+Tab "Test case" trên Google Sheets hiện quản lý **193 ca kiểm thử (`TC-01` đến `TC-193`)**, gồm 158 ca nền từ `docs/testing/strategy.md` (`TC-01` đến `TC-158`, ánh xạ hai chiều với 64 nhóm ca `TS-01` đến `TS-64` và 6 kịch bản liên module `IT-01` đến `IT-06`) và 35 ca mở rộng (`TC-159` đến `TC-160` cho `E2E-01` và `E2E-02`, `TC-161` đến `TC-169` cho các ca biên TV4, `TC-170` đến `TC-193` cho các ca biên TV3). Bảng 10.2 tổng hợp phạm vi bao phủ cho cả 8 quy định nghiệp vụ cốt lõi từ `BR-01` đến `BR-08`.
+
+Bảng 10.2: Ma trận kiểm thử trọng tâm cho các quy định nghiệp vụ BR-01 đến BR-08
+
+| **Mã BR** | **Ưu tiên** | **Module áp dụng** | **Tầng kiểm thử** | **Mã ca tiêu biểu (`Strategy` / `Sheets`)** | **Kịch bản kiểm thử trọng tâm và kết quả mong đợi** |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **BR-01** | Blocker | TV2, TV3 | Unit, RTL, Supertest | `TS-01` đến `TS-09g` (`TC-29`, `TC-57` đến `TC-60`, `TC-85` đến `TC-97`) | `hasOverlap` trả `true` khi giao nhau và `false` khi nối tiếp; engine xếp lịch không đè lịch cố định, giữ khung nối tiếp hợp lệ, không xếp ép khi lịch kín; nhập tay hoặc nạp `.ics`/`.csv` có sự kiện chồng nhau vẫn lưu (HTTP 201/200) kèm cảnh báo `FIXED_EVENT_OVERLAP` |
+| **BR-02** | Blocker | TV1, TV4, TV5 | Unit, RTL, Supertest | `TS-10` đến `TS-14e` (`TC-61` đến `TC-63`, `TC-98` đến `TC-108`) | `authenticate` trả 401 khi thiếu/sai/hết hạn JWT; `MembershipService` trả 403 với người ngoài nhóm hoặc chưa được ủy quyền (`U036`); API và giao diện tìm giờ họp không trả `title`, `kind`, `location`, `notes`, `source` kể cả với Trưởng nhóm và thành viên vừa vào nhóm (`US-05`); người dùng chỉ đọc được lịch cá nhân và phạm vi phản hồi đúng vai trò |
+| **BR-03** | High | TV3 | Unit, RTL, Supertest | `TS-15` đến `TS-19d` (`TC-64`, `TC-65`, `TC-109` đến `TC-117`, `TC-148`) | Đề xuất chưa xác nhận không hiện trên `GET /api/schedule/week`; từ chối hoặc đóng hộp thoại giữ nguyên lịch tuần; xác nhận lặp chống lưu trùng (HTTP 200 trả kết quả cũ); từ chối xác nhận với 409 `CONFLICT` khi lịch thay đổi (`schedule_changed`), đề xuất quá giờ (`proposal_expired`) hoặc đã đóng (`proposal_closed`) |
+| **BR-04** | High | TV2, TV4, TV5 | Unit, RTL, Supertest | `TS-20` đến `TS-25e` (`TC-66` đến `TC-68`, `TC-118` đến `TC-123`, `TC-149` đến `TC-151`) | Từ chối tạo/sửa việc cần làm và thẻ Kanban thiếu `dueAt` (400 `VALIDATION_ERROR`); hạn chót đã qua vẫn cho lưu (201) kèm `DEADLINE_PASSED`; gán mặc định `durationMinutes = 60` khi không nhập ở việc cần làm; từ chối `durationMinutes <= 0` ở việc cần làm và từ chối mọi trường `durationMinutes` trên thẻ Kanban |
+| **BR-05** | High | TV2 | Unit, RTL, Supertest | `TS-26a` đến `TS-31` (`TC-01` đến `TC-07`, `TC-80`, `TC-81`, `TC-152` đến `TC-154`) | Chấp nhận tệp `.ics`/`.csv` đúng biên 5.242.880 byte (`5 × 1024 × 1024`) và tệp 5.000.001 byte; từ chối tệp 5.242.881 byte với 413 `FILE_TOO_LARGE` không ghi bản ghi nào; ngưỡng đổi động theo `MAX_IMPORT_FILE_MB`; giao diện `ImportFileForm` chặn sớm tệp quá 5 MB |
+| **BR-06** | High | TV2 | Unit, RTL, Supertest | `TS-32` đến `TS-41c` (`TC-08` đến `TC-28`, `TC-76`, `TC-82`, `TC-124` đến `TC-132`, `TC-156`, `TC-157`) | Từ chối toàn khối (422 `FILE_INVALID`, không lưu dòng nào) khi tệp rỗng, không có sự kiện, sai UTF-8, thiếu cột `.csv`, thiếu `SUMMARY`/`DTSTART`/`UID`, thiếu cả `DTEND` lẫn `DURATION`, `DTEND <= DTSTART`, `TZID` lạ hoặc tên vượt 200 ký tự; trả tối đa 20 lỗi đầu kèm `totalErrors` và đúng số dòng gốc sau unfold `.ics` |
+| **BR-07** | High | TV2, TV3, TV4, TV5 | Unit, RTL, Supertest | `TS-42` đến `TS-51c` (`TC-30` đến `TC-37`, `TC-133` đến `TC-141`, `TC-155`) | API nhận chuỗi ISO 8601 hậu tố `Z` (có hoặc không mili giây), từ chối offset `+07:00`/`+00:00` hoặc thiếu `Z` (400), luôn trả chuỗi có `.000Z`; lưu UTC không phụ thuộc múi giờ máy chủ; nhập 06:30 giờ VN thành `23:30:00.000Z` hôm trước; hỗ trợ `WINDOWS_TIMEZONE_MAP`; thống kê tuần và mốc nhắc 24 giờ/1 giờ tính đúng ranh giới ngày VN và UTC |
+| **BR-08** | High | TV1, TV2, TV4, TV5 | Unit, RTL, Supertest | `TS-52` đến `TS-64` (`TC-16`, `TC-38` đến `TC-56`, `TC-69` đến `TC-75`, `TC-77` đến `TC-79`, `TC-84`, `TC-142`) | Chuẩn hóa Unicode NFC, cắt khoảng trắng, tab, xuống dòng và khoảng trắng không ngắt (Non-Breaking Space, NBSP) hai đầu rồi đếm theo code point; kiểm tra biên 1, 100, 101 ký tự (tên nhóm, tên hiển thị) và 1, 200, 201 ký tự (việc cần làm, sự kiện cố định, đề xuất họp, thẻ Kanban); đếm đúng tiếng Việt dạng tổ hợp (Normalization Form D, NFD), emoji đơn và emoji ghép có ký tự nối không độ rộng (Zero Width Joiner, ZWJ); kiểm tra ràng buộc `varchar` và `CHECK` ở PostgreSQL; cắt hiển thị `...` mà không cắt dữ liệu gốc |
+
+Bên cạnh ma trận theo quy định nghiệp vụ ở Bảng 10.2, bộ kiểm thử bao phủ các trường hợp biên đặc thù của từng module (xem Bảng 10.3), đồng bộ với thiết kế chi tiết tại mục 4, mục 5 và bảng truy vết tại mục 9.
+
+Bảng 10.3: Tổng hợp các trường hợp biên trọng tâm theo 5 module
+
+| **Module** | **Trường hợp biên trọng tâm cần kiểm thử** | **Mã ca tham chiếu** |
+| :--- | :--- | :--- |
+| **TV1 (Tài khoản và nhóm)** | Đăng ký trùng email (409); mật khẩu dưới 8 ký tự, vượt 72 byte hoặc thiếu chữ/số (400); gọi endpoint bảo vệ khi chưa đăng nhập/hết hạn token (401); tên nhóm và tên hiển thị rỗng/khoảng trắng, đúng 100 và 101 ký tự NFC, ràng buộc `CHECK`/`varchar` ở CSDL; liên kết mời hết hạn 7 ngày hoặc bị thu hồi khi tạo lại (404); tham gia lại nhóm đã vào (`alreadyMember = true`, 200); Trưởng nhóm rời nhóm thiếu `successorId` (400); thành viên cuối cùng rời nhóm xóa nhóm theo `ON DELETE CASCADE` mà vẫn giữ lịch cá nhân | `TS-10c`, `TS-12c`, `TS-61`, `TS-61b`, `TS-61c`, `TS-63d`, `IT-06` (`TC-147`) |
+| **TV2 (Lịch cá nhân và nhập lịch)** | Sự kiện cố định trùng nhau và nối tiếp chạm mép; tệp đúng 5.242.880 byte và vượt 1 byte; tệp 0 byte; đúng 20 và 21 dòng lỗi; `RRULE` vượt trần 150 buổi/24 tuần; loại trừ ngày nghỉ qua `EXDATE`; sự kiện cả ngày `VALUE=DATE`; tệp `.csv` có UTF-8 BOM và sai bảng mã Windows-1252; ngày không tồn tại (`31/02`); dừng ngắt nguyên tử ở sự kiện lỗi thứ 100 | `TS-02`, `TS-07`, `TS-08`, `TS-26a` đến `TS-41c`, `IT-05` (`TC-158`) |
+| **TV3 (Xếp lịch tự động)** | Lịch trống hoàn toàn và lịch kín 07:00 đến 22:00; việc đã xếp đủ (`NO_TASKS_TO_SCHEDULE`); việc quá hạn (`overdue`); chia khung tối đa 2 giờ, nghỉ giữa 2 khung cùng việc 30 phút, tối đa 4 giờ/ngày; kiểm tra gộp hạn chót EDF để không làm trễ việc gấp hơn; đề xuất chờ chưa đổi lịch tuần, chấp nhận/từ chối (`BR-03`); chỉ còn chỗ cho 0, 1 hoặc 2 khung giờ bù (`NO_MAKEUP_SLOT`); đánh dấu đã học lũy đẳng và chặn khung chưa bắt đầu hoặc đã bỏ lỡ | `TS-01` đến `TS-09f`, `TS-15` đến `TS-19b`, `TC-TV3-01` đến `TC-TV3-36` (bổ sung `TC-170` đến `TC-193`), `IT-01`, `IT-02` |
+| **TV4 (Giờ chung và nhắc việc)** | Nhóm chỉ có 1 thành viên (400); khoảng tìm kiếm đã qua hoàn toàn (400); nhóm không có giờ rảnh chung trả tối đa 10 `partialSlots` có `busyMembers[].displayName`; thành viên chưa nhập sự kiện cố định (`MEMBER_NO_FIXED_EVENTS`); phản hồi vào lời mời đã `superseded` hoặc quá giờ (409); thành viên thường chỉ thấy phản hồi của mình (`viewScope = "self"`); bỏ mốc nhắc đã qua khi lưu việc còn 5 giờ hoặc 30 phút; chống gửi lặp bằng `SKIP LOCKED` | `TS-10` đến `TS-14e`, `TS-51` đến `TS-51c`, `TC-TV4-01` đến `TC-TV4-19` (bổ sung `TC-161` đến `TC-169`), `IT-03` (`TC-145`) |
+| **TV5 (Kanban và thống kê)** | Tạo và sửa thẻ Kanban có hạn chót quá khứ (`DEADLINE_PASSED`), từ chối khi gửi kèm `durationMinutes`; chuyển cột hai chiều giữa 3 cột cố định (`todo`, `in_progress`, `done`); chỉ Trưởng nhóm được giao/bỏ giao thẻ và chỉ người tạo hoặc Trưởng nhóm được sửa/xóa (403); thành viên rời nhóm tự gỡ giao thẻ; thống kê tuần tính đúng khung `studied` bắt đầu 06:30 Thứ Hai giờ VN (`23:30Z` Chủ Nhật), khung vắt qua nửa đêm, khung có `task_id = NULL`, chặn tuần tương lai (400) | `TS-25` đến `TS-25e`, `TS-50` đến `TS-50d`, `TS-62c`, `IT-04` (`TC-146`) |
+
+*Ghi chú về mã ca biên:* Các mã `TC-TV3-01` đến `TC-TV3-36` và `TC-TV4-01` đến `TC-TV4-19` trong Bảng 10.3 là mã ca biên nội bộ được định nghĩa tại mục 5.3 (Bảng 5.10 và Bảng 5.11). Các ca biên chưa có mã trùng trong bộ 158 ca nền của `strategy.md` đã được đồng bộ bổ sung vào dải `TC-161` đến `TC-169` (9 ca biên TV4) và `TC-170` đến `TC-193` (24 ca biên TV3) trên tab "Test case" của Google Sheets (cùng `TC-159`, `TC-160` cho 2 kịch bản E2E).
+
+### 10.4 Kịch bản tích hợp liên module, quản lý lỗi và tài liệu chi tiết
+
+Để bảo đảm tính nhất quán giữa các module dùng chung dữ liệu (xem mục 2.4 và mục 9), hệ thống định nghĩa 6 kịch bản kiểm thử tích hợp liên module (xem Bảng 10.4; triển khai chi tiết thành 10 khối `API-IT-01` đến `API-IT-10` trong `backend/tests/integration/api.test.ts`) cùng 2 kịch bản E2E tự động (`E2E-01` / `TC-159`, `E2E-02` / `TC-160`).
+
+Bảng 10.4: Tóm tắt 6 kịch bản kiểm thử tích hợp liên module
+
+| **Mã kịch bản** | **Mã Sheets** | **Module phối hợp** | **Luồng nghiệp vụ được xác minh** |
+| :--- | :--- | :--- | :--- |
+| **IT-01** | `TC-143` | TV1 + TV2 + TV3 | Tạo sự kiện cố định, việc cần làm, gọi `auto-plan`, xác nhận áp dụng (`confirm`) và kiểm tra hiển thị trên lịch tuần (`GET /api/schedule/week`) |
+| **IT-02** | `TC-144` | TV2 + TV3 | Báo lỡ khung giờ học đã đến giờ bắt đầu (`missed-session`), nhận tối đa 2 khung giờ bù không trùng lịch cố định và chọn 1 khung bằng một chạm (Kịch bản demo 2) |
+| **IT-03** | `TC-145` | TV1 + TV2 + TV4 | Nhóm 5 thành viên nạp `.ics`, Trưởng nhóm tìm giờ họp chung bảo đảm `BR-02`, gửi lời mời, thành viên phản hồi và kiểm tra trạng thái phản hồi (Kịch bản demo 1) |
+| **IT-04** | `TC-146` | TV1 + TV2 + TV3 + TV5 | Tạo, phân công, chuyển cột, lọc, sửa/xóa thẻ Kanban; đánh dấu khung đã học (`studied`), xóa việc gốc (`task_id = NULL`) và đối chiếu thống kê giờ học tuần |
+| **IT-05** | `TC-158` | TV2 (`BR-01`, `BR-05`, `BR-06`) | Kiểm thử toàn chu trình nạp tệp lịch: kích thước hợp lệ, biên 5 MB, vượt 5 MB (413), trùng lịch cảnh báo `FIXED_EVENT_OVERLAP`, dừng ngắt nguyên tử 422 và cắt 20 dòng lỗi |
+| **IT-06** | `TC-147` | TV1 + TV4 + TV5 | Vòng đời tài khoản và nhóm: đăng ký, tạo/tạo lại liên kết mời, tham gia nhóm, chuyển quyền Trưởng nhóm, rời nhóm gỡ giao thẻ Kanban, loại khỏi quorum họp nhóm và xóa nhóm CASCADE |
+
+**Quản lý lỗi và tiêu chí kết thúc kiểm thử (Definition of Done):**
+
+* Mọi lỗi phát hiện đều báo qua GitHub Issue gắn nhãn `bug` theo mẫu chuẩn, phân loại theo 4 mức: `Blocker` (chặn tính năng chính, vi phạm `BR-01`/`BR-02` hoặc làm hỏng kịch bản demo, sửa ngay trong ngày), `High` (sai kết quả chính hoặc vi phạm `BR-03` đến `BR-08`, sửa trong sprint hiện tại), `Normal` (đưa vào backlog sprint kế tiếp) và `Low` (sửa khi còn thời gian).
+* Một đợt phát hành đạt tiêu chí kết thúc kiểm thử khi: 100% ca kiểm thử mức `Blocker` và `High` đạt `Pass`; không còn lỗi `Blocker` hoặc `High` đang mở; độ bao phủ unit test mục tiêu cho toàn bộ `backend/src/` đạt tối thiểu 70% line coverage (cần cập nhật lại cấu hình `backend/vitest.config.mts` hiện mới đo `src/utils` với ngưỡng `branches` 95%); cả 8 quy định nghiệp vụ đều có ca `Pass` ở các tầng áp dụng; 2 kịch bản `E2E-01` và `E2E-02` chạy đạt; và kết quả thực tế được đồng bộ đủ lên tab "Test case" của Google Sheets.
+
+**Liên kết tham chiếu chi tiết trên repository:**
+
+* Tài liệu Chiến lược kiểm thử hệ thống đầy đủ (bao gồm kế hoạch theo từng mốc từ Sprint 0 đến M6, chi tiết toàn bộ 64 nhóm ca `TS-01` đến `TS-64` gồm 143 tình huống, quy ước và đoạn lệnh mẫu kiểm soát thời gian, phân công kiểm thử và danh sách lựa chọn chờ chốt): [docs/testing/strategy.md](../testing/strategy.md).
+* Đặc tả và hướng dẫn kiểm thử tích hợp API cho 5 module (10 kịch bản `API-IT-01` đến `API-IT-10` tại `backend/tests/integration/api.test.ts`, cơ chế cách ly 5 lớp với `TEST_DATABASE_URL`, hướng dẫn chạy `npm run test:integration` và đề xuất job CI PostgreSQL): [docs/testing/integration-tests.md](../testing/integration-tests.md).
+* Ma trận truy vết yêu cầu sang bảng CSDL và endpoint API: [docs/traceability-matrix.md](../traceability-matrix.md).
+* Cấu hình đường ống kiểm thử tự động CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml).
 
 ## Tài liệu tham khảo
 
