@@ -1068,6 +1068,25 @@ describe('API-IT-09: xác thực JWT, cô lập dữ liệu cá nhân, BR-07 và
     expectError(await as(u).get('/api/users/me'), 401, 'UNAUTHORIZED');
   });
 
+  it('route TV2, TV3 đi qua authenticate thật: JWT hợp lệ -> 200, thiếu hoặc sai token -> 401 (Issue #189)', async () => {
+    freezeAt(T.MON_0600_VN);
+    const u = await registerActor('it09-tv23');
+    const endpoints: Array<['get' | 'post', string]> = [
+      ['get', withQuery('/api/events', { from: T.MON_0000_VN, to: T.NEXT_MON_0000_VN })],
+      ['get', '/api/tasks'],
+      ['get', withQuery('/api/schedule/week', { weekStart: T.WEEK_START_UTC })],
+      ['post', '/api/scheduler/auto-plan'],
+    ];
+    const flipped = `${u.token.slice(0, -1)}${u.token.endsWith('A') ? 'B' : 'A'}`;
+
+    for (const [method, url] of endpoints) {
+      const body = method === 'post' ? {} : undefined;
+      expectStatus(await as(u)[method](url, body), 200);
+      expectError(await as()[method](url, body), 401, 'UNAUTHORIZED');
+      expectError(await as({ token: flipped })[method](url, body), 401, 'UNAUTHORIZED');
+    }
+  });
+
   it('dữ liệu cá nhân của người này không lộ cho người khác (BR-02)', async () => {
     const [a, b, c] = await registerActors(['owner', 'other', 'out']);
     const event = await createFixedEvent(a, 'Lịch riêng tư', {

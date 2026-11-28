@@ -6,7 +6,11 @@ import { createApp } from '../src/app';
 import { createAuthMiddleware } from '../src/middlewares/authenticate';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { UserRepository } from '../src/modules/auth/user.repository';
+import type { FixedEventService } from '../src/modules/events/events.service';
 import { GroupService } from '../src/modules/groups/group.service';
+import type { WeekScheduleService } from '../src/modules/schedule/schedule.service';
+import type { SchedulerService } from '../src/modules/scheduler/scheduler.service';
+import type { TaskService } from '../src/modules/tasks/tasks.service';
 import type { Queryable } from '../src/shared/base-repository';
 import { UnauthorizedError } from '../src/shared/errors';
 
@@ -477,4 +481,76 @@ describe('createApiRouter: dùng chung options.authenticate', () => {
     expect(res.status).toBe(401);
     expect(res.body.error.message).toBe('từ chối bởi mock');
   });
+});
+
+describe('createApiRouter: route TV2, TV3 đi qua authenticate (Issue #189)', () => {
+  const USER_ID = '00000000-0000-4000-8000-0000000000aa';
+
+  function setup() {
+    const { service } = createService();
+    const eventsService = { listEvents: vi.fn(async () => []) };
+    const tasksService = { listTasks: vi.fn(async () => []) };
+    const scheduleService = {
+      getWeekSchedule: vi.fn(async (userId: string) => ({ userId })),
+    };
+    const schedulerService = {
+      autoPlan: vi.fn(async () => ({ data: { proposal: null }, warnings: [] })),
+    };
+    // Lắp giống src/server.ts: authenticate dựng từ AuthService, JWT thật
+    const app = createApp({
+      auth: service,
+      authenticate: createAuthMiddleware(service.verifyToken.bind(service)),
+      eventsService: eventsService as unknown as FixedEventService,
+      tasksService: tasksService as unknown as TaskService,
+      scheduleService: scheduleService as unknown as WeekScheduleService,
+      schedulerService: schedulerService as unknown as SchedulerService,
+    });
+    const token = jwt.sign({}, SECRET, { subject: USER_ID, expiresIn: '1h' });
+    const services = [
+      eventsService.listEvents,
+      tasksService.listTasks,
+      scheduleService.getWeekSchedule,
+      schedulerService.autoPlan,
+    ];
+    return { app, token, services };
+  }
+
+  const endpoints: Array<['get' | 'post', string]> = [
+    ['get', '/api/events?from=2026-11-01T17:00:00Z&to=2026-11-08T17:00:00Z'],
+    ['get', '/api/tasks'],
+    ['get', '/api/schedule/week?weekStart=2026-11-01T17:00:00Z'],
+    ['post', '/api/scheduler/auto-plan'],
+  ];
+
+  it.each(endpoints)(
+    '%s %s: JWT hợp lệ -> 200 và service nhận đúng userId',
+    async (method, url) => {
+      const { app, token, services } = setup();
+      const res = await request(app)[method](url).set('Authorization', `Bearer ${token}`).send({});
+
+      expect(res.status).toBe(200);
+      const called = services.find((fn) => fn.mock.calls.length > 0);
+      expect(called?.mock.calls[0]?.[0]).toBe(USER_ID);
+    },
+  );
+
+  it.each(endpoints)(
+    '%s %s: thiếu hoặc sai token -> 401, không gọi service',
+    async (method, url) => {
+      const { app, services } = setup();
+      const forged = jwt.sign({}, 'secret-khac-secret-khac-secret-khac-1', { subject: USER_ID });
+
+      const missing = await request(app)[method](url).send({});
+      const wrong = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${forged}`)
+        .send({});
+
+      for (const res of [missing, wrong]) {
+        expect(res.status).toBe(401);
+        expect(res.body.error.code).toBe('UNAUTHORIZED');
+      }
+      for (const fn of services) expect(fn).not.toHaveBeenCalled();
+    },
+  );
 });
