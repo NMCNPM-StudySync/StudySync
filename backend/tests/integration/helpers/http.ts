@@ -1,4 +1,3 @@
-import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { expect } from 'vitest';
 import { createApp } from '../../../src/app';
@@ -10,28 +9,9 @@ import { createMeetingsModule } from '../../../src/modules/meetings/meetings.mod
 let app: ReturnType<typeof createApp> | undefined;
 
 /**
- * Middleware giải mã JWT Bearer cho các route TV2/TV3 vốn chưa gắn `authenticate` trong `routes/api.ts`.
- * Không tự chặn request thiếu/sai token để giữ nguyên các route công khai (`/api/auth/*`, `GET /api/invitations/:token`);
- * các route cần đăng nhập vẫn tự trả 401 khi `req.userId` rỗng (qua `authenticate`, `getUserId`, `requireUserId`).
- */
-function createBearerHydrator(auth: AuthService): RequestHandler {
-  return (req, _res, next) => {
-    const header = req.headers.authorization;
-    const match = typeof header === 'string' ? /^Bearer\s+(\S+)$/i.exec(header.trim()) : null;
-    if (match) {
-      try {
-        req.userId = auth.verifyToken(match[1]!);
-      } catch {
-        // Giữ req.userId = undefined để middleware/controller của route trả 401 UNAUTHORIZED.
-      }
-    }
-    next();
-  };
-}
-
-/**
- * Supertest gọi thẳng vào Express app (không mở cổng mạng), lắp đủ 5 module giống `src/server.ts`
- * (không gọi `reminderJob.start()` để tránh mở interval nền làm treo Vitest).
+ * Supertest gọi thẳng vào Express app (không mở cổng mạng), lắp đủ 5 module giống hệt `src/server.ts`
+ * (không gọi `reminderJob.start()` để tránh mở interval nền làm treo Vitest). Không gán `userId` giả:
+ * mọi route cần đăng nhập đi qua `authenticate` thật trong `routes/api.ts`.
  */
 export function getApp(): ReturnType<typeof createApp> {
   if (!app) {
@@ -43,7 +23,6 @@ export function getApp(): ReturnType<typeof createApp> {
       groups,
       meetings: meetings.services,
       authenticate: createAuthMiddleware(auth.verifyToken.bind(auth)),
-      authMiddleware: createBearerHydrator(auth),
     });
   }
   return app;
