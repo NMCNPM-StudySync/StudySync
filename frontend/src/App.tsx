@@ -27,6 +27,7 @@ export function App() {
             <Route path="/meetings" element={<MeetingsPage />} />
             <Route path="/groups/:id/meetings" element={<MeetingsPage />} />
             <Route path="/kanban" element={<KanbanPage />} />
+            <Route path="/groups/:groupId/kanban" element={<KanbanPage />} />
             <Route path="/stats" element={<StatsPage />} />
           </Route>
         </Route>
