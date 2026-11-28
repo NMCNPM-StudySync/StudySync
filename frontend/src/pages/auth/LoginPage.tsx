@@ -120,6 +120,15 @@ export function LoginPage() {
               Đăng nhập
             </Button>
 
+            <div className="text-center">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-brand-primary hover:underline"
+              >
+                Quên mật khẩu?
+              </Link>
+            </div>
+
             <div className="text-center pt-2">
               <span className="text-xs text-brand-muted">Chưa có tài khoản? </span>
               <Link

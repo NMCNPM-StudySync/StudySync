@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiClient } from '../../src/services/apiClient';
+import { ApiError, SESSION_EXPIRED_EVENT, apiClient } from '../../src/services/apiClient';
 import { tokenStorage } from '../../src/services/tokenStorage';
 
 describe('apiClient', () => {
@@ -219,5 +219,73 @@ describe('apiClient', () => {
 
     await apiClient.delete('/items/1');
     expect(calls[3]?.[1]?.method).toBe('DELETE');
+  });
+});
+
+describe('apiClient – làm mới token khi gặp 401', () => {
+  const originalFetch = global.fetch;
+  const user = { id: '1', email: 'a@b.com', displayName: 'A' };
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  beforeEach(() => {
+    localStorage.clear();
+    tokenStorage.setAuth('old-token', user, new Date(Date.now() + 3600_000).toISOString());
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    localStorage.clear();
+  });
+
+  it('gọi /auth/refresh rồi gửi lại request với token mới', async () => {
+    const newExpiry = new Date(Date.now() + 7200_000).toISOString();
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json(401, { error: { code: 'UNAUTHORIZED', message: 'hết hạn' } }))
+      .mockResolvedValueOnce(
+        json(200, { data: { token: 'new-token', expiresAt: newExpiry, user } }),
+      )
+      .mockResolvedValueOnce(json(200, { data: { ok: true } }));
+    global.fetch = mockFetch;
+
+    const res = await apiClient.get<{ ok: boolean }>('/data');
+
+    expect(res.data.ok).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(String(mockFetch.mock.calls[1]![0])).toContain('/auth/refresh');
+    const retryHeaders = (mockFetch.mock.calls[2]![1] as RequestInit).headers as Headers;
+    expect(retryHeaders.get('Authorization')).toBe('Bearer new-token');
+    expect(tokenStorage.getToken()).toBe('new-token');
+  });
+
+  it('refresh thất bại: xóa token và phát sự kiện phiên hết hạn', async () => {
+    const onExpired = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(json(401, { error: { code: 'UNAUTHORIZED', message: 'hết hạn' } }));
+
+    await expect(apiClient.get('/data')).rejects.toBeInstanceOf(ApiError);
+
+    expect(tokenStorage.getToken()).toBeNull();
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  });
+
+  it('không refresh với request skipAuth (đăng nhập sai mật khẩu)', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(json(401, { error: { code: 'UNAUTHORIZED', message: 'Sai mật khẩu' } }));
+    global.fetch = mockFetch;
+
+    await expect(apiClient.post('/auth/login', {}, { skipAuth: true })).rejects.toThrow(
+      'Sai mật khẩu',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(tokenStorage.getToken()).toBe('old-token');
   });
 });

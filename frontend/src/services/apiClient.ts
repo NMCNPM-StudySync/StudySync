@@ -1,4 +1,5 @@
 import type { ApiErrorDetail, ApiResponse, ApiWarning } from '../types/api';
+import type { AuthResponseData } from '../types/auth';
 import { tokenStorage } from './tokenStorage';
 
 export class ApiError extends Error {
@@ -45,6 +46,41 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined | null>;
   skipAuth?: boolean;
+  /** Nội bộ: đánh dấu request đã được thử lại sau khi refresh token, tránh lặp vô hạn. */
+  retried?: boolean;
+}
+
+/** Sự kiện phát ra khi phiên hết hạn và không thể làm mới; AuthContext lắng nghe để đăng xuất. */
+export const SESSION_EXPIRED_EVENT = 'studysync:session-expired';
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+/** Gọi POST /auth/refresh (single-flight). Trả về true nếu lưu được token mới. */
+async function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await apiClient.post<AuthResponseData>('/auth/refresh', undefined, {
+          retried: true,
+        });
+        const { token, user, expiresAt } = res.data;
+        tokenStorage.setAuth(token, user, expiresAt);
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+function expireSession(): void {
+  tokenStorage.clearAuth();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
 }
 
 function resolveBaseUrl(): string {
@@ -89,7 +125,14 @@ export const apiClient = {
   },
 
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
-    const { body, params, skipAuth = false, headers: customHeaders, ...customInit } = options;
+    const {
+      body,
+      params,
+      skipAuth = false,
+      retried = false,
+      headers: customHeaders,
+      ...customInit
+    } = options;
     const url = buildUrl(endpoint, params);
 
     const headers = new Headers(customHeaders);
@@ -98,10 +141,12 @@ export const apiClient = {
       headers.set('Accept', 'application/json');
     }
 
+    let attachedToken = false;
     if (!skipAuth && !headers.has('Authorization')) {
       const token = tokenStorage.getToken();
       if (token) {
         headers.set('Authorization', `Bearer ${token}`);
+        attachedToken = true;
       }
     }
 
@@ -136,6 +181,14 @@ export const apiClient = {
       const message =
         networkErr instanceof Error ? networkErr.message : 'Không thể kết nối đến máy chủ';
       throw new ApiError(message, 0, 'NETWORK_ERROR');
+    }
+
+    // 401 khi đang đăng nhập: thử làm mới token một lần rồi gửi lại; thất bại thì đăng xuất.
+    if (response.status === 401 && attachedToken && !retried) {
+      if (await refreshSession()) {
+        return this.request<T>(endpoint, { ...options, retried: true });
+      }
+      expireSession();
     }
 
     // Xử lý HTTP 204 No Content
