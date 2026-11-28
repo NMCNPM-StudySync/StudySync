@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { withTransaction } from '../../config/db';
 import type { Queryable } from '../../shared/base-repository';
-import { NotFoundError } from '../../shared/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors';
 import type { ApiWarning } from '../../shared/response';
-import type { TimeInterval } from '../../utils/interval';
+import { hasOverlap, type TimeInterval } from '../../utils/interval';
 import { FixedEventRepository } from '../calendar/fixed-event.repository';
 import { TaskRepository, type TaskRecord } from '../calendar/task.repository';
 import { ScheduleProposal, type ProposalKind } from './schedule-proposal.entity';
@@ -54,6 +54,30 @@ export interface ProposalDto {
   taskResults: TaskResultDto[];
   missedSlotId: string | null;
 }
+
+export type ConfirmAction = 'accept' | 'reject';
+
+export interface ConfirmInput {
+  proposalId: string;
+  action: ConfirmAction;
+  /** Chỉ dùng khi chấp nhận lượt makeup: khung giờ bù sinh viên chọn. */
+  slotId?: string;
+}
+
+/** Dữ liệu trả về của POST /api/scheduler/confirm (docs/api.md). */
+export interface ConfirmResultDto {
+  proposalId: string;
+  status: ScheduleProposal['status'];
+  savedSlots: StudySlotDto[];
+  removedSlotIds: string[];
+}
+
+export type ProposalConflictIssue = 'schedule_changed' | 'proposal_expired';
+
+const CONFLICT_MESSAGES: Record<ProposalConflictIssue, string> = {
+  schedule_changed: 'Lịch đã thay đổi, đề xuất đã được cập nhật',
+  proposal_expired: 'Đề xuất đã hết hạn, đề xuất đã được cập nhật',
+};
 
 export interface ServiceResult<T> {
   data: T;
@@ -107,18 +131,22 @@ export class SchedulerService {
   }
 
   /** U021, POST /api/scheduler/auto-plan. */
-  public async autoPlan(userId: string): Promise<ServiceResult<{ proposal: ProposalDto | null }>> {
+  public async autoPlan(
+    userId: string,
+  ): Promise<ServiceResult<{ proposal: ProposalDto | null; freeMinutes: number }>> {
     const { engine, slotRepo, runTransaction, clock } = this.deps;
 
     return runTransaction(async (tx) => {
       const now = clock();
       const window = engine.planWindow(now);
       const ctx = await this.loadContext(userId, window, tx);
+      // Thời gian trống trước khi áp dụng lượt đề xuất này (docs/api.md, trường freeMinutes).
+      const freeMinutes = engine.freeMinutes({ fixed: ctx.fixed, slots: ctx.slots }, window);
 
       // Bước 4: không có việc chưa hoàn thành, hoặc mọi việc đã xếp đủ (R = 0): không ghi CSDL.
       const hasWork = ctx.tasks.some((t) => engine.remainingMinutes(t, ctx.slots) > 0);
       if (!hasWork) {
-        return { data: { proposal: null }, warnings: [NO_TASKS_TO_SCHEDULE] };
+        return { data: { proposal: null, freeMinutes }, warnings: [NO_TASKS_TO_SCHEDULE] };
       }
 
       const result = engine.planSlots(ctx.tasks, { fixed: ctx.fixed, slots: ctx.slots }, window);
@@ -131,8 +159,137 @@ export class SchedulerService {
       await slotRepo.insertMany(slots, tx);
 
       const titles = new Map(ctx.tasks.map((t) => [t.id, t.title]));
-      return { data: { proposal: toProposalDto(proposal, slots, result.taskResults, titles) } };
+      return {
+        data: {
+          proposal: toProposalDto(proposal, slots, result.taskResults, titles),
+          freeMinutes,
+        },
+      };
     });
+  }
+
+  /**
+   * U021, U022 (bước xác nhận), POST /api/scheduler/confirm. Endpoint duy nhất làm lịch tuần đổi (BR-03).
+   * Theo bảng "Giao dịch TV3 nhiều bảng" (docs/data-dictionary.md) và mục 4.3.3 (scheduler-algorithm.md):
+   * không tính lại khung mà chỉ kiểm tra lại. Lượt đã cũ thì ghi `outdated`, xóa khung proposed,
+   * commit rồi mới trả 409 để giao diện tự đề xuất lại.
+   */
+  public async confirm(
+    userId: string,
+    input: ConfirmInput,
+  ): Promise<ServiceResult<ConfirmResultDto>> {
+    const { engine, slotRepo, proposalRepo, runTransaction, clock } = this.deps;
+
+    const outcome = await runTransaction(
+      async (
+        tx,
+      ): Promise<
+        { kind: 'ok'; data: ConfirmResultDto } | { kind: 'stale'; issue: ProposalConflictIssue }
+      > => {
+        const now = clock();
+        const proposal = await proposalRepo.lockById(input.proposalId, tx);
+        // Lượt của người khác trả 404 như lượt không tồn tại (BR-02).
+        if (!proposal || proposal.userId !== userId) {
+          throw new NotFoundError('Không tìm thấy lượt đề xuất');
+        }
+        const own = await slotRepo.listByProposal(proposal.id, tx);
+        assertSlotIdUsage(proposal, own, input);
+
+        // Chống lưu trùng (yêu cầu 3.8, 3.13): chấp nhận lại lượt đã accepted trả kết quả lần đầu.
+        if (proposal.status === 'accepted' && input.action === 'accept') {
+          const saved = own.filter((slot) => slot.status !== 'proposed');
+          const titles = await this.titlesOf(saved, tx);
+          return {
+            kind: 'ok',
+            data: {
+              proposalId: proposal.id,
+              status: proposal.status,
+              savedSlots: saved.map((slot) => toSlotDto(slot, titleRecord(slot, titles), false)),
+              removedSlotIds: [],
+            },
+          };
+        }
+
+        if (input.action === 'reject') {
+          proposal.reject(); // lượt không còn chờ: 409 proposal_closed
+          await proposalRepo.updateStatus(proposal, tx);
+          await slotRepo.deleteProposedOf(proposal.id, tx);
+          return {
+            kind: 'ok',
+            data: {
+              proposalId: proposal.id,
+              status: proposal.status,
+              savedSlots: [],
+              removedSlotIds: [],
+            },
+          };
+        }
+
+        // Lượt đã bị từ chối hoặc đã bị thay bằng lượt mới: 409 proposal_closed, không ghi gì.
+        if (!proposal.isPending()) {
+          throw new ConflictError('Lượt đề xuất không còn ở trạng thái chờ', [
+            { field: 'proposalId', issue: 'proposal_closed' },
+          ]);
+        }
+
+        const chosen =
+          proposal.kind === 'makeup'
+            ? own.filter((slot) => slot.id === input.slotId)
+            : own.filter((slot) => slot.status === 'proposed');
+        const ctx = await this.loadContext(userId, engine.planWindow(now), tx);
+        const issue = findStaleIssue(chosen, ctx, now);
+        if (issue) {
+          proposal.markOutdated();
+          await proposalRepo.updateStatus(proposal, tx);
+          await slotRepo.deleteProposedOf(proposal.id, tx);
+          return { kind: 'stale', issue };
+        }
+
+        for (const slot of chosen) {
+          slot.confirm();
+          await slotRepo.updateStatus(slot, tx);
+        }
+        // Lượt makeup: khung bù còn lại bị bỏ. Lượt khác: không còn khung proposed nào.
+        await slotRepo.deleteProposedOf(proposal.id, tx);
+
+        // Khung cũ lượt replan dời, và khung "Cần xếp lại" của việc vừa có khung mới (yêu cầu 3.7).
+        const replaced = new Set(chosen.map((slot) => slot.replacesSlotId));
+        const tasksWithNewSlots = new Set(chosen.map((slot) => slot.taskId));
+        const removedSlotIds = ctx.slots
+          .filter(
+            (slot) =>
+              replaced.has(slot.id) ||
+              (slot.status === 'scheduled' &&
+                slot.needsReschedule &&
+                tasksWithNewSlots.has(slot.taskId)),
+          )
+          .map((slot) => slot.id);
+        await slotRepo.deleteByIds(removedSlotIds, tx);
+
+        proposal.accept();
+        await proposalRepo.updateStatus(proposal, tx);
+
+        const tasks = new Map(ctx.tasks.map((task) => [task.id, task]));
+        return {
+          kind: 'ok',
+          data: {
+            proposalId: proposal.id,
+            status: proposal.status,
+            savedSlots: chosen.map((slot) =>
+              toSlotDto(slot, slot.taskId ? (tasks.get(slot.taskId) ?? null) : null, false),
+            ),
+            removedSlotIds,
+          },
+        };
+      },
+    );
+
+    if (outcome.kind === 'stale') {
+      throw new ConflictError(CONFLICT_MESSAGES[outcome.issue], [
+        { field: 'proposalId', issue: outcome.issue },
+      ]);
+    }
+    return { data: outcome.data };
   }
 
   /** U024, POST /api/scheduler/completed-session. */
@@ -282,6 +439,20 @@ export class SchedulerService {
     return { tasks, fixed, slots };
   }
 
+  /** Tên việc của các khung đã lưu (việc đã bị xóa thì không có trong bản đồ). */
+  private async titlesOf(
+    slots: readonly StudySlot[],
+    tx: Queryable,
+  ): Promise<Map<string, TaskRecord>> {
+    const result = new Map<string, TaskRecord>();
+    for (const taskId of new Set(slots.map((slot) => slot.taskId))) {
+      if (!taskId) continue;
+      const task = await this.deps.taskRepo.findById(taskId, tx);
+      if (task) result.set(taskId, task);
+    }
+    return result;
+  }
+
   /**
    * Giao dịch TV3 "Tạo lượt đề xuất": chuyển lượt pending cũ sang outdated, xóa các khung
    * proposed của lượt đó, rồi thêm lượt mới. Chạy trong transaction của lời gọi.
@@ -313,6 +484,63 @@ export class SchedulerService {
     await proposalRepo.insert(proposal, tx);
     return proposal;
   }
+}
+
+/**
+ * Kiểm tra slotId theo docs/api.md: bắt buộc khi chấp nhận lượt makeup, không gửi với lượt khác,
+ * và phải thuộc lượt đề xuất. Sai thì 400 VALIDATION_ERROR.
+ */
+function assertSlotIdUsage(
+  proposal: ScheduleProposal,
+  own: readonly StudySlot[],
+  input: ConfirmInput,
+): void {
+  const fail = (message: string, issue: string) =>
+    new ValidationError(message, [{ field: 'slotId', issue }]);
+
+  if (proposal.kind !== 'makeup') {
+    if (input.slotId !== undefined) {
+      throw fail('Chỉ chọn khung giờ bù với lượt đề xuất khung giờ bù', 'chỉ dùng cho lượt makeup');
+    }
+    return;
+  }
+  if (input.action === 'accept' && input.slotId === undefined) {
+    throw fail('Chọn một khung giờ bù để xác nhận', 'bắt buộc');
+  }
+  if (input.slotId !== undefined && !own.some((slot) => slot.id === input.slotId)) {
+    throw fail('Khung giờ bù không thuộc lượt đề xuất', 'không thuộc lượt đề xuất');
+  }
+}
+
+/**
+ * Kiểm tra lại các khung sắp lưu (mục 4.3.3): đã qua giờ bắt đầu thì proposal_expired; giao sự kiện
+ * cố định hoặc khung scheduled, studied hiện có (trừ khung mà chính lượt sẽ dời), hoặc việc đã hoàn
+ * thành, đã bị xóa thì schedule_changed (BR-01).
+ */
+function findStaleIssue(
+  chosen: readonly StudySlot[],
+  ctx: PlanContext,
+  now: Date,
+): ProposalConflictIssue | null {
+  if (chosen.some((slot) => slot.hasStarted(now))) return 'proposal_expired';
+
+  const replaced = new Set(chosen.map((slot) => slot.replacesSlotId));
+  const busy: TimeInterval[] = [
+    ...ctx.fixed,
+    ...ctx.slots.filter((slot) => !replaced.has(slot.id)).map((slot) => slot.interval),
+  ];
+  const openTasks = new Set(ctx.tasks.map((task) => task.id));
+  const stale = chosen.some(
+    (slot) =>
+      slot.taskId === null ||
+      !openTasks.has(slot.taskId) ||
+      busy.some((interval) => hasOverlap(slot.toInterval(), interval)),
+  );
+  return stale ? 'schedule_changed' : null;
+}
+
+function titleRecord(slot: StudySlot, tasks: Map<string, TaskRecord>): TaskRecord | null {
+  return slot.taskId ? (tasks.get(slot.taskId) ?? null) : null;
 }
 
 function newProposedSlot(

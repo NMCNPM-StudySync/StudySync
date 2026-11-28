@@ -76,6 +76,15 @@ export class StudySlot extends BaseEntity implements TimeRange {
     this.currentStatus = 'studied';
   }
 
+  /** proposed -> scheduled khi sinh viên chấp nhận lượt đề xuất (BR-03); đã scheduled thì không đổi. */
+  public confirm(): void {
+    if (this.currentStatus === 'scheduled') return;
+    if (this.currentStatus !== 'proposed') {
+      throw slotError(`Khung giờ học đang ở trạng thái "${this.currentStatus}"`, 'invalid_status');
+    }
+    this.currentStatus = 'scheduled';
+  }
+
   /** scheduled -> missed khi đã đến giờ bắt đầu (US-19). */
   public markMissed(now: Date): void {
     if (this.currentStatus === 'missed') return;

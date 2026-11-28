@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SchedulerService } from '../../src/modules/scheduler/scheduler.service';
-import { NotFoundError, ValidationError } from '../../src/shared/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../src/shared/errors';
 import { hasOverlap } from '../../src/utils/interval';
 import { FakeStore } from './fake-store';
 import { fmt, span, vn } from './helpers';
@@ -109,6 +109,30 @@ describe('SchedulerService.autoPlan (U021)', () => {
     const res = await service('2026-11-23 06:00').autoPlan(USER);
     expect(res.data.proposal?.slots).toEqual([]);
     expect(res.data.proposal?.taskResults[0]?.result).toBe('overdue');
+  });
+
+  it('freeMinutes: luôn trả về, kể cả khi proposal null (NO_TASKS_TO_SCHEDULE)', async () => {
+    store.addTask({ id: TASK, userId: USER, isDone: true });
+    const res = await service('2026-11-23 06:00').autoPlan(USER);
+    expect(res.data).toEqual({ proposal: null, freeMinutes: 7 * 240 });
+  });
+
+  it('freeMinutes: trừ sự kiện cố định và khung đã xếp, không trừ khung đề xuất đang chờ (BR-03)', async () => {
+    store.addTask({ id: TASK, userId: USER, durationMinutes: 60 });
+    store.addTask({ id: TASK2, userId: USER, durationMinutes: 120 });
+    store.addFixed(USER, span('2026-11-23', '07:00', '20:00'));
+    store.addSlot({
+      id: SLOT,
+      userId: USER,
+      taskId: TASK2,
+      ...range('2026-11-24', '07:00', '09:00'),
+    });
+
+    const res = await service('2026-11-23 06:00').autoPlan(USER);
+
+    // 23/11 còn 120 phút; 24/11 còn 240 - 120; 5 ngày còn lại 240. Khung proposed mới không bị trừ.
+    expect(res.data.proposal?.slots.length).toBeGreaterThan(0);
+    expect(res.data.freeMinutes).toBe(120 + 120 + 5 * 240);
   });
 
   it('gọi lại khi đang có lượt chờ: lượt cũ thành outdated, khung proposed cũ bị xóa trong cùng transaction', async () => {
@@ -359,6 +383,265 @@ describe('SchedulerService.reportMissed (U022)', () => {
     await service('2026-11-23 08:00').reportMissed(USER, SLOT);
     expect(store.proposal(OLD_PROPOSAL)?.status).toBe('outdated');
     expect(store.state.proposals.filter((p) => p.status === 'pending')).toHaveLength(1);
+  });
+});
+
+describe('SchedulerService.confirm (US-18, US-20, BR-03)', () => {
+  const MAKEUP_1 = 'c3c3c3c3-0000-4000-8000-000000000001';
+  const MAKEUP_2 = 'c3c3c3c3-0000-4000-8000-000000000002';
+
+  /** Tạo lượt auto_plan lúc 06:00: việc 2 giờ được đề xuất 23/11 07:00-09:00. */
+  async function planOneSlot(): Promise<string> {
+    store.addTask({ id: TASK, userId: USER, title: 'Ôn Giải tích', durationMinutes: 120 });
+    const res = await service('2026-11-23 06:00').autoPlan(USER);
+    const proposal = res.data.proposal!;
+    expect(
+      proposal.slots.map((s) => fmt({ start: new Date(s.startsAt), end: new Date(s.endsAt) })),
+    ).toEqual(['23/11 07:00-09:00']);
+    return proposal.id;
+  }
+
+  async function expectConflict(promise: Promise<unknown>, issue: string) {
+    const err = await promise.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect((err as ConflictError).details).toEqual([{ field: 'proposalId', issue }]);
+  }
+
+  function addMakeupProposal() {
+    store.addTask({ id: TASK, userId: USER, title: 'Ôn thi Giải tích' });
+    store.addProposal({ id: OLD_PROPOSAL, userId: USER, kind: 'makeup' });
+    for (const [id, date] of [
+      [MAKEUP_1, '2026-11-24'],
+      [MAKEUP_2, '2026-11-25'],
+    ] as const) {
+      store.addSlot({
+        id,
+        userId: USER,
+        taskId: TASK,
+        proposalId: OLD_PROPOSAL,
+        status: 'proposed',
+        ...range(date, '08:00', '09:00'),
+      });
+    }
+  }
+
+  it('accept: khung proposed thành scheduled, lượt thành accepted', async () => {
+    const proposalId = await planOneSlot();
+
+    const res = await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' });
+
+    expect(res.data).toMatchObject({ proposalId, status: 'accepted', removedSlotIds: [] });
+    expect(res.data.savedSlots).toEqual([
+      expect.objectContaining({
+        taskId: TASK,
+        taskTitle: 'Ôn Giải tích',
+        startsAt: vn('2026-11-23 07:00').toISOString(),
+        status: 'scheduled',
+        needsReschedule: false,
+      }),
+    ]);
+    expect(store.proposal(proposalId)?.status).toBe('accepted');
+    expect(store.state.slots.map((s) => s.status)).toEqual(['scheduled']);
+  });
+
+  it('TC-TV3-36: bấm Chấp nhận hai lần -> 200 với đúng kết quả lần đầu, không nhân đôi khung', async () => {
+    const proposalId = await planOneSlot();
+    const first = await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' });
+    const second = await service('2026-11-23 06:31').confirm(USER, {
+      proposalId,
+      action: 'accept',
+    });
+
+    expect(second.data.savedSlots.map((s) => s.id)).toEqual(first.data.savedSlots.map((s) => s.id));
+    expect(second.data.status).toBe('accepted');
+    expect(store.state.slots).toHaveLength(1);
+  });
+
+  it('reject: lượt thành rejected, xóa khung proposed, lịch tuần giữ nguyên', async () => {
+    store.addSlot({
+      id: SLOT,
+      userId: USER,
+      taskId: TASK2,
+      ...range('2026-11-26', '07:00', '08:00'),
+    });
+    const proposalId = await planOneSlot();
+
+    const res = await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'reject' });
+
+    expect(res.data).toEqual({
+      proposalId,
+      status: 'rejected',
+      savedSlots: [],
+      removedSlotIds: [],
+    });
+    expect(store.proposal(proposalId)?.status).toBe('rejected');
+    expect(store.state.slots.map((s) => [s.id, s.status])).toEqual([[SLOT, 'scheduled']]);
+  });
+
+  it('TC-TV3-34: lịch đổi làm khung bị trùng sự kiện cố định -> 409 schedule_changed, lượt outdated, không lưu khung', async () => {
+    const proposalId = await planOneSlot();
+    store.addFixed(USER, span('2026-11-23', '07:30', '08:00'));
+
+    await expectConflict(
+      service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' }),
+      'schedule_changed',
+    );
+
+    // Đã commit việc đánh dấu outdated (không rollback) để lần gọi sau báo proposal_closed
+    expect(store.proposal(proposalId)?.status).toBe('outdated');
+    expect(store.state.slots).toEqual([]);
+    expect(store.transactions.rolledBack).toBe(0);
+  });
+
+  it('khung nối tiếp sự kiện cố định (kết thúc đúng lúc bắt đầu) không tính là trùng (BR-01)', async () => {
+    const proposalId = await planOneSlot();
+    store.addFixed(USER, span('2026-11-23', '09:00', '10:00'));
+
+    const res = await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' });
+    expect(res.data.status).toBe('accepted');
+  });
+
+  it('TC-TV3-35: khung đã qua giờ bắt đầu -> 409 proposal_expired, lượt outdated', async () => {
+    const proposalId = await planOneSlot();
+
+    await expectConflict(
+      service('2026-11-23 07:00').confirm(USER, { proposalId, action: 'accept' }),
+      'proposal_expired',
+    );
+    expect(store.proposal(proposalId)?.status).toBe('outdated');
+    expect(store.state.slots).toEqual([]);
+  });
+
+  it('việc đã hoàn thành sau khi đề xuất -> 409 schedule_changed', async () => {
+    const proposalId = await planOneSlot();
+    store.state.tasks[0]!.isDone = true;
+
+    await expectConflict(
+      service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' }),
+      'schedule_changed',
+    );
+  });
+
+  it('lượt đã đóng -> 409 proposal_closed, không ghi gì', async () => {
+    const proposalId = await planOneSlot();
+    await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'reject' });
+    const before = structuredClone(store.state);
+
+    await expectConflict(
+      service('2026-11-23 06:31').confirm(USER, { proposalId, action: 'accept' }),
+      'proposal_closed',
+    );
+    await expectConflict(
+      service('2026-11-23 06:31').confirm(USER, { proposalId, action: 'reject' }),
+      'proposal_closed',
+    );
+    expect(store.state).toEqual(before);
+  });
+
+  it('từ chối lượt đã chấp nhận -> 409 proposal_closed, khung đã lưu giữ nguyên', async () => {
+    const proposalId = await planOneSlot();
+    await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' });
+
+    await expectConflict(
+      service('2026-11-23 06:31').confirm(USER, { proposalId, action: 'reject' }),
+      'proposal_closed',
+    );
+    expect(store.state.slots.map((s) => s.status)).toEqual(['scheduled']);
+  });
+
+  it('lượt không tồn tại hoặc của người khác -> 404 (BR-02)', async () => {
+    const proposalId = await planOneSlot();
+    await expect(
+      service('2026-11-23 06:30').confirm(OTHER, { proposalId, action: 'accept' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      service('2026-11-23 06:30').confirm(USER, { proposalId: OLD_PROPOSAL, action: 'accept' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(store.proposal(proposalId)?.status).toBe('pending');
+  });
+
+  it('gửi slotId với lượt auto_plan -> 400', async () => {
+    const proposalId = await planOneSlot();
+    await expectSlotError(
+      service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept', slotId: SLOT }),
+      'chỉ dùng cho lượt makeup',
+    );
+  });
+
+  it('accept xóa khung "Cần xếp lại" của việc vừa có khung mới (yêu cầu 3.7)', async () => {
+    store.addTask({ id: TASK, userId: USER, durationMinutes: 60 });
+    store.addSlot({
+      id: SLOT,
+      userId: USER,
+      taskId: TASK,
+      ...range('2026-11-23', '10:00', '11:00'),
+    });
+    store.addFixed(USER, span('2026-11-23', '10:00', '11:00')); // khung cũ thành "Cần xếp lại"
+    const plan = await service('2026-11-23 06:00').autoPlan(USER);
+    const proposalId = plan.data.proposal!.id;
+
+    const res = await service('2026-11-23 06:30').confirm(USER, { proposalId, action: 'accept' });
+
+    expect(res.data.removedSlotIds).toEqual([SLOT]);
+    expect(store.slot(SLOT)).toBeUndefined();
+    expect(store.state.slots.map((s) => s.status)).toEqual(['scheduled']);
+  });
+
+  describe('lượt makeup (US-20)', () => {
+    it('accept phải kèm slotId thuộc lượt', async () => {
+      addMakeupProposal();
+      await expectSlotError(
+        service('2026-11-23 06:30').confirm(USER, { proposalId: OLD_PROPOSAL, action: 'accept' }),
+        'bắt buộc',
+      );
+      await expectSlotError(
+        service('2026-11-23 06:30').confirm(USER, {
+          proposalId: OLD_PROPOSAL,
+          action: 'accept',
+          slotId: SLOT,
+        }),
+        'không thuộc lượt đề xuất',
+      );
+    });
+
+    it('chọn một khung: khung đó thành scheduled, khung còn lại bị bỏ', async () => {
+      addMakeupProposal();
+
+      const res = await service('2026-11-23 06:30').confirm(USER, {
+        proposalId: OLD_PROPOSAL,
+        action: 'accept',
+        slotId: MAKEUP_2,
+      });
+
+      expect(res.data.savedSlots.map((s) => s.id)).toEqual([MAKEUP_2]);
+      expect(store.state.slots.map((s) => [s.id, s.status])).toEqual([[MAKEUP_2, 'scheduled']]);
+      expect(store.proposal(OLD_PROPOSAL)?.status).toBe('accepted');
+    });
+
+    it('yêu cầu 3.13: chạm khung thứ hai sau khung thứ nhất -> trả lại khung đã lưu', async () => {
+      addMakeupProposal();
+      const svc = service('2026-11-23 06:30');
+      await svc.confirm(USER, { proposalId: OLD_PROPOSAL, action: 'accept', slotId: MAKEUP_1 });
+
+      const again = await svc.confirm(USER, {
+        proposalId: OLD_PROPOSAL,
+        action: 'accept',
+        slotId: MAKEUP_1,
+      });
+
+      expect(again.data.savedSlots.map((s) => s.id)).toEqual([MAKEUP_1]);
+      expect(store.state.slots).toHaveLength(1);
+    });
+
+    it('reject lượt makeup không cần slotId', async () => {
+      addMakeupProposal();
+      const res = await service('2026-11-23 06:30').confirm(USER, {
+        proposalId: OLD_PROPOSAL,
+        action: 'reject',
+      });
+      expect(res.data.status).toBe('rejected');
+      expect(store.state.slots).toEqual([]);
+    });
   });
 });
 

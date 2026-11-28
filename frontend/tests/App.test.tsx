@@ -136,7 +136,7 @@ describe('App navigation and layout', () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
       { route: '/groups', title: 'Nhóm (TV1)' },
-      { route: '/scheduler', title: 'Xếp lịch (TV3)' },
+      { route: '/scheduler', title: 'Xếp lịch tự động' },
       { route: '/meetings', title: 'TÌM GIỜ HỌP' },
       { route: '/groups/group-001/meetings', title: 'TÌM GIỜ HỌP' },
       { route: '/kanban', title: 'Bảng Kanban công việc nhóm' },

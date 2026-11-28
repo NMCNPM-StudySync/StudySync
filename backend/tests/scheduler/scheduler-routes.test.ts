@@ -37,6 +37,7 @@ function storeWithSlot() {
 describe('Route TV3 /api/scheduler', () => {
   it.each([
     '/api/scheduler/auto-plan',
+    '/api/scheduler/confirm',
     '/api/scheduler/missed-session',
     '/api/scheduler/completed-session',
   ])('%s chưa đăng nhập -> 401 UNAUTHORIZED', async (path) => {
@@ -68,6 +69,82 @@ describe('Route TV3 /api/scheduler', () => {
         replacesSlot: null,
       }),
     ]);
+    // Khung đề xuất đang chờ không trừ vào thời gian trống (BR-03)
+    expect(res.body.data.freeMinutes).toBe(1680);
+  });
+
+  it('POST /confirm accept -> 200 với savedSlots; gọi lại accept -> 200 cùng kết quả', async () => {
+    const store = new FakeStore();
+    store.addTask({ id: TASK, userId: USER, title: 'Ôn chương 3 Giải tích' });
+    const app = appWithUser(new SchedulerService(store.deps(vn('2026-11-23 06:00'))));
+    const plan = await request(app).post('/api/scheduler/auto-plan').send({});
+    const proposalId = plan.body.data.proposal.id as string;
+
+    const res = await request(app)
+      .post('/api/scheduler/confirm')
+      .send({ proposalId, action: 'accept' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ proposalId, status: 'accepted', removedSlotIds: [] });
+    expect(res.body.data.savedSlots).toEqual([
+      expect.objectContaining({
+        taskId: TASK,
+        status: 'scheduled',
+        startsAt: '2026-11-23T00:00:00.000Z',
+        endsAt: '2026-11-23T01:00:00.000Z',
+      }),
+    ]);
+
+    const again = await request(app)
+      .post('/api/scheduler/confirm')
+      .send({ proposalId, action: 'accept' });
+    expect(again.status).toBe(200);
+    expect(again.body.data.savedSlots[0].id).toBe(res.body.data.savedSlots[0].id);
+  });
+
+  it('POST /confirm khi lịch đã đổi -> 409 CONFLICT kèm details schedule_changed', async () => {
+    const store = new FakeStore();
+    store.addTask({ id: TASK, userId: USER });
+    const app = appWithUser(new SchedulerService(store.deps(vn('2026-11-23 06:00'))));
+    const plan = await request(app).post('/api/scheduler/auto-plan').send({});
+    store.addFixed(USER, span('2026-11-23', '07:00', '08:00'));
+
+    const res = await request(app)
+      .post('/api/scheduler/confirm')
+      .send({ proposalId: plan.body.data.proposal.id, action: 'accept' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.data).toBeUndefined();
+    expect(res.body.error).toMatchObject({
+      code: 'CONFLICT',
+      message: 'Lịch đã thay đổi, đề xuất đã được cập nhật',
+      details: [{ field: 'proposalId', issue: 'schedule_changed' }],
+    });
+  });
+
+  it.each([
+    [{ action: 'accept' }, 'proposalId', 'bắt buộc'],
+    [{ proposalId: 'abc', action: 'accept' }, 'proposalId', 'sai định dạng UUID'],
+    [{ proposalId: SLOT }, 'action', 'bắt buộc'],
+    [{ proposalId: SLOT, action: 'approve' }, 'action', 'ngoài danh mục'],
+    [{ proposalId: SLOT, action: 'accept', slotId: 'abc' }, 'slotId', 'sai định dạng UUID'],
+  ])('POST /confirm body %j -> 400 VALIDATION_ERROR', async (body, field, issue) => {
+    const service = new SchedulerService(new FakeStore().deps(vn('2026-11-23 06:00')));
+    const spy = vi.spyOn(service, 'confirm');
+    const res = await request(appWithUser(service)).post('/api/scheduler/confirm').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.details).toEqual([{ field, issue }]);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('POST /confirm lượt không tồn tại -> 404 NOT_FOUND', async () => {
+    const app = appWithUser(new SchedulerService(new FakeStore().deps(vn('2026-11-23 06:00'))));
+    const res = await request(app)
+      .post('/api/scheduler/confirm')
+      .send({ proposalId: SLOT, action: 'reject' });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
   it('POST /auto-plan không có việc -> 200, proposal null kèm NO_TASKS_TO_SCHEDULE', async () => {
@@ -75,7 +152,8 @@ describe('Route TV3 /api/scheduler', () => {
     const res = await request(app).post('/api/scheduler/auto-plan');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      data: { proposal: null },
+      // Lịch trống, gọi lúc 06:00: 7 ngày x 240 phút (docs/api.md, trường freeMinutes)
+      data: { proposal: null, freeMinutes: 1680 },
       warnings: [{ code: 'NO_TASKS_TO_SCHEDULE', message: 'Không có việc cần làm để xếp lịch' }],
     });
   });

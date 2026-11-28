@@ -81,6 +81,25 @@ export class StudySlotRepository extends BaseRepository<StudySlot> {
     await db.query(`UPDATE study_slots SET status = $2 WHERE id = $1`, [slot.id, slot.status]);
   }
 
+  /** Mọi khung gắn với một lượt đề xuất, có khóa dòng (dùng khi xác nhận). */
+  public async listByProposal(proposalId: string, db: Queryable): Promise<StudySlot[]> {
+    const res = await db.query(
+      `SELECT ${COLUMNS} FROM study_slots
+        WHERE proposal_id = $1
+        ORDER BY starts_at ASC, id ASC
+        FOR UPDATE`,
+      [proposalId],
+    );
+    return res.rows.map((row) => this.toEntity(row as Record<string, unknown>));
+  }
+
+  /** Xóa các khung theo id (khung cũ bị dời, khung "Cần xếp lại"), trả số dòng đã xóa. */
+  public async deleteByIds(ids: readonly string[], db: Queryable): Promise<number> {
+    if (ids.length === 0) return 0;
+    const res = await db.query(`DELETE FROM study_slots WHERE id = ANY($1::uuid[])`, [ids]);
+    return res.rowCount ?? 0;
+  }
+
   /** Xóa các khung proposed của một lượt đề xuất, trả số dòng đã xóa. */
   public async deleteProposedOf(proposalId: string, db: Queryable): Promise<number> {
     const res = await db.query(

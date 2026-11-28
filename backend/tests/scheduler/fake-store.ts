@@ -149,6 +149,16 @@ export class FakeStore {
         const row = this.slot(slot.id);
         if (row) row.status = slot.status;
       },
+      listByProposal: async (proposalId: string) =>
+        this.state.slots
+          .filter((s) => s.proposalId === proposalId)
+          .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || cmp(a.id, b.id))
+          .map((s) => new StudySlot({ ...s })),
+      deleteByIds: async (ids: readonly string[]) => {
+        const before = this.state.slots.length;
+        this.state.slots = this.state.slots.filter((s) => !ids.includes(s.id));
+        return before - this.state.slots.length;
+      },
       deleteProposedOf: async (proposalId: string) => {
         const before = this.state.slots.length;
         this.state.slots = this.state.slots.filter(
@@ -162,6 +172,10 @@ export class FakeStore {
 
   private proposalRepo(): ScheduleProposalRepository {
     const repo = {
+      lockById: async (id: string) => {
+        const row = this.proposal(id);
+        return row ? new ScheduleProposal({ ...row }) : null;
+      },
       findPendingByUser: async (userId: string) => {
         const row = this.state.proposals.find((p) => p.userId === userId && p.status === 'pending');
         return row ? new ScheduleProposal({ ...row }) : null;
@@ -209,4 +223,8 @@ export class FakeStore {
     };
     return repo as unknown as FixedEventRepository;
   }
+}
+
+function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
