@@ -66,7 +66,7 @@ export class EventController extends BaseController {
         throw new ValidationError('Dữ liệu yêu cầu phải là một đối tượng JSON');
       }
 
-      const { title, kind, startsAt, endsAt, location, notes } = body;
+      const { title, kind, startsAt, endsAt, location, notes, isRecurring } = body;
 
       if (!title || typeof title !== 'string') {
         throw new ValidationError('Tiêu đề sự kiện là bắt buộc', [
@@ -91,6 +91,7 @@ export class EventController extends BaseController {
         endsAt,
         location,
         notes,
+        isRecurring,
       });
 
       this.created(res, data.toResponseDto(), warnings);

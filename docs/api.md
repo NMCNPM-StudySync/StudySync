@@ -1260,6 +1260,7 @@ Không có.
 | `endsAt` | string (ISO 8601 UTC) | Có | Thời điểm kết thúc sự kiện, bắt buộc sau `startsAt` (BR-01, BR-07) |
 | `location` | string | Không | Địa điểm hoặc phòng học |
 | `notes` | string | Không | Ghi chú thêm cho sự kiện |
+| `isRecurring` | boolean | Không | `true` để tạo quy tắc lặp hằng tuần (`weekly`) và tự sinh sự kiện cho 12 tuần liên tiếp; mặc định `false` |
 
 ```json
 {
@@ -1416,6 +1417,7 @@ Quyền: Chủ tài khoản sở hữu sự kiện.
 | `endsAt` | string (ISO 8601 UTC) | Không | Thời điểm kết thúc mới, bắt buộc sau `startsAt` (BR-01, BR-07) |
 | `location` | string | Không | Địa điểm hoặc phòng học (cho phép gửi `null` để xóa) |
 | `notes` | string | Không | Ghi chú thêm (cho phép gửi `null` để xóa) |
+| `isRecurring` | boolean | Không | `true` để bật lặp hằng tuần và sinh thêm 11 tuần tiếp theo; `false` để tắt lặp (gỡ rule khỏi sự kiện hiện tại và xóa các buổi lặp kế tiếp) |
 
 ```json
 {
@@ -1982,7 +1984,7 @@ Quyền: Chủ tài khoản.
 
 | Tên | Kiểu | Bắt buộc | Mô tả |
 | --- | --- | --- | --- |
-| `weekStart` | string (ISO 8601 UTC) | Có | Mốc thời gian bắt đầu của tuần (Thứ Hai, 00:00:00 UTC; ví dụ: `2026-11-16T00:00:00.000Z`) |
+| `weekStart` | string (ISO 8601 UTC) | Có | Mốc thời gian bắt đầu của tuần tại `00:00:00` Thứ Hai giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7) quy đổi sang UTC (tức `17:00:00.000Z` Chủ Nhật trước theo BR-07; ví dụ: `2026-11-15T17:00:00.000Z`) |
 
 **Nội dung gửi lên (body)**
 
@@ -1993,8 +1995,8 @@ Không có.
 ```json
 {
   "data": {
-    "weekStart": "2026-11-16T00:00:00.000Z",
-    "weekEnd": "2026-11-23T00:00:00.000Z",
+    "weekStart": "2026-11-15T17:00:00.000Z",
+    "weekEnd": "2026-11-22T17:00:00.000Z",
     "fixedEvents": [
       {
         "id": "11111111-2222-4333-8444-555555555555",

@@ -9,6 +9,7 @@ export interface UpdateFixedEventFields {
   endsAt?: Date;
   location?: string | null;
   notes?: string | null;
+  recurringRuleId?: string | null;
 }
 
 export interface BusyIntervalRecord {
@@ -208,6 +209,10 @@ export class FixedEventRepository extends BaseRepository<FixedEvent> {
     if (fields.notes !== undefined) {
       params.push(fields.notes);
       setClauses.push(`notes = $${params.length}`);
+    }
+    if (fields.recurringRuleId !== undefined) {
+      params.push(fields.recurringRuleId);
+      setClauses.push(`recurring_rule_id = $${params.length}`);
     }
 
     if (setClauses.length === 0) {

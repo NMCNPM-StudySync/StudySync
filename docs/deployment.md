@@ -147,7 +147,7 @@ Theo mục 4.10 của tài liệu dự án `[NMCNPM] StudySync`: *"Bí mật (kh
 Cơ chế phân quyền và phối hợp quản trị thực tế giữa hai thành viên được thiết lập như sau:
 
 1. **Phân định vai trò:**
-   - **Quản trị viên chính (Primary Admin / Owner):** Đỗ Huỳnh Anh Thư (Thư H.A. – TV1 & DevOps).
+   - **Quản trị viên chính (Primary Admin / Owner):** Lê Huỳnh Anh Thư (Thư H.A. – TV1 & DevOps).
    - **Quản trị viên dự phòng (Backup Admin / DevOps Supporter):** Đào Ngọc Hưng (Hưng – TV2 & DevOps Supporter).
 2. **Hiện trạng quản trị trên từng nền tảng:**
    - **Vercel (Frontend):** Do gói Vercel Hobby 0 đồng không hỗ trợ tính năng Team miễn phí (tạo Team yêu cầu gói Pro 20 USD/tháng), dự án frontend tạm thời gắn với scope cá nhân của người trực tiếp triển khai (`Neqqipy`). Tuy nhiên, toàn bộ quyền deploy tự động được ủy quyền thông qua 3 biến `VERCEL_TOKEN`, `VERCEL_ORG_ID` và `VERCEL_PROJECT_ID` lưu tập trung trong **GitHub Repository Secrets** của tổ chức `NMCNPM-StudySync`. Thư H.A. và Team Lead Kiên nắm quyền Admin trên GitHub Organization nên có toàn quyền quản trị, thu hồi hoặc thay thế các secret này.
