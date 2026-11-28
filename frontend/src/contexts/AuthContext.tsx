@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { apiClient } from '../services/apiClient';
+import { SESSION_EXPIRED_EVENT, apiClient } from '../services/apiClient';
 import { tokenStorage } from '../services/tokenStorage';
 import type { AuthResponseData, LoginRequest, RegisterRequest, User } from '../types/auth';
 import { AuthContext, type AuthContextType } from './authContextDef';
@@ -28,6 +28,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Phiên hết hạn (refresh thất bại): dọn state để ProtectedRoute chuyển về /login
+  useEffect(() => {
+    const handleExpired = () => {
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
   }, []);
 
   const login = useCallback(async (credentials: LoginRequest): Promise<AuthResponseData> => {
