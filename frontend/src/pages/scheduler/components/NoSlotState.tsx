@@ -64,7 +64,7 @@ export function NoSlotState({ taskResults }: NoSlotStateProps) {
       className="flex flex-col items-center rounded-2xl border border-brand-borderDefault bg-white px-6 py-10 text-center shadow-sm md:px-10"
     >
       <EmptyCalendarIllustration />
-      <h2 id="no-slot-title" className="mt-4 font-heading text-2xl font-bold text-brand-navy">
+      <h2 id="no-slot-title" className="mt-4 font-heading text-2xl font-semibold text-brand-navy">
         Chưa tìm được khung giờ phù hợp
       </h2>
       <p className="mt-4 max-w-xl text-sm leading-6 text-brand-slate">

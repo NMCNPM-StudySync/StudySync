@@ -345,7 +345,7 @@ export function SchedulerPage() {
       </div>
 
       {/* Dải tóm tắt */}
-      <dl className="grid grid-cols-1 gap-y-3 divide-brand-borderDefault/60 rounded-xl border border-brand-borderDefault bg-gradient-to-r from-[#e8f1ff] via-[#f3f7fd] to-white p-4 text-xs shadow-sm sm:grid-cols-2 lg:grid-cols-4 lg:gap-y-0 lg:divide-x">
+      <dl className="grid grid-cols-1 gap-y-3 divide-brand-borderDefault/60 rounded-xl border border-brand-borderDefault bg-gradient-to-r from-brand-surface via-brand-bg to-brand-surfaceCard p-4 text-xs shadow-sm sm:grid-cols-2 lg:grid-cols-4 lg:gap-y-0 lg:divide-x">
         <SummaryCell
           breadcrumb={`Xếp lịch / Tuần ${weekNumber}`}
           label="Thời gian"
