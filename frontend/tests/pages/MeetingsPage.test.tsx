@@ -1,7 +1,7 @@
 import { AvailabilityHeatmap } from '../../src/components/meetings/AvailabilityHeatmap';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext, type AuthContextType } from '../../src/contexts/authContextDef';
 import { MeetingsPage } from '../../src/pages/meetings/MeetingsPage';
 import { ApiError } from '../../src/services/apiClient';
@@ -28,6 +28,9 @@ const mockedApi = vi.mocked(meetingsApi);
 const GROUP_ID = '7d2c9a51-6b3e-4f08-8a1d-5e9c2b4f7a33';
 const LEADER_ID = '0b8f6f5e-2c1a-4c7e-9d4b-3a5f1e7c9a10';
 const MEMBER_ID = '5c1e8d27-9a4b-4e3f-b6d1-2f7a0c8e4b19';
+
+// Cố định mốc giữa tuần (Thứ Tư 25/11/2026 09:00 giờ VN — tuần 23/11–29/11) để test không phụ thuộc ngày chạy
+const FIXED_NOW = new Date('2026-11-25T02:00:00.000Z');
 
 const sampleGroupDetail: GroupDetail = {
   id: GROUP_ID,
@@ -98,6 +101,8 @@ function renderMeetingsPage(
 
 describe('MeetingsPage (TV4)', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
     vi.clearAllMocks();
     mockedApi.listMyGroups.mockResolvedValue({
       data: {
@@ -144,6 +149,10 @@ describe('MeetingsPage (TV4)', () => {
     mockedApi.listMyReminders.mockResolvedValue({ data: { reminders: [] }, warnings: [] });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('hiển thị bản đồ nhiệt giờ rảnh, cảnh báo BR-02 và Empty State khi chưa có cuộc họp', async () => {
     renderMeetingsPage();
 
@@ -167,6 +176,38 @@ describe('MeetingsPage (TV4)', () => {
       GROUP_ID,
       expect.objectContaining({ durationMinutes: 60, sortBy: 'time' }),
     );
+  });
+
+  it('hiển thị ổn định bản đồ nhiệt khi mở trang vào cuối tuần (Thứ Bảy, BR-07)', async () => {
+    // Thứ Bảy 28/11/2026 17:00 giờ VN (tuần hiện tại 23/11–29/11)
+    vi.setSystemTime(new Date('2026-11-28T10:00:00.000Z'));
+    mockedApi.searchMeetingSlots.mockResolvedValueOnce({
+      data: {
+        allFreeSlots: [
+          {
+            // Chủ Nhật 29/11/2026 19:00–20:00 giờ VN (nằm trong tuần hiện tại)
+            startsAt: '2026-11-29T12:00:00.000Z',
+            endsAt: '2026-11-29T13:00:00.000Z',
+            availableCount: 3,
+            totalMembers: 3,
+            busyMembers: [],
+            score: 80,
+            rank: 1,
+          },
+        ],
+        partialSlots: [],
+      },
+      warnings: [],
+    });
+
+    renderMeetingsPage();
+
+    const heatmap = await screen.findByRole('table', {
+      name: /Bản đồ nhiệt giờ rảnh chung của nhóm/i,
+    });
+    expect(
+      within(heatmap).getByRole('button', { name: /CN 29\/11 lúc 19:00, 3\/3 thành viên rảnh/i }),
+    ).toBeInTheDocument();
   });
 
   it('mở modal tạo cuộc họp, kiểm tra BR-08 và gửi POST /groups/:id/meeting-proposals', async () => {
