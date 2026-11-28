@@ -1,12 +1,88 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
+import { meetingsApi } from '../src/services/meetingsApi';
 import { tokenStorage } from '../src/services/tokenStorage';
+
+vi.mock('../src/services/meetingsApi', () => ({
+  meetingsApi: {
+    listMyGroups: vi.fn(),
+    getGroupDetail: vi.fn(),
+    searchMeetingSlots: vi.fn(),
+    createMeetingProposal: vi.fn(),
+    listMeetingProposals: vi.fn(),
+    getMeetingProposalDetail: vi.fn(),
+    respondMeetingInvitation: vi.fn(),
+    listMyMeetingInvitations: vi.fn(),
+    setMemberMeetingPermission: vi.fn(),
+    listMyReminders: vi.fn(),
+  },
+}));
+
+const mockedMeetingsApi = vi.mocked(meetingsApi);
 
 describe('App navigation and layout', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
+
+    mockedMeetingsApi.listMyGroups.mockResolvedValue({
+      data: {
+        groups: [
+          {
+            id: 'group-001',
+            name: 'Đồ án NMCNPM nhóm 04',
+            myRole: 'leader',
+            memberCount: 2,
+            createdAt: '2026-11-01T00:00:00.000Z',
+          },
+        ],
+      },
+      warnings: [],
+    });
+    mockedMeetingsApi.getGroupDetail.mockResolvedValue({
+      data: {
+        id: 'group-001',
+        name: 'Đồ án NMCNPM nhóm 04',
+        myRole: 'leader',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        members: [
+          {
+            userId: 'user-001',
+            displayName: 'Trung Kiên',
+            role: 'leader',
+            canOrganizeMeetings: false,
+            joinedAt: '2026-11-01T00:00:00.000Z',
+          },
+          {
+            userId: 'user-002',
+            displayName: 'Huỳnh Nhi',
+            role: 'member',
+            canOrganizeMeetings: false,
+            joinedAt: '2026-11-02T00:00:00.000Z',
+          },
+        ],
+      },
+      warnings: [],
+    });
+    mockedMeetingsApi.searchMeetingSlots.mockResolvedValue({
+      data: { allFreeSlots: [], partialSlots: [] },
+      warnings: [],
+    });
+    mockedMeetingsApi.listMeetingProposals.mockResolvedValue({
+      data: { proposals: [] },
+      warnings: [],
+    });
+    mockedMeetingsApi.listMyMeetingInvitations.mockResolvedValue({
+      data: { invitations: [] },
+      warnings: [],
+    });
+    mockedMeetingsApi.listMyReminders.mockResolvedValue({
+      data: { reminders: [] },
+      warnings: [],
+    });
+
     // Giả lập trạng thái đã đăng nhập để kiểm thử điều hướng và bố cục của ứng dụng chính
     const futureExpiry = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     tokenStorage.setAuth(
@@ -56,13 +132,15 @@ describe('App navigation and layout', () => {
     ).toBeInTheDocument();
   });
 
-  it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', () => {
+  it('hiển thị đúng tiêu đề các trang module khi đã đăng nhập', async () => {
     const testCases = [
       { route: '/calendar', title: 'Lịch cá nhân (TV2)' },
       { route: '/groups', title: 'Nhóm (TV1)' },
       { route: '/scheduler', title: 'Xếp lịch tự động' },
-      { route: '/meetings', title: 'Giờ chung (TV4)' },
-      { route: '/kanban', title: 'Kanban (TV5)' },
+      { route: '/meetings', title: 'TÌM GIỜ HỌP' },
+      { route: '/groups/group-001/meetings', title: 'TÌM GIỜ HỌP' },
+      { route: '/kanban', title: 'Bảng Kanban công việc nhóm' },
+      { route: '/groups/test-group-id/kanban', title: 'Bảng Kanban công việc nhóm' },
       { route: '/stats', title: 'Thống kê giờ học' },
     ];
 
@@ -73,7 +151,16 @@ describe('App navigation and layout', () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+
+      if (route === '/groups/group-001/meetings') {
+        const nav = screen.getByRole('navigation', { name: 'Thanh điều hướng chính' });
+        expect(within(nav).getByRole('link', { name: /^Giờ chung$/i })).toHaveAttribute(
+          'aria-current',
+          'page',
+        );
+      }
+
       unmount();
     }
   });
